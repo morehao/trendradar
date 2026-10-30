@@ -1,0 +1,41 @@
+{
+  "schema": 2,
+  "date": "2026-10-30",
+  "period": "daily",
+  "languages": [
+    "all",
+    "go",
+    "python",
+    "rust"
+  ],
+  "count": 2,
+  "degraded": false,
+  "contentHash": "sha256:38c38188602424014a7fdd8a3bfd0408690ce8a5db21be9c8559ac3ca85b2b4c",
+  "contentHashAlgo": "jcs-sha256-v1",
+  "coreVersion": "0.1.0",
+  "generatedAt": "2026-10-30T00:05:00Z",
+  "repos": [
+    {
+      "fullName": "golang/go",
+      "url": "https://github.com/golang/go",
+      "language": "go",
+      "stars": 126000,
+      "starsInPeriod": 320,
+      "rank": 1,
+      "source": "trending-html",
+      "summaryZh": "Go 官方仓库，今日新增 star 位居榜单前列。",
+      "summarySource": "model"
+    },
+    {
+      "fullName": "gin-gonic/gin",
+      "url": "https://github.com/gin-gonic/gin",
+      "language": "go",
+      "stars": 80200,
+      "starsInPeriod": 210,
+      "rank": 2,
+      "source": "trending-html",
+      "summaryZh": "流行的 Go Web 框架，热度持续。",
+      "summarySource": "model"
+    }
+  ]
+}

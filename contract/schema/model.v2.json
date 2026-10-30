@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/model.v2.json",
+  "title": "trendradar model v2",
+  "description": "Domain model: a scraped repository snapshot (RepoSnapshot) and its digested form (RepoDigest). RepoDigest composes RepoSnapshot via allOf instead of flattening.",
+  "$ref": "#/$defs/RepoDigest",
+  "$defs": {
+    "RepoSnapshot": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["fullName", "url", "language", "stars", "starsInPeriod", "rank", "source"],
+      "properties": {
+        "fullName": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "url": { "type": "string", "format": "uri" },
+        "description": { "type": "string" },
+        "language": { "type": "string" },
+        "stars": { "type": "integer", "minimum": 0 },
+        "starsInPeriod": { "type": "integer", "minimum": 0 },
+        "forks": { "type": "integer", "minimum": 0 },
+        "rank": { "type": "integer", "minimum": 1 },
+        "source": { "type": "string", "enum": ["trending-html", "search-api"] }
+      }
+    },
+    "RepoDigest": {
+      "description": "RepoSnapshot plus the digest-only summary fields; the two sub-schemas are merged with allOf.",
+      "allOf": [
+        { "$ref": "#/$defs/RepoSnapshot" },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["summaryZh", "summarySource"],
+          "properties": {
+            "summaryZh": { "type": "string" },
+            "summarySource": { "type": "string", "enum": ["model", "original"] }
+          }
+        }
+      ]
+    }
+  }
+}

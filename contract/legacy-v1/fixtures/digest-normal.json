@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "date": "2026-10-30",
+  "period": "daily",
+  "languages": ["all", "go", "python", "rust"],
+  "count": 6,
+  "degraded": false,
+  "contentHash": "sha256:3f7a2c9e1b4d5a6f8c0e2d4b6a8f0c2e4d6b8a0f2c4e6d8b0a2f4c6e8d0b2a4f",
+  "coreVersion": "0.1.0",
+  "generatedAt": "2026-10-30T00:05:00Z",
+  "repos": [
+    {
+      "fullName": "golang/go",
+      "url": "https://github.com/golang/go",
+      "description": "The Go programming language",
+      "language": "go",
+      "stars": 126000,
+      "starsInPeriod": 320,
+      "forks": 17800,
+      "rank": 1,
+      "source": "trending-html",
+      "summaryZh": "Go 官方仓库，今日新增 star 位居榜单前列。",
+      "summarySource": "model"
+    },
+    {
+      "fullName": "gin-gonic/gin",
+      "url": "https://github.com/gin-gonic/gin",
+      "description": "HTTP web framework written in Go",
+      "language": "go",
+      "stars": 80200,
+      "starsInPeriod": 210,
+      "forks": 8100,
+      "rank": 2,
+      "source": "trending-html",
+      "summaryZh": "流行的 Go Web 框架，热度持续。",
+      "summarySource": "model"
+    },
+    {
+      "fullName": "python/cpython",
+      "url": "https://github.com/python/cpython",
+      "description": "The Python programming language",
+      "language": "python",
+      "stars": 64500,
+      "starsInPeriod": 180,
+      "forks": 30500,
+      "rank": 3,
+      "source": "trending-html",
+      "summaryZh": "CPython 官方实现，今日关注度上升。",
+      "summarySource": "model"
+    },
+    {
+      "fullName": "psf/requests",
+      "url": "https://github.com/psf/requests",
+      "description": "A simple, yet elegant HTTP library",
+      "language": "python",
+      "stars": 52500,
+      "starsInPeriod": 95,
+      "forks": 9400,
+      "rank": 4,
+      "source": "trending-html",
+      "summaryZh": "经典 Python HTTP 库，稳居热榜。",
+      "summarySource": "model"
+    },
+    {
+      "fullName": "rust-lang/rust",
+      "url": "https://github.com/rust-lang/rust",
+      "description": "Empowering everyone to build reliable and efficient software",
+      "language": "rust",
+      "stars": 102000,
+      "starsInPeriod": 260,
+      "forks": 13200,
+      "rank": 5,
+      "source": "trending-html",
+      "summaryZh": "Rust 语言主仓库，社区活跃。",
+      "summarySource": "model"
+    },
+    {
+      "fullName": "tokio-rs/tokio",
+      "url": "https://github.com/tokio-rs/tokio",
+      "description": "A runtime for writing reliable asynchronous applications with Rust",
+      "language": "rust",
+      "stars": 28600,
+      "starsInPeriod": 120,
+      "forks": 2650,
+      "rank": 6,
+      "source": "trending-html",
+      "summaryZh": "Rust 异步运行时，性能方向关注度高。",
+      "summarySource": "model"
+    }
+  ]
+}
