@@ -8,15 +8,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/morehao/trendradar/internal/app"
 	"github.com/morehao/trendradar/internal/config"
-	"github.com/morehao/trendradar/internal/digest"
-	"github.com/morehao/trendradar/internal/ipc"
+	"github.com/morehao/trendradar/internal/fetch"
+	"github.com/morehao/trendradar/internal/ingest"
 	"github.com/morehao/trendradar/internal/model"
-	"github.com/morehao/trendradar/internal/render"
-	"github.com/morehao/trendradar/internal/summarize"
 )
 
 type fileOut struct {
@@ -25,23 +23,26 @@ type fileOut struct {
 	SHA256 string `json:"sha256"`
 }
 
-type dryOutput struct {
-	Files  []fileOut `json:"files"`
-	Digest struct {
+type runOutput struct {
+	Files   []fileOut `json:"files"`
+	Skipped bool      `json:"skipped"`
+	Branch  string    `json:"branch,omitempty"`
+	PRURL   string    `json:"prUrl,omitempty"`
+	Digest  struct {
 		ContentHash string `json:"contentHash"`
 	} `json:"digest"`
 }
 
-// runRun implements `trendradar run`. In M3 it renders from a snapshots JSON
-// file (--input) using either the offline fake or gllm provider.
+// runRun implements `trendradar run`: ingest (network or --input) -> summarize
+// -> render -> git commit/push (+ PR when enabled).
 func runRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "path to config.yaml")
-	input := fs.String("input", "", "snapshots JSON file ([]RepoSnapshot)")
+	input := fs.String("input", "", "snapshots JSON file ([]RepoSnapshot); skips network fetch")
 	date := fs.String("date", time.Now().Format("2006-01-02"), "digest date (YYYY-MM-DD)")
-	dryRun := fs.Bool("dry-run", false, "do not write files")
+	dryRun := fs.Bool("dry-run", false, "do not write files or touch git")
 	asJSON := fs.Bool("json", false, "emit machine-readable JSON")
-	outDir := fs.String("out", "", "output directory (overrides config)")
+	outDir := fs.String("out", "", "output directory (overrides config.output.dir)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -54,90 +55,79 @@ func runRun(args []string) error {
 		}
 		cfg = c
 	}
+	if *outDir != "" {
+		if cfg == nil {
+			cfg = &config.Config{}
+		}
+		cfg.Output.Dir = *outDir
+	}
 
-	if *input == "" {
-		return fmt.Errorf("--input is required in M3 (network fetch is wired in M4)")
+	in := app.Inputs{Date: *date}
+	if *input != "" {
+		raw, err := os.ReadFile(*input)
+		if err != nil {
+			return fmt.Errorf("read input: %w", err)
+		}
+		if err := json.Unmarshal(raw, &in.Repos); err != nil {
+			return fmt.Errorf("parse snapshots: %w", err)
+		}
+	} else {
+		if cfg == nil {
+			return fmt.Errorf("--config is required when --input is not given")
+		}
+		client := fetch.NewClient(fetch.Options{})
+		res, err := ingest.Ingest(context.Background(), client, cfg.Trending.Languages, cfg.Trending.Since, cfg.Trending.PerLanguage)
+		if err != nil {
+			return err
+		}
+		in.Repos, in.Degraded = res.Repos, res.Degraded
 	}
-	raw, err := os.ReadFile(*input)
-	if err != nil {
-		return fmt.Errorf("read input: %w", err)
+	if len(in.Repos) == 0 {
+		return fmt.Errorf("no repository snapshots to process")
 	}
-	var repos []digest.RepoSnapshot
-	if err := json.Unmarshal(raw, &repos); err != nil {
-		return fmt.Errorf("parse snapshots: %w", err)
-	}
-	if len(repos) == 0 {
-		return fmt.Errorf("no snapshots in %s", *input)
+	if cfg != nil && cfg.Trending.Since != "" {
+		in.Period = cfg.Trending.Since
 	}
 
 	provider, err := selectProvider(cfg)
 	if err != nil {
 		return err
 	}
-
-	summarizer := summarize.New(provider, summarize.WithCache(summarize.NewCache()))
-	repoDigests := summarizer.Summarize(context.Background(), repos)
-
-	period := "daily"
-	if cfg != nil && cfg.Trending.Since != "" {
-		period = cfg.Trending.Since
-	}
-	d := digest.Digest{
-		Schema:      1,
-		Date:        *date,
-		Period:      period,
-		Languages:   languagesOf(repos),
-		Count:       len(repoDigests),
-		Degraded:    false,
-		CoreVersion: ipc.Version,
-		GeneratedAt: time.Now().UTC(),
-		Repos:       repoDigests,
-	}
-	d.ContentHash = render.ContentHash(d)
-
-	files, err := render.Build(d, []digest.Digest{d}, 90)
+	result, err := app.Run(context.Background(), cfg, in, app.Options{
+		DryRun:   *dryRun,
+		Token:    firstNonEmpty(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
+		Provider: provider,
+	})
 	if err != nil {
 		return err
 	}
 
-	if !*dryRun {
-		base := *outDir
-		if base == "" && cfg != nil {
-			base = cfg.Output.Dir
-		}
-		if base == "" {
-			base = "."
-		}
-		for _, f := range files {
-			path := filepath.Join(base, filepath.FromSlash(f.Path))
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(path, f.Data, 0o644); err != nil {
-				return err
-			}
-		}
-	}
-
 	if *asJSON {
-		out := dryOutput{}
-		out.Digest.ContentHash = d.ContentHash
-		for _, f := range files {
+		out := runOutput{Skipped: result.Skipped, Branch: result.Branch, PRURL: result.PRURL}
+		out.Digest.ContentHash = result.Digest.ContentHash
+		for _, f := range result.Files {
 			sum := sha256.Sum256(f.Data)
-			out.Files = append(out.Files, fileOut{
-				Path:   f.Path,
-				Bytes:  len(f.Data),
-				SHA256: "sha256:" + hex.EncodeToString(sum[:]),
-			})
+			out.Files = append(out.Files, fileOut{Path: f.Path, Bytes: len(f.Data), SHA256: "sha256:" + hex.EncodeToString(sum[:])})
 		}
 		b, _ := json.Marshal(out)
 		fmt.Println(string(b))
 		return nil
 	}
 
-	fmt.Printf("digest %s (%s): %d repos, %d files, contentHash=%s\n", d.Date, d.Period, d.Count, len(files), d.ContentHash)
-	for _, f := range files {
-		fmt.Printf("  %s (%d bytes)\n", f.Path, len(f.Data))
+	if result.Skipped {
+		fmt.Printf("skipped: contentHash unchanged (%s), no commit\n", result.Digest.ContentHash)
+		return nil
+	}
+	fmt.Printf("digest %s (%s): %d repos, %d files, contentHash=%s\n",
+		result.Digest.Date, result.Digest.Period, result.Digest.Count, len(result.Files), result.Digest.ContentHash)
+	if result.Branch != "" {
+		fmt.Printf("  branch: %s\n", result.Branch)
+	}
+	if result.PRURL != "" {
+		fmt.Printf("  PR: %s\n", result.PRURL)
+	}
+	for _, s := range result.Report.Stages {
+		fmt.Printf("  %-10s %dms\n", s.Name, s.DurationMs)
 	}
 	return nil
 }
@@ -157,15 +147,11 @@ func selectProvider(cfg *config.Config) (model.Provider, error) {
 	})
 }
 
-func languagesOf(repos []digest.RepoSnapshot) []string {
-	seen := map[string]bool{}
-	out := []string{"all"}
-	seen["all"] = true
-	for _, r := range repos {
-		if !seen[r.Language] {
-			seen[r.Language] = true
-			out = append(out, r.Language)
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
 		}
 	}
-	return out
+	return ""
 }
