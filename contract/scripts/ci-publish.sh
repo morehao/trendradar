@@ -33,7 +33,7 @@ RETRY_BASE_SECONDS="${RETRY_BASE_SECONDS:-30}"
 MAX_ATTEMPTS=3
 attempt=1
 while :; do
-  if npm publish --provenance --access public --registry https://registry.npmjs.org; then
+  if npm publish --provenance --access public --tag latest --registry https://registry.npmjs.org; then
     exit 0
   fi
   if npm view "${name}@${PKG_VERSION}" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
