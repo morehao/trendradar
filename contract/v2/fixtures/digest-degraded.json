@@ -1,0 +1,43 @@
+{
+  "schema": 2,
+  "date": "2026-10-30",
+  "period": "daily",
+  "languages": [
+    "all",
+    "go"
+  ],
+  "count": 2,
+  "degraded": true,
+  "contentHash": "sha256:a21dfa56cbd2fe611c9e7b9844d672b3608922156bf8e998f49f4293ab5ce3e3",
+  "contentHashAlgo": "jcs-sha256-v1",
+  "coreVersion": "0.1.0",
+  "generatedAt": "2026-10-30T00:05:00Z",
+  "repos": [
+    {
+      "fullName": "golang/go",
+      "url": "https://github.com/golang/go",
+      "description": "The Go programming language",
+      "language": "go",
+      "stars": 126000,
+      "starsInPeriod": 0,
+      "forks": 17800,
+      "rank": 1,
+      "source": "search-api",
+      "summaryZh": "[原文] The Go programming language",
+      "summarySource": "original"
+    },
+    {
+      "fullName": "gin-gonic/gin",
+      "url": "https://github.com/gin-gonic/gin",
+      "description": "HTTP web framework written in Go",
+      "language": "go",
+      "stars": 80200,
+      "starsInPeriod": 0,
+      "forks": 8100,
+      "rank": 2,
+      "source": "search-api",
+      "summaryZh": "[原文] HTTP web framework written in Go",
+      "summarySource": "original"
+    }
+  ]
+}

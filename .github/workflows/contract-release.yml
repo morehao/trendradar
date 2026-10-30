@@ -1,0 +1,39 @@
+name: contract-release
+
+# Triggered by nested-module tags of the form contract/vX.Y.Z (see design 7.1).
+on:
+  push:
+    tags: ["contract/v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # npm OIDC trusted publishing + provenance
+
+defaults:
+  run:
+    working-directory: contract/v2
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: contract/v2/package-lock.json
+      - name: tag matches package version
+        run: |
+          test "contract/v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}" \
+            || { echo "tag ${GITHUB_REF_NAME} does not match package.json version"; exit 1; }
+      - run: npm ci
+      - run: npm run verify-versions
+      - run: npm run verify-field-map
+      - run: npm test
+      - name: publish @morehao/trendradar-contract (OIDC)
+        run: npm publish --access public --provenance
+      # Go side: the tag contract/vX.Y.Z makes the submodule available to
+      # `go get github.com/morehao/trendradar/contract/v2@vX.Y.Z`; no publish step.

@@ -1,0 +1,43 @@
+{
+  "schema": 2,
+  "date": "2026-10-30",
+  "period": "daily",
+  "languages": [
+    "all",
+    "unknown"
+  ],
+  "count": 2,
+  "degraded": false,
+  "contentHash": "sha256:84a5ef479995ae104544dfc0869227442f3d8968c0d27b5f76410040d4c8b2e4",
+  "contentHashAlgo": "jcs-sha256-v1",
+  "coreVersion": "0.1.0",
+  "generatedAt": "2026-10-30T00:05:00Z",
+  "repos": [
+    {
+      "fullName": "someorg/no-language",
+      "url": "https://github.com/someorg/no-language",
+      "description": "A repo whose primary language could not be detected",
+      "language": "unknown",
+      "stars": 1200,
+      "starsInPeriod": 40,
+      "forks": 30,
+      "rank": 1,
+      "source": "trending-html",
+      "summaryZh": "语言未知的仓库，热度进入榜单。",
+      "summarySource": "model"
+    },
+    {
+      "fullName": "someorg/aggregate-only",
+      "url": "https://github.com/someorg/aggregate-only",
+      "description": "Repo surfaced only in the all-languages list",
+      "language": "unknown",
+      "stars": 980,
+      "starsInPeriod": 33,
+      "forks": 12,
+      "rank": 2,
+      "source": "trending-html",
+      "summaryZh": "仅在全局榜单出现的仓库。",
+      "summarySource": "model"
+    }
+  ]
+}

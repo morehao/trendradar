@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/errors.v2.json",
+  "title": "trendradar errors v2",
+  "description": "Canonical error-code catalog. Each property is one error code whose retriable/description are consts, so this file is the single source of truth for retriability. ipc.v2.json ErrorCode enum must match these keys exactly.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "INTERNAL",
+    "CONFIG_INVALID",
+    "PAYLOAD_TOO_LARGE",
+    "FETCH_FAILED",
+    "FETCH_RATE_LIMITED",
+    "PARSE_FAILED",
+    "MODEL_UNAUTHORIZED",
+    "MODEL_RATE_LIMITED",
+    "MODEL_TIMEOUT",
+    "MODEL_FAILED",
+    "MODEL_BAD_OUTPUT",
+    "GIT_NOT_INSTALLED",
+    "REPO_NOT_GIT",
+    "REPO_DIRTY",
+    "GIT_OPERATION_FAILED",
+    "PR_FAILED",
+    "NOT_MERGEABLE"
+  ],
+  "properties": {
+    "INTERNAL": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": true
+        },
+        "description": {
+          "const": "Unexpected internal error (transient panic/IO); retry may succeed."
+        }
+      }
+    },
+    "CONFIG_INVALID": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Configuration is invalid or unreadable."
+        }
+      }
+    },
+    "PAYLOAD_TOO_LARGE": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Input payload exceeds the allowed size."
+        }
+      }
+    },
+    "FETCH_FAILED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Fetching trending data failed terminally (retries exhausted)."
+        }
+      }
+    },
+    "FETCH_RATE_LIMITED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": true
+        },
+        "description": {
+          "const": "Fetching was rate limited; retry later."
+        }
+      }
+    },
+    "PARSE_FAILED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Parsing fetched HTML/JSON failed."
+        }
+      }
+    },
+    "MODEL_UNAUTHORIZED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Model provider rejected the credentials."
+        }
+      }
+    },
+    "MODEL_RATE_LIMITED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": true
+        },
+        "description": {
+          "const": "Model provider rate limited the request."
+        }
+      }
+    },
+    "MODEL_TIMEOUT": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": true
+        },
+        "description": {
+          "const": "Model request timed out."
+        }
+      }
+    },
+    "MODEL_FAILED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": true
+        },
+        "description": {
+          "const": "Model request failed."
+        }
+      }
+    },
+    "MODEL_BAD_OUTPUT": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Model returned output that violates the expected shape."
+        }
+      }
+    },
+    "GIT_NOT_INSTALLED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "git executable was not found."
+        }
+      }
+    },
+    "REPO_NOT_GIT": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Target directory is not a git repository."
+        }
+      }
+    },
+    "REPO_DIRTY": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Git working tree has uncommitted changes."
+        }
+      }
+    },
+    "GIT_OPERATION_FAILED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": true
+        },
+        "description": {
+          "const": "A git operation (commit/push) failed."
+        }
+      }
+    },
+    "PR_FAILED": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": true
+        },
+        "description": {
+          "const": "Opening or updating the pull request failed."
+        }
+      }
+    },
+    "NOT_MERGEABLE": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "const": false
+        },
+        "description": {
+          "const": "Pull request is not mergeable."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "INTERNAL",
+        "CONFIG_INVALID",
+        "PAYLOAD_TOO_LARGE",
+        "FETCH_FAILED",
+        "FETCH_RATE_LIMITED",
+        "PARSE_FAILED",
+        "MODEL_UNAUTHORIZED",
+        "MODEL_RATE_LIMITED",
+        "MODEL_TIMEOUT",
+        "MODEL_FAILED",
+        "MODEL_BAD_OUTPUT",
+        "GIT_NOT_INSTALLED",
+        "REPO_NOT_GIT",
+        "REPO_DIRTY",
+        "GIT_OPERATION_FAILED",
+        "PR_FAILED",
+        "NOT_MERGEABLE"
+      ]
+    },
+    "ErrorMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retriable",
+        "description"
+      ],
+      "properties": {
+        "retriable": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

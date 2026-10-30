@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/version-info.v2.json",
+  "title": "trendradar version info v2",
+  "description": "Handshake payload returned by `trendradar version --json`. The plugin requires ipcSchema===2 && digestSchema===2 && contractVersion major===2.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["version", "commit", "ipcSchema", "digestSchema", "contractVersion", "supportedProviders"],
+  "properties": {
+    "version": { "type": "string" },
+    "commit": { "type": "string" },
+    "ipcSchema": { "const": 2 },
+    "digestSchema": { "const": 2 },
+    "contractVersion": { "type": "string" },
+    "supportedProviders": { "type": "array", "items": { "type": "string" } }
+  }
+}
