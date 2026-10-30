@@ -1,14 +1,24 @@
+# Tag-triggered publish of @morehao/trendradar-contract via npm Trusted Publishing (OIDC).
+# Mirrors the proven dsh-github-trending release recipe: NO registry-url (a dummy
+# NODE_AUTH_TOKEN from setup-node fights OIDC), npm upgraded to >=11.5.1, explicit
+# --registry in ci-publish.sh, --provenance.
+#
+# One-time npm-side setup (owner): see notes — `npm trust github
+# @morehao/trendradar-contract --repo morehao/trendradar --file contract-release.yml --allow-publish`.
 name: contract-release
 
-# Triggered by nested-module tags of the form contract/vX.Y.Z (see design 7.1).
 on:
   push:
     tags: ["contract/v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag to publish (e.g. contract/v2.0.0)"
+        required: true
 
 permissions:
   contents: read
-  id-token: write # npm OIDC trusted publishing + provenance
+  id-token: write # OIDC trusted publishing + provenance
 
 defaults:
   run:
@@ -19,21 +29,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      # NOTE: deliberately NO registry-url here (see header comment).
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-          cache: npm
-          cache-dependency-path: contract/v2/package-lock.json
-      - name: tag matches package version
+          node-version: "22"
+          package-manager-cache: false
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+      - name: OIDC environment self-check
         run: |
-          test "contract/v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}" \
-            || { echo "tag ${GITHUB_REF_NAME} does not match package.json version"; exit 1; }
-      - run: npm ci
-      - run: npm run verify-versions
-      - run: npm run verify-field-map
-      - run: npm test
-      - name: publish @morehao/trendradar-contract (OIDC)
-        run: npm publish --access public --provenance
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] && [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "id-token env: present"
+          else
+            echo "id-token env: MISSING (need permissions.id-token: write)"; exit 1
+          fi
+      - run: npm ci --ignore-scripts
+      - name: pre-publish gates
+        run: npm run verify-versions && npm run verify-field-map && npm test
+      - name: Publish to npm via OIDC
+        run: bash ./scripts/ci-publish.sh
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          NPM_CONFIG_LOGLEVEL: verbose
       # Go side: the tag contract/vX.Y.Z makes the submodule available to
       # `go get github.com/morehao/trendradar/contract/v2@vX.Y.Z`; no publish step.
