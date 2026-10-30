@@ -76,7 +76,7 @@ func (s *Summarizer) summarizeBatch(ctx context.Context, batch []digest.RepoSnap
 	out := make(map[string]string, len(batch))
 	var pending []digest.RepoSnapshot
 	for _, r := range batch {
-		if sum, ok := s.cache.Get(r.FullName, r.Description); ok {
+		if sum, ok := s.cache.Get(r.FullName, digest.Str(r.Description)); ok {
 			out[r.FullName] = sum
 			continue
 		}
@@ -102,7 +102,7 @@ func (s *Summarizer) summarizeBatch(ctx context.Context, batch []digest.RepoSnap
 		for _, r := range pending {
 			if v, ok := sums[r.FullName]; ok {
 				out[r.FullName] = v
-				s.cache.Put(r.FullName, r.Description, v)
+				s.cache.Put(r.FullName, digest.Str(r.Description), v)
 			}
 		}
 		return out
@@ -111,7 +111,7 @@ func (s *Summarizer) summarizeBatch(ctx context.Context, batch []digest.RepoSnap
 }
 
 func original(r digest.RepoSnapshot) digest.RepoDigest {
-	desc := r.Description
+	desc := digest.Str(r.Description)
 	if desc == "" {
 		desc = "(无描述)"
 	}

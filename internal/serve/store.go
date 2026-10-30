@@ -10,7 +10,6 @@ import (
 	"sort"
 
 	contract "github.com/morehao/trendradar/contract"
-	"github.com/morehao/trendradar/internal/digest"
 	"github.com/morehao/trendradar/internal/ipc"
 )
 
@@ -59,11 +58,12 @@ func (s *Store) Digest(date string) (*contract.Digest, error) {
 		return &d, nil
 	}
 	// v1 file: normalize to v2 with the legacy algorithm, preserving the hash.
-	var v1 digest.Digest
-	if err := json.Unmarshal(data, &v1); err != nil {
+	var cd contract.Digest
+	if err := json.Unmarshal(data, &cd); err != nil {
 		return nil, err
 	}
-	cd := v1.ContractWithAlgo("legacy-struct-marshal-v1")
+	cd.Schema = 2
+	cd.ContentHashAlgo = "legacy-struct-marshal-v1"
 	return &cd, nil
 }
 

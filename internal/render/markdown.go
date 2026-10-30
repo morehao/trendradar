@@ -21,8 +21,12 @@ func Markdown(d digest.Digest) []byte {
 	fmt.Fprintf(&b, "count: %d\n", d.Count)
 	fmt.Fprintf(&b, "degraded: %t\n", d.Degraded)
 	fmt.Fprintf(&b, "contentHash: %s\n", d.ContentHash)
-	fmt.Fprintf(&b, "coreVersion: %s\n", d.CoreVersion)
-	fmt.Fprintf(&b, "generatedAt: %s\n", d.GeneratedAt.UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "coreVersion: %s\n", digest.Str(d.CoreVersion))
+	gen := ""
+	if d.GeneratedAt != nil {
+		gen = d.GeneratedAt.UTC().Format(time.RFC3339)
+	}
+	fmt.Fprintf(&b, "generatedAt: %s\n", gen)
 	b.WriteString("---\n\n")
 	fmt.Fprintf(&b, "# %s 趋势摘要\n\n", d.Date)
 	if d.Degraded {

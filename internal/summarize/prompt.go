@@ -17,7 +17,7 @@ func buildUserPrompt(batch []digest.RepoSnapshot) string {
 	var b strings.Builder
 	b.WriteString("为下列仓库生成中文摘要：\n")
 	for _, r := range batch {
-		desc := strings.TrimSpace(r.Description)
+		desc := strings.TrimSpace(digest.Str(r.Description))
 		if desc == "" {
 			desc = "(无描述)"
 		}

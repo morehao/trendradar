@@ -14,8 +14,8 @@ import (
 func snap(i int) digest.RepoSnapshot {
 	name := fmt.Sprintf("acme/repo%d", i)
 	return digest.RepoSnapshot{
-		FullName: name, URL: "https://github.com/" + name, Description: "desc " + name,
-		Language: "go", Stars: 100, StarsInPeriod: 10, Forks: 5, Rank: i + 1, Source: digest.SourceTrendingHTML,
+		FullName: name, URL: "https://github.com/" + name, Description: digest.StrPtr("desc " + name),
+		Language: "go", Stars: 100, StarsInPeriod: 10, Forks: digest.IntPtr(5), Rank: i + 1, Source: digest.SourceTrendingHTML,
 	}
 }
 

@@ -84,16 +84,19 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if period == "" {
 		period = "daily"
 	}
+	coreV := ipc.Version
+	genAt := time.Now().UTC()
 	d := digest.Digest{
-		Schema:      2,
-		Date:        in.Date,
-		Period:      period,
-		Languages:   languagesOf(in.Repos),
-		Count:       len(repoDigests),
-		Degraded:    in.Degraded || summaryDegraded,
-		CoreVersion: ipc.Version,
-		GeneratedAt: time.Now().UTC(),
-		Repos:       repoDigests,
+		Schema:          2,
+		Date:            in.Date,
+		Period:          period,
+		Languages:       languagesOf(in.Repos),
+		Count:           len(repoDigests),
+		Degraded:        in.Degraded || summaryDegraded,
+		ContentHashAlgo: "jcs-sha256-v1",
+		CoreVersion:     &coreV,
+		GeneratedAt:     &genAt,
+		Repos:           repoDigests,
 	}
 	d.ContentHash = render.ContentHash(d)
 

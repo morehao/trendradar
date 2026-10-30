@@ -57,11 +57,11 @@ func (c *Client) SearchFallbackAt(ctx context.Context, now time.Time, since stri
 		out = append(out, digest.RepoSnapshot{
 			FullName:      it.FullName,
 			URL:           it.HTMLURL,
-			Description:   it.Description,
+			Description:   digest.StrPtr(it.Description),
 			Language:      lang,
 			Stars:         it.Stars,
 			StarsInPeriod: 0,
-			Forks:         it.Forks,
+			Forks:         digest.IntPtr(it.Forks),
 			Rank:          i + 1,
 			Source:        digest.SourceSearchAPI,
 		})

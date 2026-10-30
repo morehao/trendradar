@@ -8,10 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	contract "github.com/morehao/trendradar/contract"
-	"github.com/morehao/trendradar/internal/digest"
 )
 
 // seed writes a legacy v1 digest file (schema 1, no contentHashAlgo) to exercise
@@ -23,13 +21,12 @@ func seed(t *testing.T) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	d := digest.Digest{
-		Schema: 1, Date: "2026-10-30", Period: "daily", Languages: []string{"all", "go"},
-		Count: 1, Degraded: false, ContentHash: "sha256:" + strings.Repeat("a", 64),
-		CoreVersion: "0.1.0", GeneratedAt: time.Date(2026, 10, 30, 0, 5, 0, 0, time.UTC),
-		Repos: []digest.RepoDigest{},
+	v1 := map[string]any{
+		"schema": 1, "date": "2026-10-30", "period": "daily", "languages": []string{"all", "go"},
+		"count": 1, "degraded": false, "contentHash": "sha256:" + strings.Repeat("a", 64),
+		"coreVersion": "0.1.0", "generatedAt": "2026-10-30T00:05:00Z", "repos": []any{},
 	}
-	b, _ := json.Marshal(d)
+	b, _ := json.Marshal(v1)
 	if err := os.WriteFile(filepath.Join(dir, "2026-10-30.json"), b, 0o644); err != nil {
 		t.Fatal(err)
 	}
