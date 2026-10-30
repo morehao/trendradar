@@ -1,5 +1,7 @@
 name: contract-ci
 
+# 镜像显式钉 ubuntu-24.04：ubuntu-latest 自 2026-10-19 起分批迁到 26.04（11-19 完成），
+# 校验结果不该随镜像漂移；要试新镜像就单独改 ubuntu-26.04 跑一轮。
 on:
   push:
     branches: [main]
@@ -11,6 +13,9 @@ on:
       - "contract/**"
       - ".github/workflows/contract-ci.yml"
 
+# 同一 workflow + ref 串行化：同分支最多一个运行 + 一个等待，新提交会顶掉旧的等待，省 runner。
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
 permissions:
   contents: read
 
@@ -20,12 +25,12 @@ defaults:
 
 jobs:
   ts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -41,14 +46,14 @@ jobs:
       - run: npm pack --dry-run
 
   go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.1"
           cache-dependency-path: contract/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm

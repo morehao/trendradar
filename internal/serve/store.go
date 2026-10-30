@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/morehao/trendradar/internal/digest"
+	contract "github.com/morehao/trendradar/contract"
 	"github.com/morehao/trendradar/internal/ipc"
 )
 
@@ -18,8 +18,7 @@ var ErrNotFound = errors.New("digest not found")
 
 var dateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
-// Store reads digests from a directory laid out as <root>/<date>/<date>.json,
-// where root is the digests directory (usually "digests").
+// Store reads digests from a directory laid out as <root>/<date>/<date>.json.
 type Store struct {
 	root string
 }
@@ -36,8 +35,9 @@ func (s *Store) path(date string) string {
 	return filepath.Join(s.root, date, date+".json")
 }
 
-// Digest loads one day's digest.
-func (s *Store) Digest(date string) (*digest.Digest, error) {
+// Digest loads one day's digest normalized to the v2 contract shape. Historical
+// v1 files are upgraded on read (schema:2, contentHashAlgo legacy, hash kept).
+func (s *Store) Digest(date string) (*contract.Digest, error) {
 	if !dateRe.MatchString(date) {
 		return nil, ErrNotFound
 	}
@@ -48,18 +48,32 @@ func (s *Store) Digest(date string) (*digest.Digest, error) {
 	if err != nil {
 		return nil, err
 	}
-	var d digest.Digest
-	if err := json.Unmarshal(data, &d); err != nil {
+	var probe map[string]json.RawMessage
+	_ = json.Unmarshal(data, &probe)
+	if _, ok := probe["contentHashAlgo"]; ok {
+		var d contract.Digest
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	}
+	// v1 file: normalize to v2 with the legacy algorithm, preserving the hash.
+	var cd contract.Digest
+	if err := json.Unmarshal(data, &cd); err != nil {
 		return nil, err
 	}
-	return &d, nil
+	cd.Schema = 2
+	cd.ContentHashAlgo = "legacy-struct-marshal-v1"
+	return &cd, nil
 }
 
 // ManifestEntry is one row of the manifest.
 type ManifestEntry struct {
-	Date        string `json:"date"`
-	ContentHash string `json:"contentHash"`
-	Degraded    bool   `json:"degraded"`
+	Date            string `json:"date"`
+	ContentHash     string `json:"contentHash"`
+	Schema          int    `json:"schema"`
+	ContentHashAlgo string `json:"contentHashAlgo"`
+	Degraded        bool   `json:"degraded"`
 }
 
 // Manifest lists available digests, newest first.
@@ -86,7 +100,7 @@ func (s *Store) Manifest() (Manifest, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, ManifestEntry{Date: d.Date, ContentHash: d.ContentHash, Degraded: d.Degraded})
+		out = append(out, ManifestEntry{Date: d.Date, ContentHash: d.ContentHash, Schema: d.Schema, ContentHashAlgo: d.ContentHashAlgo, Degraded: d.Degraded})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Date > out[j].Date })
 	return Manifest{CoreVersion: ipc.Version, Entries: out}, nil

@@ -15,7 +15,7 @@ type File struct {
 	Data []byte
 }
 
-// JSON serializes a digest as indented JSON.
+// JSON serializes a digest as indented v2 JSON (schema=2, contentHashAlgo).
 func JSON(d digest.Digest) ([]byte, error) {
 	b, err := json.MarshalIndent(d, "", "  ")
 	if err != nil {

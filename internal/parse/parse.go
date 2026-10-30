@@ -57,11 +57,11 @@ func ParseTrending(body []byte, pageLang string) ([]digest.RepoSnapshot, Stats, 
 		out = append(out, digest.RepoSnapshot{
 			FullName:      full,
 			URL:           "https://github.com" + href,
-			Description:   strings.TrimSpace(s.Find("p.col-9").First().Text()),
+			Description:   digest.StrPtr(strings.TrimSpace(s.Find("p.col-9").First().Text())),
 			Language:      normLang,
 			Stars:         parseCount(s.Find(`a[href$="/stargazers"]`).First().Text()),
 			StarsInPeriod: parseStarsInPeriod(s.Text()),
-			Forks:         parseCount(s.Find(`a[href$="/forks"]`).First().Text()),
+			Forks:         digest.IntPtr(parseCount(s.Find(`a[href$="/forks"]`).First().Text())),
 			Rank:          i + 1,
 			Source:        digest.SourceTrendingHTML,
 		})

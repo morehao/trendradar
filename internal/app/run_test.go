@@ -67,7 +67,7 @@ func setupRepo(t *testing.T) (remote, work string, cfg *config.Config) {
 
 func fixtureInputs() Inputs {
 	mk := func(i int, name string) digest.RepoSnapshot {
-		return digest.RepoSnapshot{FullName: name, URL: "https://github.com/" + name, Description: "desc", Language: "go", Stars: 100 + i, StarsInPeriod: 10, Forks: 5, Rank: i + 1, Source: digest.SourceTrendingHTML}
+		return digest.RepoSnapshot{FullName: name, URL: "https://github.com/" + name, Description: digest.StrPtr("desc"), Language: "go", Stars: 100 + i, StarsInPeriod: 10, Forks: digest.IntPtr(5), Rank: i + 1, Source: digest.SourceTrendingHTML}
 	}
 	return Inputs{Repos: []digest.RepoSnapshot{mk(0, "acme/one"), mk(1, "acme/two")}, Date: "2026-10-30", Period: "daily"}
 }

@@ -1,28 +1,33 @@
 package ipc
 
-import "testing"
+import (
+	"testing"
+
+	contract "github.com/morehao/trendradar/contract"
+)
 
 func TestErrorCodeCount(t *testing.T) {
 	if got, want := len(AllCodes), 17; got != want {
 		t.Fatalf("AllCodes length = %d, want %d", got, want)
 	}
+	if len(contract.ErrorCatalog) != 17 {
+		t.Fatalf("contract.ErrorCatalog length = %d, want 17", len(contract.ErrorCatalog))
+	}
 }
 
-func TestEveryCodeIsValidAndHasRetriableVerdict(t *testing.T) {
+func TestEveryCodeValid(t *testing.T) {
 	seen := make(map[Code]bool, len(AllCodes))
 	for _, c := range AllCodes {
 		if seen[c] {
-			t.Fatalf("duplicate code %q in AllCodes", c)
+			t.Fatalf("duplicate code %q", c)
 		}
 		seen[c] = true
 		if !c.Valid() {
-			t.Fatalf("code %q in AllCodes but not in retriable table", c)
+			t.Fatalf("code %q not valid", c)
 		}
-		// Retriable must return the table value for every code (no silent default).
-		if _, ok := retriableCodes[c]; !ok {
-			t.Fatalf("code %q has no retriable verdict", c)
-		}
-		_ = Retriable(c)
+	}
+	if Code("NOPE").Valid() {
+		t.Fatal("unknown code reported valid")
 	}
 }
 
@@ -45,11 +50,5 @@ func TestNewErrorFillsRetriable(t *testing.T) {
 	e := NewError(CodeFetchRateLimited, "status %d", 429)
 	if e.Code != CodeFetchRateLimited || e.Message != "status 429" || !e.Retriable {
 		t.Fatalf("unexpected error info: %+v", e)
-	}
-}
-
-func TestUnknownCodeIsInvalid(t *testing.T) {
-	if Code("NOPE").Valid() {
-		t.Fatal("unknown code reported valid")
 	}
 }

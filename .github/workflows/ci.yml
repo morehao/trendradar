@@ -1,19 +1,24 @@
 name: ci
 
+# 镜像显式钉 ubuntu-24.04：ubuntu-latest 自 2026-10-19 起分批迁到 26.04（11-19 完成），
+# 校验结果不该随镜像漂移；要试新镜像就单独改 ubuntu-26.04 跑一轮。
 on:
   push:
     branches: [main]
   pull_request:
+
+# 同一 workflow + ref 串行化：同分支最多一个运行 + 一个等待，新提交会顶掉旧的等待，省 runner。
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: read
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.1"
           cache: true
@@ -27,10 +32,10 @@ jobs:
           ./bin/trendradar version --json
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.1"
       # NOTE: golangci-lint v1 binaries are built with an older Go and refuse to
@@ -42,15 +47,15 @@ jobs:
         run: go vet ./...
 
   build-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         goos: [darwin, linux, windows]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.1"
       - name: cross build ${{ matrix.goos }}/${{ matrix.goarch }}
@@ -61,10 +66,10 @@ jobs:
         run: go build -o /dev/null ./cmd/trendradar
 
   contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.1"
       - name: contract hash is up to date

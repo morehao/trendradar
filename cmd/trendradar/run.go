@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -13,39 +14,54 @@ import (
 	"github.com/morehao/trendradar/internal/app"
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/fetch"
+	"github.com/morehao/trendradar/internal/gitx"
 	"github.com/morehao/trendradar/internal/ingest"
+	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
 )
 
-type fileOut struct {
-	Path   string `json:"path"`
-	Bytes  int    `json:"bytes"`
-	SHA256 string `json:"sha256"`
-}
-
-type runOutput struct {
-	Files   []fileOut `json:"files"`
-	Skipped bool      `json:"skipped"`
-	Branch  string    `json:"branch,omitempty"`
-	PRURL   string    `json:"prUrl,omitempty"`
-	Digest  struct {
-		ContentHash string `json:"contentHash"`
-	} `json:"digest"`
-}
-
-// runRun implements `trendradar run`: ingest (network or --input) -> summarize
-// -> render -> git commit/push (+ PR when enabled).
+// runRun implements `trendradar run`. In --json mode it always emits a contract
+// RunResult, including on failure (ok=false + error ErrorInfo).
 func runRun(args []string) error {
+	started := time.Now()
+	var asJSON bool
+	err := runRunExec(args, started, &asJSON)
+	if err != nil && asJSON {
+		out := ipc.RunResult{
+			IPCSchema:  ipc.SchemaVersion,
+			OK:         false,
+			Command:    string(ipc.CommandRun),
+			StartedAt:  started.UTC(),
+			FinishedAt: time.Now().UTC(),
+		}
+		var ie *ipc.ErrorInfo
+		var ge *gitx.Error
+		switch {
+		case errors.As(err, &ie):
+			out.Error = ie.ToContract()
+		case errors.As(err, &ge):
+			out.Error = ipc.NewError(ge.Code, "%s", ge.Message).ToContract()
+		default:
+			out.Error = ipc.NewError(ipc.CodeInternal, "%s", err.Error()).ToContract()
+		}
+		b, _ := json.Marshal(out)
+		fmt.Println(string(b))
+	}
+	return err
+}
+
+func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "path to config.yaml")
 	input := fs.String("input", "", "snapshots JSON file ([]RepoSnapshot); skips network fetch")
 	date := fs.String("date", time.Now().Format("2006-01-02"), "digest date (YYYY-MM-DD)")
 	dryRun := fs.Bool("dry-run", false, "do not write files or touch git")
-	asJSON := fs.Bool("json", false, "emit machine-readable JSON")
+	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON")
 	outDir := fs.String("out", "", "output directory (overrides config.output.dir)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	*asJSON = *jsonFlag
 
 	var cfg *config.Config
 	if *cfgPath != "" {
@@ -106,11 +122,25 @@ func runRun(args []string) error {
 	}
 
 	if *asJSON {
-		out := runOutput{Skipped: result.Skipped, Branch: result.Branch, PRURL: result.PRURL}
-		out.Digest.ContentHash = result.Digest.ContentHash
+		out := ipc.RunResult{
+			IPCSchema:  ipc.SchemaVersion,
+			OK:         true,
+			Command:    string(ipc.CommandRun),
+			StartedAt:  started.UTC(),
+			FinishedAt: time.Now().UTC(),
+			Skipped:    result.Skipped,
+			Branch:     strPtr(result.Branch),
+			Commit:     strPtr(result.Commit),
+			PRUrl:      strPtr(result.PRURL),
+			Warnings:   result.Report.Warnings,
+		}
+		if result.Digest.ContentHash != "" {
+			ch := result.Digest.ContentHash
+			out.ContentHash = &ch
+		}
 		for _, f := range result.Files {
 			sum := sha256.Sum256(f.Data)
-			out.Files = append(out.Files, fileOut{Path: f.Path, Bytes: len(f.Data), SHA256: "sha256:" + hex.EncodeToString(sum[:])})
+			out.Files = append(out.Files, ipc.FileArtifact{Path: f.Path, Bytes: len(f.Data), SHA256: "sha256:" + hex.EncodeToString(sum[:])})
 		}
 		b, _ := json.Marshal(out)
 		fmt.Println(string(b))
@@ -133,6 +163,13 @@ func runRun(args []string) error {
 		fmt.Printf("  %-10s %dms\n", s.Name, s.DurationMs)
 	}
 	return nil
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func selectProvider(cfg *config.Config) (model.Provider, error) {
