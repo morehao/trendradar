@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,7 +80,7 @@ func TestMarkdownGolden(t *testing.T) {
 
 func TestBuildProducesThreeFiles(t *testing.T) {
 	d := fixtureDigest()
-	files, err := Build(d, []digest.Digest{d}, 90)
+	files, err := Build(d, []digest.Digest{d}, 90, "digests")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,5 +95,69 @@ func TestBuildProducesThreeFiles(t *testing.T) {
 		if !paths[want] {
 			t.Fatalf("missing %s in %v", want, paths)
 		}
+	}
+}
+
+// Regression: output.dir must drive the rendered paths and the index links, so
+// `git add <output.dir>` stages exactly what was written.
+func TestBuildHonorsOutputDir(t *testing.T) {
+	d := fixtureDigest()
+	files, err := Build(d, []digest.Digest{d}, 90, "trending")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	var index []byte
+	for _, f := range files {
+		paths[f.Path] = true
+		if strings.HasSuffix(f.Path, "index.md") {
+			index = f.Data
+		}
+	}
+	for _, want := range []string{"trending/2026-10-30/2026-10-30.md", "trending/2026-10-30/2026-10-30.json", "trending/index.md"} {
+		if !paths[want] {
+			t.Fatalf("missing %s in %v", want, paths)
+		}
+	}
+	if !strings.Contains(string(index), "(trending/2026-10-30/2026-10-30.md)") {
+		t.Fatalf("index link not rewritten to output dir:\n%s", index)
+	}
+}
+
+func TestOutputRootSanitizes(t *testing.T) {
+	cases := map[string]string{
+		"":          "digests",
+		".":         "digests",
+		"  ":        "digests",
+		"/abs/path": "digests",
+		"../escape": "digests",
+		"digests":   "digests",
+		"trending":  "trending",
+		"a/b":       "a/b",
+	}
+	for in, want := range cases {
+		if got := OutputRoot(in); got != want {
+			t.Errorf("OutputRoot(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestMarkdownTableAndDegradedNotice(t *testing.T) {
+	d := fixtureDigest()
+	d.Degraded = true
+	d.Repos[0].SummarySource = "original"
+	d.Repos[0].SummaryZh = "[原文] The Go programming language | with a pipe"
+	md := string(Markdown(d))
+	if !strings.Contains(md, "降级") {
+		t.Fatalf("degraded notice missing:\n%s", md)
+	}
+	if !strings.Contains(md, "| 仓库 | Stars | 今日新增 | 摘要 |") {
+		t.Fatalf("table header missing:\n%s", md)
+	}
+	if !strings.Contains(md, "\\|") {
+		t.Fatalf("pipe in a cell must be escaped:\n%s", md)
+	}
+	if strings.Contains(md, " ★") {
+		t.Fatalf("old bullet format should be gone:\n%s", md)
 	}
 }

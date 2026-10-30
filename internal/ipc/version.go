@@ -8,7 +8,7 @@ const DigestSchemaVersion = 1
 //	go build -ldflags "-X github.com/morehao/trendradar/internal/ipc.Version=$(git describe --tags) \
 //	                    -X github.com/morehao/trendradar/internal/ipc.Commit=$(git rev-parse --short HEAD)"
 var (
-	Version = "0.1.0"
+	Version = "0.1.1"
 	Commit  = "dev"
 )
 

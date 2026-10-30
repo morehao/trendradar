@@ -101,6 +101,9 @@ func runRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	for _, w := range result.Report.Warnings {
+		fmt.Fprintf(os.Stderr, "warn: %s\n", w)
+	}
 
 	if *asJSON {
 		out := runOutput{Skipped: result.Skipped, Branch: result.Branch, PRURL: result.PRURL}

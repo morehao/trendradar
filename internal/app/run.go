@@ -60,7 +60,25 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 
 	sumStart := time.Now()
 	repoDigests := summarize.New(provider, summarize.WithCache(summarize.NewCache())).Summarize(ctx, in.Repos)
-	rep.Stages = append(rep.Stages, Stage{Name: "summarize", DurationMs: since(sumStart)})
+	degradedCount := 0
+	for _, rd := range repoDigests {
+		if rd.SummarySource == "original" {
+			degradedCount++
+		}
+	}
+	summaryDegraded := degradedCount > 0
+	rep.Stages = append(rep.Stages, Stage{Name: "summarize", DurationMs: since(sumStart), Degraded: summaryDegraded})
+	if summaryDegraded {
+		rep.Warnings = append(rep.Warnings, fmt.Sprintf(
+			"%d/%d 仓库摘要降级为英文原文（模型不可用或返回无效结果）", degradedCount, len(repoDigests)))
+	}
+
+	// The digest root must be identical for rendering and `git add`; compute it
+	// once here so output.dir is honoured end-to-end (dry runs have no cfg).
+	outDir := render.OutputRoot("")
+	if cfg != nil {
+		outDir = render.OutputRoot(cfg.Output.Dir)
+	}
 
 	period := in.Period
 	if period == "" {
@@ -72,14 +90,14 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		Period:      period,
 		Languages:   languagesOf(in.Repos),
 		Count:       len(repoDigests),
-		Degraded:    in.Degraded,
+		Degraded:    in.Degraded || summaryDegraded,
 		CoreVersion: ipc.Version,
 		GeneratedAt: time.Now().UTC(),
 		Repos:       repoDigests,
 	}
 	d.ContentHash = render.ContentHash(d)
 
-	files, err := render.Build(d, []digest.Digest{d}, 90)
+	files, err := render.Build(d, []digest.Digest{d}, 90, outDir)
 	if err != nil {
 		return res, err
 	}
@@ -121,10 +139,6 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		return res, &gitx.Error{Code: ipc.CodeRepoDirty, Message: "working tree has tracked changes"}
 	}
 
-	outDir := cfg.Output.Dir
-	if outDir == "" {
-		outDir = "digests"
-	}
 	remote := cfg.Repo.Remote
 	if remote == "" {
 		remote = "origin"
@@ -180,10 +194,11 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 
 	if cfg.PR.Enabled && opts.Token != "" {
 		url, werr := openPR(ctx, g, cfg, opts.Token, branch, d)
+		if url != "" {
+			res.PRURL = url
+		}
 		if werr != nil {
 			rep.Warnings = append(rep.Warnings, "PR: "+werr.Error())
-		} else {
-			res.PRURL = url
 		}
 	}
 
@@ -191,6 +206,17 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	res.Report = rep
 	return res, nil
 }
+
+// prAPI is the subset of pr.Client used when opening/merging a PR. It is
+// indirected so tests can assert auto-merge without hitting GitHub.
+type prAPI interface {
+	FindOpen(ctx context.Context, head, base string) (*pr.Pull, error)
+	Create(ctx context.Context, title, head, base, bodyText string) (*pr.Pull, error)
+	Update(ctx context.Context, number int, title, bodyText string) (*pr.Pull, error)
+	Merge(ctx context.Context, number int) error
+}
+
+var newPRClient = func(owner, repo, token string) prAPI { return pr.New(owner, repo, token) }
 
 func openPR(ctx context.Context, g *gitx.Git, cfg *config.Config, token, branch string, d digest.Digest) (string, error) {
 	remoteURL, err := g.RemoteURL(ctx, cfg.Repo.Remote)
@@ -201,7 +227,7 @@ func openPR(ctx context.Context, g *gitx.Git, cfg *config.Config, token, branch 
 	if err != nil {
 		return "", err
 	}
-	client := pr.New(owner, repo, token)
+	client := newPRClient(owner, repo, token)
 	title := fmt.Sprintf("trending %s", d.Date)
 	bodyText := fmt.Sprintf("automated trending digest for %s (%d repos).", d.Date, d.Count)
 
@@ -213,6 +239,13 @@ func openPR(ctx context.Context, g *gitx.Git, cfg *config.Config, token, branch 
 		p, err := client.Create(ctx, title, branch, cfg.Repo.BaseBranch, bodyText)
 		if err != nil {
 			return "", err
+		}
+		// A freshly created PR must also honour autoMerge. Previously only the
+		// "existing PR" path merged, so the first PR of a run was left open.
+		if cfg.PR.AutoMerge {
+			if err := client.Merge(ctx, p.Number); err != nil {
+				return p.HTMLURL, err
+			}
 		}
 		return p.HTMLURL, nil
 	}

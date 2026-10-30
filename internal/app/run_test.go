@@ -16,6 +16,7 @@ import (
 	"github.com/morehao/trendradar/internal/gitx"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
+	"github.com/morehao/trendradar/internal/pr"
 )
 
 func runGit(t *testing.T, dir string, args ...string) {
@@ -141,5 +142,131 @@ func TestSecondDateDoesNotBlockOnTrackedIndex(t *testing.T) {
 	base := countRef(t, remote, "main")
 	if got := countRef(t, remote, "trending/2026-10-31"); got != base+1 {
 		t.Fatalf("branch commits = %d, want %d", got, base+1)
+	}
+}
+
+// Regression: a non-default output.dir must be both written AND staged. Before
+// the fix the renderer hard-coded "digests" while git staged output.dir, so the
+// run failed with `fatal: pathspec 'trending' did not match any files`.
+func TestCustomOutputDirHonored(t *testing.T) {
+	remote, work, cfg := setupRepo(t)
+	cfg.Output.Dir = "trending"
+	r, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("run with custom output dir: %v", err)
+	}
+	if r.Branch != "trending/2026-10-30" {
+		t.Fatalf("branch = %q", r.Branch)
+	}
+	base := countRef(t, remote, "main")
+	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+		t.Fatalf("branch commits = %d, want %d", got, base+1)
+	}
+	for _, rel := range []string{"trending/2026-10-30/2026-10-30.md", "trending/2026-10-30/2026-10-30.json", "trending/index.md"} {
+		if _, err := os.Stat(filepath.Join(work, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("missing %s: %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(work, "digests")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected digests/ dir created: %v", err)
+	}
+}
+
+type badProvider struct{}
+
+func (badProvider) Name() string { return "bad" }
+func (badProvider) Complete(context.Context, string, string) (model.Result, error) {
+	return model.Result{Text: "not json"}, nil
+}
+
+// A degraded model must be reflected in digest.degraded and surfaced as a
+// warning plus a visible notice in the markdown. Previously a wrong key silently
+// produced an all-English digest that still claimed degraded=false.
+func TestDegradedSummariesMarkedAndWarned(t *testing.T) {
+	_, work, cfg := setupRepo(t)
+	r, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: badProvider{}})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !r.Digest.Degraded {
+		t.Fatal("digest.degraded should be true when summaries fall back to original")
+	}
+	if len(r.Report.Warnings) == 0 {
+		t.Fatal("expected a degradation warning")
+	}
+	md, err := os.ReadFile(filepath.Join(work, "digests", "2026-10-30", "2026-10-30.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(md), "降级") {
+		t.Fatalf("markdown is missing the degraded notice:\n%s", md)
+	}
+}
+
+type fakePR struct {
+	existing *pr.Pull
+	created  *pr.Pull
+	merged   []int
+}
+
+func (f *fakePR) FindOpen(context.Context, string, string) (*pr.Pull, error) { return f.existing, nil }
+func (f *fakePR) Create(context.Context, string, string, string, string) (*pr.Pull, error) {
+	return f.created, nil
+}
+func (f *fakePR) Update(context.Context, int, string, string) (*pr.Pull, error) {
+	return f.existing, nil
+}
+func (f *fakePR) Merge(_ context.Context, n int) error {
+	f.merged = append(f.merged, n)
+	return nil
+}
+
+func newOpenPRTestGit(t *testing.T) *gitx.Git {
+	t.Helper()
+	work := t.TempDir()
+	runGit(t, "", "init", work)
+	runGit(t, work, "remote", "add", "origin", "https://github.com/acme/widgets.git")
+	return gitx.New(work)
+}
+
+// Regression: autoMerge must apply to a freshly created PR, not only to a PR
+// that already existed on a previous run.
+func TestOpenPRAutoMergesNewPR(t *testing.T) {
+	fake := &fakePR{created: &pr.Pull{Number: 11, HTMLURL: "https://github.com/acme/widgets/pull/11"}}
+	old := newPRClient
+	newPRClient = func(string, string, string) prAPI { return fake }
+	defer func() { newPRClient = old }()
+
+	cfg := &config.Config{
+		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
+		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
+	}
+	url, err := openPR(context.Background(), newOpenPRTestGit(t), cfg, "tok", "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 3})
+	if err != nil {
+		t.Fatalf("openPR: %v", err)
+	}
+	if url != fake.created.HTMLURL {
+		t.Fatalf("url = %q, want %q", url, fake.created.HTMLURL)
+	}
+	if len(fake.merged) != 1 || fake.merged[0] != 11 {
+		t.Fatalf("new PR was not auto-merged: %v", fake.merged)
+	}
+}
+
+func TestOpenPRMergesExisting(t *testing.T) {
+	fake := &fakePR{existing: &pr.Pull{Number: 9, HTMLURL: "https://github.com/acme/widgets/pull/9"}}
+	old := newPRClient
+	newPRClient = func(string, string, string) prAPI { return fake }
+	defer func() { newPRClient = old }()
+
+	cfg := &config.Config{
+		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
+		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
+	}
+	if _, err := openPR(context.Background(), newOpenPRTestGit(t), cfg, "tok", "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 1}); err != nil {
+		t.Fatalf("openPR: %v", err)
+	}
+	if len(fake.merged) != 1 || fake.merged[0] != 9 {
+		t.Fatalf("existing PR merge = %v", fake.merged)
 	}
 }
