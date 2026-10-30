@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/digest"
@@ -204,13 +205,23 @@ func TestDegradedSummariesMarkedAndWarned(t *testing.T) {
 }
 
 type fakePR struct {
-	existing *pr.Pull
-	created  *pr.Pull
-	merged   []int
+	latest     *pr.Pull // FindForBranch result (any state)
+	existing   *pr.Pull // FindOpen result (open PR)
+	created    *pr.Pull
+	createdErr error
+	merged     []int
+	creates    int
 }
 
 func (f *fakePR) FindOpen(context.Context, string, string) (*pr.Pull, error) { return f.existing, nil }
+func (f *fakePR) FindForBranch(context.Context, string, string) (*pr.Pull, error) {
+	return f.latest, nil
+}
 func (f *fakePR) Create(context.Context, string, string, string, string) (*pr.Pull, error) {
+	f.creates++
+	if f.createdErr != nil {
+		return nil, f.createdErr
+	}
 	return f.created, nil
 }
 func (f *fakePR) Update(context.Context, int, string, string) (*pr.Pull, error) {
@@ -221,27 +232,15 @@ func (f *fakePR) Merge(_ context.Context, n int) error {
 	return nil
 }
 
-func newOpenPRTestGit(t *testing.T) *gitx.Git {
-	t.Helper()
-	work := t.TempDir()
-	runGit(t, "", "init", work)
-	runGit(t, work, "remote", "add", "origin", "https://github.com/acme/widgets.git")
-	return gitx.New(work)
-}
-
 // Regression: autoMerge must apply to a freshly created PR, not only to a PR
 // that already existed on a previous run.
 func TestOpenPRAutoMergesNewPR(t *testing.T) {
 	fake := &fakePR{created: &pr.Pull{Number: 11, HTMLURL: "https://github.com/acme/widgets/pull/11"}}
-	old := newPRClient
-	newPRClient = func(string, string, string) prAPI { return fake }
-	defer func() { newPRClient = old }()
-
 	cfg := &config.Config{
 		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
 		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
 	}
-	url, err := openPR(context.Background(), newOpenPRTestGit(t), cfg, "tok", "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 3})
+	url, err := openPR(context.Background(), fake, cfg, "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 3})
 	if err != nil {
 		t.Fatalf("openPR: %v", err)
 	}
@@ -255,18 +254,155 @@ func TestOpenPRAutoMergesNewPR(t *testing.T) {
 
 func TestOpenPRMergesExisting(t *testing.T) {
 	fake := &fakePR{existing: &pr.Pull{Number: 9, HTMLURL: "https://github.com/acme/widgets/pull/9"}}
-	old := newPRClient
-	newPRClient = func(string, string, string) prAPI { return fake }
-	defer func() { newPRClient = old }()
-
 	cfg := &config.Config{
 		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
 		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
 	}
-	if _, err := openPR(context.Background(), newOpenPRTestGit(t), cfg, "tok", "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 1}); err != nil {
+	if _, err := openPR(context.Background(), fake, cfg, "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 1}); err != nil {
 		t.Fatalf("openPR: %v", err)
 	}
 	if len(fake.merged) != 1 || fake.merged[0] != 9 {
 		t.Fatalf("existing PR merge = %v", fake.merged)
+	}
+}
+
+// withPRClient installs a fake PR client for the duration of a test.
+func withPRClient(t *testing.T, fake prAPI) {
+	t.Helper()
+	old := newPRClientFor
+	newPRClientFor = func(context.Context, *gitx.Git, *config.Config, string) (prAPI, error) { return fake, nil }
+	t.Cleanup(func() { newPRClientFor = old })
+}
+
+func refSHA(t *testing.T, gitDir, ref string) string {
+	t.Helper()
+	out, err := exec.Command("git", "--git-dir", gitDir, "rev-parse", ref).Output()
+	if err != nil {
+		t.Fatalf("rev-parse %s: %v", ref, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// Regression (C1): the original failure. A same-date rerun with changed content
+// rebuilds the branch from origin/main, so the remote branch is no longer an
+// ancestor of the new commit; a plain push is rejected as non-fast-forward. The
+// core must force-with-lease over its own branch instead.
+func TestSameDateRerunWithNewContentForcePushes(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	if _, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()}); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	base := countRef(t, remote, "main")
+	first := refSHA(t, remote, "trending/2026-10-30")
+
+	in2 := fixtureInputs()
+	in2.Repos[0].Stars += 99 // same date, different content -> different contentHash
+	r2, err := Run(context.Background(), cfg, in2, Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("same-date rerun with new content: %v (non-fast-forward regression)", err)
+	}
+	if r2.Skipped {
+		t.Fatal("rerun with changed content must not be skipped")
+	}
+	second := refSHA(t, remote, "trending/2026-10-30")
+	if second == first {
+		t.Fatalf("remote branch was not updated; still %s", first)
+	}
+	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+		t.Fatalf("remote branch commits = %d, want %d (force replaces, not stacks)", got, base+1)
+	}
+}
+
+// Regression (C2): a push that succeeds but is followed by a PR failure must not
+// record state, else the next identical run skips and the PR is never opened.
+func TestPRFailureKeepsStateUnsaved(t *testing.T) {
+	_, _, cfg := setupRepo(t)
+	cfg.PR = config.PRConfig{Enabled: true, AutoMerge: true}
+	withPRClient(t, &fakePR{createdErr: errors.New("boom")})
+
+	in := fixtureInputs()
+	r1, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake(), Token: "tok"})
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if r1.Skipped {
+		t.Fatal("first run should not be skipped")
+	}
+	r2, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake(), Token: "tok"})
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if r2.Skipped {
+		t.Fatal("state was saved despite PR failure; rerun skipped and PR would never be retried")
+	}
+}
+
+// Regression (C3): a date whose PR was already merged must be skipped entirely,
+// not re-pushed and re-opened as a duplicate.
+func TestMergedPRSkipsWholeRun(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	cfg.PR = config.PRConfig{Enabled: true, AutoMerge: true}
+	mergedAt := time.Now()
+	withPRClient(t, &fakePR{latest: &pr.Pull{Number: 5, State: "closed", MergedAt: &mergedAt}})
+
+	r, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake(), Token: "tok"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !r.Skipped {
+		t.Fatal("a date with a merged PR must be skipped")
+	}
+	if got := countRef(t, remote, "trending/2026-10-30"); got != 0 {
+		t.Fatalf("unexpected branch pushed for merged date: %d commits", got)
+	}
+}
+
+// Regression (C3): a closed-unmerged PR must be rebuilt and re-opened, not
+// skipped.
+func TestClosedPRRebuildsAndReopens(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	cfg.PR = config.PRConfig{Enabled: true, AutoMerge: true}
+	created := &pr.Pull{Number: 7, HTMLURL: "https://github.com/acme/widgets/pull/7"}
+	fake := &fakePR{latest: &pr.Pull{Number: 3, State: "closed", MergedAt: nil}, created: created}
+	withPRClient(t, fake)
+
+	r, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake(), Token: "tok"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if r.Skipped {
+		t.Fatal("closed PR must trigger a rebuild, not a skip")
+	}
+	if fake.creates != 1 {
+		t.Fatalf("expected a fresh PR to be created, creates=%d", fake.creates)
+	}
+	base := countRef(t, remote, "main")
+	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+		t.Fatalf("branch commits = %d, want %d", got, base+1)
+	}
+	if r.PRURL != created.HTMLURL {
+		t.Fatalf("PRURL = %q, want %q", r.PRURL, created.HTMLURL)
+	}
+}
+
+// Regression (C4): changing only output.dir must re-render instead of being
+// skipped on date+contentHash.
+func TestOutputDirChangeIsNotSkipped(t *testing.T) {
+	_, work, cfg := setupRepo(t)
+	in := fixtureInputs()
+	if _, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake()}); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	cfg.Output.Dir = "digests-alt"
+	r2, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("run with new output dir: %v", err)
+	}
+	if r2.Skipped {
+		t.Fatal("changing output.dir must not hit the contentHash skip")
+	}
+	rel := "digests-alt/2026-10-30/2026-10-30.md"
+	if _, err := os.Stat(filepath.Join(work, filepath.FromSlash(rel))); err != nil {
+		t.Fatalf("missing %s after output.dir change: %v", rel, err)
 	}
 }

@@ -33,12 +33,17 @@ func New(owner, repo, token string) *Client {
 	}
 }
 
-// Pull is the subset of the PR object we use.
+// Pull is the subset of the PR object we use. MergedAt is nil until the PR is
+// merged; "state" alone cannot distinguish merged from closed-unmerged.
 type Pull struct {
-	Number  int    `json:"number"`
-	HTMLURL string `json:"html_url"`
-	State   string `json:"state"`
+	Number   int        `json:"number"`
+	HTMLURL  string     `json:"html_url"`
+	State    string     `json:"state"`
+	MergedAt *time.Time `json:"merged_at"`
 }
+
+// Merged reports whether the PR was merged (as opposed to closed unmerged).
+func (p *Pull) Merged() bool { return p != nil && p.MergedAt != nil }
 
 var remoteRe = regexp.MustCompile(`github\.com[:/]+([^/]+)/([^/]+?)(?:\.git)?$`)
 
@@ -86,6 +91,27 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 // FindOpen returns an open PR for head->base, or nil.
 func (c *Client) FindOpen(ctx context.Context, head, base string) (*Pull, error) {
 	path := fmt.Sprintf("/repos/%s/%s/pulls?state=open&head=%s:%s&base=%s", c.Owner, c.Repo, c.Owner, head, base)
+	data, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var pulls []Pull
+	if err := json.Unmarshal(data, &pulls); err != nil {
+		return nil, err
+	}
+	if len(pulls) == 0 {
+		return nil, nil
+	}
+	return &pulls[0], nil
+}
+
+// FindForBranch returns the most recently created PR (in ANY state) for
+// head->base, or nil. The lifecycle of the digest branch for a date is decided
+// from this: a merged PR means the date is done; a closed-unmerged PR means the
+// branch may be rebuilt and a fresh PR opened.
+func (c *Client) FindForBranch(ctx context.Context, head, base string) (*Pull, error) {
+	path := fmt.Sprintf("/repos/%s/%s/pulls?state=all&head=%s:%s&base=%s&sort=created&direction=desc&per_page=1",
+		c.Owner, c.Repo, c.Owner, head, base)
 	data, err := c.do(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
