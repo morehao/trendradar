@@ -121,3 +121,25 @@ func TestRepoDirty(t *testing.T) {
 		t.Fatalf("err = %v, want REPO_DIRTY", err)
 	}
 }
+
+// Regression: a repo that already tracks digests/index.md on a previous date's
+// branch must not abort when switching to a new date's branch.
+func TestSecondDateDoesNotBlockOnTrackedIndex(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	if _, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()}); err != nil {
+		t.Fatalf("first date run: %v", err)
+	}
+	in2 := fixtureInputs()
+	in2.Date = "2026-10-31"
+	r, err := Run(context.Background(), cfg, in2, Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("second date run: %v", err)
+	}
+	if r.Branch != "trending/2026-10-31" {
+		t.Fatalf("branch = %q", r.Branch)
+	}
+	base := countRef(t, remote, "main")
+	if got := countRef(t, remote, "trending/2026-10-31"); got != base+1 {
+		t.Fatalf("branch commits = %d, want %d", got, base+1)
+	}
+}
