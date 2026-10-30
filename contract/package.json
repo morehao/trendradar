@@ -4,6 +4,11 @@
   "description": "Language-neutral contract (JSON Schema, fixtures, generated Go & TypeScript types) shared by the trendradar Go core and its DSH plugin.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/morehao/trendradar.git",
+    "directory": "contract"
+  },
   "files": [
     "schema",
     "fixtures",
