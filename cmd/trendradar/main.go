@@ -15,8 +15,10 @@ func main() {
 	switch os.Args[1] {
 	case "version":
 		err = runVersion(os.Args[2:])
-	case "run", "serve", "config":
-		err = fmt.Errorf("command %q is not implemented yet (lands in M2/M3/M5)", os.Args[1])
+	case "run":
+		err = runRun(os.Args[2:])
+	case "serve", "config":
+		err = fmt.Errorf("command %q is not implemented yet (lands in M5)", os.Args[1])
 	default:
 		usage()
 		os.Exit(2)

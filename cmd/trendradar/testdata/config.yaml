@@ -1,0 +1,14 @@
+model:
+  provider: fake
+  name: fake
+  baseURL: http://fake.local
+  apiKey: ""
+repo:
+  path: /tmp/trendradar-repo
+pr:
+  enabled: false
+trending:
+  languages: [all, go, python, rust]
+  since: daily
+output:
+  dir: digests
