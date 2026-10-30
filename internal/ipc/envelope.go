@@ -71,3 +71,11 @@ type StateRun struct {
 	ContentHash string    `json:"contentHash"`
 	RunAt       time.Time `json:"runAt"`
 }
+
+// Error implements the error interface so an ErrorInfo can be returned as an error.
+func (e *ErrorInfo) Error() string {
+	if e == nil {
+		return ""
+	}
+	return string(e.Code) + ": " + e.Message
+}
