@@ -1,0 +1,22 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "full_name": "example/fresh-repo",
+      "html_url": "https://github.com/example/fresh-repo",
+      "description": "A repo created in the last week that gained stars fast",
+      "language": "Go",
+      "stargazers_count": 1234,
+      "forks_count": 56
+    },
+    {
+      "full_name": "example/another",
+      "html_url": "https://github.com/example/another",
+      "description": "Another recently created repo",
+      "language": null,
+      "stargazers_count": 987,
+      "forks_count": 12
+    }
+  ]
+}
