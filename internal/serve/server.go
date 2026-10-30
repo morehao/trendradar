@@ -17,8 +17,15 @@ type Server struct {
 func New(store *Store) *Server {
 	s := &Server{store: store}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/digests/{date}", s.handleDigest)
-	mux.HandleFunc("GET /api/v1/manifest", s.handleManifest)
+	mux.HandleFunc("GET /api/v2/digests/{date}", s.handleDigest)
+	mux.HandleFunc("GET /api/v2/manifest", s.handleManifest)
+	// v1 kept for one release: 302 -> v2.
+	mux.HandleFunc("GET /api/v1/digests/{date}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/api/v2/digests/"+r.PathValue("date"), http.StatusFound)
+	})
+	mux.HandleFunc("GET /api/v1/manifest", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/api/v2/manifest", http.StatusFound)
+	})
 	mux.HandleFunc("GET /feed.xml", s.handleFeed)
 	mux.Handle("GET /", http.FileServer(http.FS(webSub())))
 	s.handler = mux
@@ -89,7 +96,7 @@ func (s *Server) handleFeed(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		feed.Channel.Items = append(feed.Channel.Items, item{
-			Title: e.Date, Link: "/api/v1/digests/" + e.Date, GUID: e.ContentHash, PubDate: e.Date,
+			Title: e.Date, Link: "/api/v2/digests/" + e.Date, GUID: e.ContentHash, PubDate: e.Date,
 		})
 	}
 	out, err := xml.MarshalIndent(feed, "", "  ")

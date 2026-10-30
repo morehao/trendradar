@@ -85,7 +85,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		period = "daily"
 	}
 	d := digest.Digest{
-		Schema:      1,
+		Schema:      2,
 		Date:        in.Date,
 		Period:      period,
 		Languages:   languagesOf(in.Repos),

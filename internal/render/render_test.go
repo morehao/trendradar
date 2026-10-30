@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
@@ -159,5 +160,45 @@ func TestMarkdownTableAndDegradedNotice(t *testing.T) {
 	}
 	if strings.Contains(md, " ★") {
 		t.Fatalf("old bullet format should be gone:\n%s", md)
+	}
+}
+
+func TestJSONV2ShapeAndOptionalOmission(t *testing.T) {
+	d := fixtureDigest()
+	b, err := JSON(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["schema"].(float64) != 2 {
+		t.Fatalf("schema = %v, want 2", m["schema"])
+	}
+	if m["contentHashAlgo"] != "jcs-sha256-v1" {
+		t.Fatalf("contentHashAlgo = %v", m["contentHashAlgo"])
+	}
+	// optional fields present when set
+	repo0 := m["repos"].([]any)[0].(map[string]any)
+	if _, ok := repo0["description"]; !ok {
+		t.Fatal("description should be present")
+	}
+	if _, ok := repo0["forks"]; !ok {
+		t.Fatal("forks should be present")
+	}
+	// omitted when absent (nil pointers + omitempty)
+	d2 := fixtureDigest()
+	d2.Repos[0].Description = ""
+	d2.Repos[0].Forks = 0
+	b2, _ := JSON(d2)
+	var m2 map[string]any
+	_ = json.Unmarshal(b2, &m2)
+	r0 := m2["repos"].([]any)[0].(map[string]any)
+	if _, ok := r0["description"]; ok {
+		t.Fatal("description should be omitted when empty")
+	}
+	if _, ok := r0["forks"]; ok {
+		t.Fatal("forks should be omitted when zero")
 	}
 }
