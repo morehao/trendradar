@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Tag-triggered publish of @morehao/trendradar-contract via npm Trusted Publishing (OIDC).
-# Invoked by .github/workflows/contract-release.yml. Local debug: RELEASE_TAG=contract/v2.0.0 bash scripts/ci-publish.sh
+# Invoked by .github/workflows/contract-release.yml. Local debug: RELEASE_TAG=contract/v0.2.0 bash scripts/ci-publish.sh
 # Guards: tag version == package.json version; idempotent skip if already published; retry with registry re-check.
 set -euo pipefail
 
 TAG="${RELEASE_TAG:-${GIT_TAG:-}}"
 if [ -z "$TAG" ]; then
-  echo "error: RELEASE_TAG not set (expected e.g. contract/v2.0.0)" >&2
+  echo "error: RELEASE_TAG not set (expected e.g. contract/v0.2.0)" >&2
   exit 1
 fi
 PKG_VERSION="${TAG#contract/v}" # strip the nested-module prefix
 
-cd "$(dirname "$0")/.." # -> contract/v2
+cd "$(dirname "$0")/.." # -> contract
 
 name="@morehao/trendradar-contract"
 PKG_JSON_VERSION="$(node -p "require('./package.json').version")"

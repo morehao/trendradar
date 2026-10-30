@@ -3,7 +3,7 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
-## 2.0.0
+## 0.2.0
 
 Initial v2 contract (breaking re-baseline; no v1 wire compatibility).
 

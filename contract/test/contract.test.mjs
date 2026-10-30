@@ -15,7 +15,7 @@ const jcsHash = (d) => {
   return 'sha256:' + crypto.createHash('sha256').update(canonicalize(basis), 'utf8').digest('hex')
 }
 
-test('contractVersion is 2.0.0', () => assert.equal(contractVersion, '2.0.0'))
+test('contractVersion is 2.0.0', () => assert.equal(contractVersion, '0.2.0'))
 
 test('error catalog has 17 retriable entries', () => {
   assert.equal(Object.keys(errorCatalog).length, 17)

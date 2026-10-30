@@ -2,7 +2,7 @@
 // Convert the legacy v1 digest fixtures into v2 fixtures and (re)compute the
 // RFC 8785 JCS contentHash for each, so fixtures carry a real, reproducible hash.
 // Legacy v1 fixtures live at ../../fixtures (contract/fixtures); outputs go to
-// ./fixtures (contract/v2/fixtures).
+// ./fixtures (contract/fixtures).
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -11,7 +11,7 @@ import canonicalize from 'canonicalize'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.dirname(here)
-const V1 = path.join(ROOT, '..', 'fixtures')
+const V1 = path.join(ROOT, 'legacy-v1', 'fixtures')
 const OUT = path.join(ROOT, 'fixtures')
 
 // optional RepoDigest fields that must be omitted when absent (nil in Go)

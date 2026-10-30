@@ -1,6 +1,6 @@
 {
   "name": "@morehao/trendradar-contract",
-  "version": "2.0.0",
+  "version": "0.2.0",
   "description": "Language-neutral contract (JSON Schema, fixtures, generated Go & TypeScript types) shared by the trendradar Go core and its DSH plugin.",
   "type": "module",
   "license": "MIT",

@@ -21,7 +21,7 @@ const ROOT = path.dirname(here)
 const SCHEMA = path.join(ROOT, 'schema')
 const load = (f) => JSON.parse(fs.readFileSync(path.join(SCHEMA, f), 'utf8'))
 
-const CONTRACT_VERSION = '2.0.0'
+const CONTRACT_VERSION = '0.2.0'
 
 // schema file -> optional name for a top-level (non-$defs) object root
 const FILES = [

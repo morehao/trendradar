@@ -1,15 +1,11 @@
 {
-  "schema": 2,
+  "schema": 1,
   "date": "2026-10-30",
   "period": "daily",
-  "languages": [
-    "all",
-    "go"
-  ],
+  "languages": ["all", "go"],
   "count": 2,
   "degraded": true,
-  "contentHash": "sha256:a21dfa56cbd2fe611c9e7b9844d672b3608922156bf8e998f49f4293ab5ce3e3",
-  "contentHashAlgo": "jcs-sha256-v1",
+  "contentHash": "sha256:b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2",
   "coreVersion": "0.1.0",
   "generatedAt": "2026-10-30T00:05:00Z",
   "repos": [

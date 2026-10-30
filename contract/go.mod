@@ -1,4 +1,4 @@
-module github.com/morehao/trendradar/contract/v2
+module github.com/morehao/trendradar/contract
 
 go 1.26.1
 

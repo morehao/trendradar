@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.dirname(here)
 const V2 = path.join(ROOT, 'schema')
-const V1 = path.join(ROOT, '..', 'schema') // legacy contract/schema
+const V1 = path.join(ROOT, 'legacy-v1', 'schema') // legacy contract/legacy-v1/schema
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'))
 
 function propsOf(schema, defName) {

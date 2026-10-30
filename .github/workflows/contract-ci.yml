@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "contract/v2/**"
+      - "contract/**"
       - ".github/workflows/contract-ci.yml"
   pull_request:
     paths:
-      - "contract/v2/**"
+      - "contract/**"
       - ".github/workflows/contract-ci.yml"
 
 permissions:
@@ -16,7 +16,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: contract/v2
+    working-directory: contract
 
 jobs:
   ts:
@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: contract/v2/package-lock.json
+          cache-dependency-path: contract/package-lock.json
       - run: npm ci
       - name: version carriers consistent + breaking-change gate
         run: npm run verify-versions
@@ -47,12 +47,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.1"
-          cache-dependency-path: contract/v2/go.sum
+          cache-dependency-path: contract/go.sum
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: contract/v2/package-lock.json
+          cache-dependency-path: contract/package-lock.json
       - run: npm ci
       - name: generated code is up to date (deterministic, gofmt'd)
         run: |

@@ -33,10 +33,12 @@ check(digestConst === 2, `digest schema const = ${digestConst}, want 2`)
 check(vinfoIpc === 2 && vinfoDigest === 2, `version-info ipcSchema/digestSchema = ${vinfoIpc}/${vinfoDigest}, want 2/2`)
 check(vm['ipc.v2.json'].current === ipcConst, 'version-map ipc current != ipcSchema const')
 check(vm['digest.v2.json'].current === digestConst, 'version-map digest current != schema const')
-check(vm['version-info.v2.json'].current === '2.0.0', 'version-map version-info current != 2.0.0')
+check(vm['version-info.v2.json'].current === '0.2.0', 'version-map version-info current != 0.2.0')
 check(vm['api.v2.yaml'].current === apiVer, `version-map api current != api.v2.yaml info.version (${apiVer})`)
-check(pkg.version === '2.0.0', `package.json version = ${pkg.version}, want 2.0.0`)
-check(pkg.version.split('.')[0] === String(ipcConst), 'package major != ipcSchema major')
+check(pkg.version === '0.2.0', `package.json version = ${pkg.version}, want 0.2.0`)
+// Package semver major is decoupled from the wire integer on purpose:
+// package 0.2.0 carries the second-generation wire format (ipcSchema=2).
+check(pkg.version.split('.')[0] === '0', `expected 0.x package version, got ${pkg.version}`)
 
 // error code catalogs must agree everywhere
 const ipcCodes = ipc.$defs.ErrorCode.enum
@@ -56,7 +58,7 @@ for (const f of ['digest-normal.json','digest-degraded.json','digest-empty-lang.
 const BASE = process.env.BASE_REF
 if (BASE) {
   const gitShow = (rel) => {
-    try { return execFileSync('git', ['show', `${BASE}:contract/v2/${rel}`], { cwd: ROOT, encoding: 'utf8' }) }
+    try { return execFileSync('git', ['show', `${BASE}:contract/${rel}`], { cwd: ROOT, encoding: 'utf8' }) }
     catch { return null }
   }
   const breakingOf = (baseSchema, headSchema) => {

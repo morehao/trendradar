@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: trendradar serve API
-  version: 2.0.0
+  version: 0.2.0
   description: |
     Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the
     digest.v2 schema, so the plugin can consume the same shape whether data comes
