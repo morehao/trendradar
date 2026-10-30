@@ -7,6 +7,8 @@
 # @morehao/trendradar-contract --repo morehao/trendradar --file contract-release.yml --allow-publish`.
 name: contract-release
 
+# 镜像显式钉 ubuntu-24.04：ubuntu-latest 自 2026-10-19 起分批迁到 26.04（11-19 完成），
+# 发布失败只能补发（tag 已推不可改），更不该跟 latest 漂；要试新镜像就手动改 ubuntu-26.04。
 on:
   push:
     tags: ["contract/v*"]
@@ -15,6 +17,9 @@ on:
       tag:
         description: "tag to publish (e.g. contract/v0.2.0)"
         required: true
+
+# 发布是 tag 触发：同 tag 重复触发时串行化，避免并发发布（发布本身幂等，已在跑的不会被杀）。
+concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: read
@@ -26,16 +31,19 @@ defaults:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
       # NOTE: deliberately NO registry-url here (see header comment).
-      - uses: actions/setup-node@v4
+      # package-manager-cache: false —— 关闭 setup-node 的自动依赖缓存（v5 起 packageManager
+      # 字段存在即自动开缓存），发布 job 防缓存投毒。
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
+          package-manager-cache: false
       - name: Upgrade npm for trusted publishing
         run: npm install -g npm@latest
       - name: OIDC environment self-check
