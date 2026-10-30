@@ -125,17 +125,6 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if outDir == "" {
 		outDir = "digests"
 	}
-	gitStart := time.Now()
-	for _, f := range files {
-		p := filepath.Join(cfg.Repo.Path, filepath.FromSlash(f.Path))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			return res, err
-		}
-		if err := os.WriteFile(p, f.Data, 0o644); err != nil {
-			return res, err
-		}
-	}
-
 	remote := cfg.Repo.Remote
 	if remote == "" {
 		remote = "origin"
@@ -144,6 +133,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if base == "" {
 		base = "main"
 	}
+	gitStart := time.Now()
 	if err := g.Fetch(ctx, remote); err != nil {
 		return res, err
 	}
@@ -151,8 +141,19 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if cfg.Output.BranchPrefix == "" {
 		branch = "trending/" + d.Date
 	}
+	// Switch before writing: tracked files from a previous date would otherwise
+	// block `git switch -C` with "local changes would be overwritten".
 	if err := g.SwitchCreate(ctx, branch, remote+"/"+base); err != nil {
 		return res, err
+	}
+	for _, f := range files {
+		p := filepath.Join(cfg.Repo.Path, filepath.FromSlash(f.Path))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return res, err
+		}
+		if err := os.WriteFile(p, f.Data, 0o644); err != nil {
+			return res, err
+		}
 	}
 	if err := g.AddAll(ctx, outDir); err != nil {
 		return res, err
