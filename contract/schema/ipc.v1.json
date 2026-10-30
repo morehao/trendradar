@@ -87,6 +87,7 @@
       "properties": {
         "date": { "type": "string", "format": "date" },
         "contentHash": { "type": "string" },
+        "outputDir": { "type": "string" },
         "runAt": { "type": "string", "format": "date-time" }
       }
     },

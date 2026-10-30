@@ -65,10 +65,14 @@ type State struct {
 	LastRun   *StateRun `json:"lastRun,omitempty"`
 }
 
-// StateRun records the last successful run's digest identity.
+// StateRun records the last successful run's digest identity. OutputDir is part
+// of the identity because the same date+content rendered into a different
+// output.dir is a different artifact set: skipping on date+contentHash alone
+// would silently ignore the new directory.
 type StateRun struct {
 	Date        string    `json:"date"`
 	ContentHash string    `json:"contentHash"`
+	OutputDir   string    `json:"outputDir,omitempty"`
 	RunAt       time.Time `json:"runAt"`
 }
 

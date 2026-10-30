@@ -124,7 +124,10 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if err != nil {
 		return res, err
 	}
-	if st.LastRun != nil && st.LastRun.ContentHash == d.ContentHash && st.LastRun.Date == d.Date {
+	// Idempotency key is date + contentHash + output.dir. Including the output
+	// directory means changing only output.dir re-renders instead of being
+	// silently skipped as "same content".
+	if st.LastRun != nil && st.LastRun.ContentHash == d.ContentHash && st.LastRun.Date == d.Date && st.LastRun.OutputDir == outDir {
 		res.Skipped = true
 		rep.TotalMs = since(start)
 		res.Report = rep
@@ -151,10 +154,49 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if err := g.Fetch(ctx, remote); err != nil {
 		return res, err
 	}
-	branch := cfg.Output.BranchPrefix + d.Date
-	if cfg.Output.BranchPrefix == "" {
-		branch = "trending/" + d.Date
+	prefix := cfg.Output.BranchPrefix
+	if prefix == "" {
+		prefix = "trending/"
 	}
+	branch := prefix + d.Date
+
+	// PR lifecycle pre-check: decide from the most recent PR for this branch
+	// whether the date is already done (merged -> skip) or was closed unmerged
+	// (rebuild the branch and open a fresh PR). It runs before any git work so a
+	// merged date never leaves a stray re-created branch behind.
+	prRequested := cfg.PR.Enabled && opts.Token != ""
+	prOK := true
+	var prClient prAPI
+	if prRequested {
+		c, cerr := newPRClientFor(ctx, g, cfg, opts.Token)
+		if cerr != nil {
+			prOK = false
+			rep.Warnings = append(rep.Warnings, "PR: "+cerr.Error())
+		} else {
+			latest, lerr := c.FindForBranch(ctx, branch, base)
+			switch {
+			case lerr != nil:
+				prOK = false
+				rep.Warnings = append(rep.Warnings, "PR: "+lerr.Error())
+			case latest.Merged():
+				// Already merged for this date: nothing to push or open.
+				res.Skipped = true
+				st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: outDir, RunAt: time.Now().UTC()}
+				if err := state.Save(cfg.Repo.Path, st); err != nil {
+					return res, err
+				}
+				rep.TotalMs = since(start)
+				res.Report = rep
+				return res, nil
+			default:
+				// open, closed-unmerged, or no PR: (re)build the branch below.
+				// C1's force-with-lease push safely replaces a closed PR's stale
+				// branch; an open PR is later updated by openPR.
+				prClient = c
+			}
+		}
+	}
+
 	// Switch before writing: tracked files from a previous date would otherwise
 	// block `git switch -C` with "local changes would be overwritten".
 	if err := g.SwitchCreate(ctx, branch, remote+"/"+base); err != nil {
@@ -181,24 +223,36 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if err := g.Commit(ctx, commitMessage(cfg, d.Date), cfg.Repo.AuthorName, cfg.Repo.AuthorEmail); err != nil {
 		return res, err
 	}
-	if err := g.Push(ctx, remote, branch, opts.Token); err != nil {
+	if gitx.IsOwnedBranch(branch, prefix) {
+		// Own per-date branch rebuilt from base each run: force-with-lease (C1).
+		if err := g.PushForceWithLease(ctx, remote, branch, opts.Token); err != nil {
+			return res, err
+		}
+	} else if err := g.Push(ctx, remote, branch, opts.Token); err != nil {
 		return res, err
 	}
 	res.Branch = branch
 	rep.Stages = append(rep.Stages, Stage{Name: "git", DurationMs: since(gitStart)})
 
-	st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, RunAt: time.Now().UTC()}
-	if err := state.Save(cfg.Repo.Path, st); err != nil {
-		return res, err
-	}
-
-	if cfg.PR.Enabled && opts.Token != "" {
-		url, werr := openPR(ctx, g, cfg, opts.Token, branch, d)
+	if prRequested && prClient != nil {
+		url, werr := openPR(ctx, prClient, cfg, branch, d)
 		if url != "" {
 			res.PRURL = url
 		}
 		if werr != nil {
+			prOK = false
 			rep.Warnings = append(rep.Warnings, "PR: "+werr.Error())
+		}
+	}
+
+	// Persist state only once the whole run -- including the PR -- succeeded. If
+	// the push worked but the PR failed, leaving state unsaved makes the next run
+	// with the same content re-attempt instead of skipping and never retrying the
+	// PR (C2).
+	if prOK {
+		st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: outDir, RunAt: time.Now().UTC()}
+		if err := state.Save(cfg.Repo.Path, st); err != nil {
+			return res, err
 		}
 	}
 
@@ -211,6 +265,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 // indirected so tests can assert auto-merge without hitting GitHub.
 type prAPI interface {
 	FindOpen(ctx context.Context, head, base string) (*pr.Pull, error)
+	FindForBranch(ctx context.Context, head, base string) (*pr.Pull, error)
 	Create(ctx context.Context, title, head, base, bodyText string) (*pr.Pull, error)
 	Update(ctx context.Context, number int, title, bodyText string) (*pr.Pull, error)
 	Merge(ctx context.Context, number int) error
@@ -218,16 +273,21 @@ type prAPI interface {
 
 var newPRClient = func(owner, repo, token string) prAPI { return pr.New(owner, repo, token) }
 
-func openPR(ctx context.Context, g *gitx.Git, cfg *config.Config, token, branch string, d digest.Digest) (string, error) {
+// newPRClientFor builds a PR client from the configured git remote. Indirected
+// so tests can inject a fake without a real GitHub remote.
+var newPRClientFor = func(ctx context.Context, g *gitx.Git, cfg *config.Config, token string) (prAPI, error) {
 	remoteURL, err := g.RemoteURL(ctx, cfg.Repo.Remote)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	owner, repo, err := pr.ParseRemote(remoteURL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	client := newPRClient(owner, repo, token)
+	return newPRClient(owner, repo, token), nil
+}
+
+func openPR(ctx context.Context, client prAPI, cfg *config.Config, branch string, d digest.Digest) (string, error) {
 	title := fmt.Sprintf("trending %s", d.Date)
 	bodyText := fmt.Sprintf("automated trending digest for %s (%d repos).", d.Date, d.Count)
 

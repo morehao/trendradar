@@ -87,10 +87,26 @@ func (g *Git) Commit(ctx context.Context, message, name, email string) error {
 	return err
 }
 
-// Push pushes branch to remote. When token is non-empty it is fed through a
-// temporary GIT_ASKPASS helper (0600, removed after), never via argv.
+// Push pushes branch to remote (fast-forward only). When token is non-empty it
+// is fed through a temporary GIT_ASKPASS helper (0600, removed after), never via
+// argv.
 func (g *Git) Push(ctx context.Context, remote, branch, token string) error {
-	args := []string{"push", "-u", remote, branch}
+	return g.push(ctx, []string{"push", "-u", remote, branch}, token)
+}
+
+// PushForceWithLease pushes branch with --force-with-lease. It is meant for the
+// automation's own per-date branches, which are rebuilt from the base branch on
+// every run: a rebuilt branch is not a descendant of the previous push, so a
+// plain push would be rejected as non-fast-forward. The lease keeps this safe by
+// only overwriting the remote branch if it still points where our last fetch saw
+// it; if someone else pushed in between, the push is refused instead of
+// clobbering their commits. The caller must fetch first so the lease baseline is
+// current.
+func (g *Git) PushForceWithLease(ctx context.Context, remote, branch, token string) error {
+	return g.push(ctx, []string{"push", "--force-with-lease", "-u", remote, branch}, token)
+}
+
+func (g *Git) push(ctx context.Context, args []string, token string) error {
 	if token == "" {
 		_, _, err := g.run(ctx, args...)
 		return err
@@ -107,6 +123,17 @@ func (g *Git) Push(ctx context.Context, remote, branch, token string) error {
 	}
 	_, _, err = g.runEnv(ctx, env, args...)
 	return err
+}
+
+// IsOwnedBranch reports whether branch belongs to the automation and may
+// therefore be force-pushed. Ownership is defined by the configured output
+// branch prefix (default "trending/"); everything else must use a plain push so
+// a misconfiguration can never force over a human branch.
+func IsOwnedBranch(branch, prefix string) bool {
+	if prefix == "" {
+		prefix = "trending/"
+	}
+	return strings.HasPrefix(branch, prefix)
 }
 
 // PullRebase rebases the current branch onto the remote branch.
