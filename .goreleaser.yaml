@@ -1,0 +1,44 @@
+version: 2
+
+project_name: trendradar
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: trendradar
+    main: ./cmd/trendradar
+    binary: trendradar
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/morehao/trendradar/internal/ipc.Version={{ .Version }}
+      - -X github.com/morehao/trendradar/internal/ipc.Commit={{ .ShortCommit }}
+
+archives:
+  - id: default
+    formats: [binary]
+    name_template: "trendradar_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: git
+
+release:
+  draft: false
+  extra_files:
+    - glob: contract/CONTRACT.sha256
