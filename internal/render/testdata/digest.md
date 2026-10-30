@@ -13,9 +13,13 @@ generatedAt: 2026-10-30T00:05:00Z
 
 ## go
 
-- [golang/go](https://github.com/golang/go) ★126,000 (+320) — Go 官方仓库，今日热度上升。
+| 仓库 | Stars | 今日新增 | 摘要 |
+| --- | ---: | ---: | --- |
+| [golang/go](https://github.com/golang/go) | 126,000 | +320 | Go 官方仓库，今日热度上升。 |
 
 ## python
 
-- [python/cpython](https://github.com/python/cpython) ★64,500 (+180) — CPython 官方实现，关注度上升。
+| 仓库 | Stars | 今日新增 | 摘要 |
+| --- | ---: | ---: | --- |
+| [python/cpython](https://github.com/python/cpython) | 64,500 | +180 | CPython 官方实现，关注度上升。 |
 

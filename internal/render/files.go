@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/morehao/trendradar/internal/digest"
 )
@@ -25,18 +26,36 @@ func JSON(d digest.Digest) ([]byte, error) {
 
 // Build returns the markdown, json and index files for a digest. indexDigests
 // is the set of digests to list on the index page (newest first by date).
-func Build(d digest.Digest, indexDigests []digest.Digest, indexLimit int) ([]File, error) {
+//
+// outDir is the digest root inside the repository (config.output.dir). It MUST
+// match what the caller stages with `git add`, otherwise a run writes files
+// under one directory and stages another. Empty means "digests". Every returned
+// path is relative to the repository root.
+func Build(d digest.Digest, indexDigests []digest.Digest, indexLimit int, outDir string) ([]File, error) {
+	root := OutputRoot(outDir)
 	md := Markdown(d)
 	js, err := JSON(d)
 	if err != nil {
 		return nil, err
 	}
-	dir := path.Join("digests", d.Date)
+	dir := path.Join(root, d.Date)
 	return []File{
 		{Path: path.Join(dir, d.Date+".md"), Data: md},
 		{Path: path.Join(dir, d.Date+".json"), Data: js},
-		{Path: path.Join("digests", "index.md"), Data: Index(indexDigests, indexLimit)},
+		{Path: path.Join(root, "index.md"), Data: Index(indexDigests, indexLimit, root)},
 	}, nil
+}
+
+// OutputRoot normalizes a configured output dir into a safe repository-relative
+// digest root. Absolute paths and parent traversal fall back to "digests" so a
+// bad config can never make the core write outside the repo. It is the single
+// source of truth shared by rendering and staging.
+func OutputRoot(outDir string) string {
+	root := strings.TrimSpace(path.Clean(strings.ReplaceAll(outDir, "\\", "/")))
+	if root == "" || root == "." || path.IsAbs(root) || root == ".." || strings.HasPrefix(root, "../") {
+		return "digests"
+	}
+	return root
 }
 
 // CountFiles is a tiny helper for CLI output.
