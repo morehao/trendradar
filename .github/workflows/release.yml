@@ -1,7 +1,5 @@
 name: release
 
-# Enabled in M5. Until .goreleaser.yaml and npm packaging land, this is a
-# no-op so tag pushes do not fail the pipeline.
 on:
   push:
     tags: ["v*"]
@@ -20,5 +18,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.1"
-      - name: placeholder for M5 goreleaser and npm publish
-        run: echo "Release pipeline is wired up in M5 (goreleaser matrix + npm platform packages)."
+          cache: true
+      - name: regenerate contract hash
+        run: go run ./tools/contracthash -contract contract
+      - name: verify contract hash is committed
+        run: git diff --exit-code contract/CONTRACT.sha256
+      - name: goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
