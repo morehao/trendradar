@@ -127,7 +127,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	// Idempotency key is date + contentHash + output.dir. Including the output
 	// directory means changing only output.dir re-renders instead of being
 	// silently skipped as "same content".
-	if st.LastRun != nil && st.LastRun.ContentHash == d.ContentHash && st.LastRun.Date == d.Date && st.LastRun.OutputDir == outDir {
+	if st.LastRun != nil && st.LastRun.ContentHash == d.ContentHash && st.LastRun.Date == d.Date && derefStr(st.LastRun.OutputDir) == outDir {
 		res.Skipped = true
 		rep.TotalMs = since(start)
 		res.Report = rep
@@ -181,7 +181,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 			case latest.Merged():
 				// Already merged for this date: nothing to push or open.
 				res.Skipped = true
-				st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: outDir, RunAt: time.Now().UTC()}
+				st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: strPtr(outDir), RunAt: time.Now().UTC()}
 				if err := state.Save(cfg.Repo.Path, st); err != nil {
 					return res, err
 				}
@@ -250,7 +250,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	// with the same content re-attempt instead of skipping and never retrying the
 	// PR (C2).
 	if prOK {
-		st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: outDir, RunAt: time.Now().UTC()}
+		st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: strPtr(outDir), RunAt: time.Now().UTC()}
 		if err := state.Save(cfg.Repo.Path, st); err != nil {
 			return res, err
 		}
@@ -345,3 +345,17 @@ func languagesOf(repos []digest.RepoSnapshot) []string {
 }
 
 func since(t time.Time) int64 { return time.Since(t).Milliseconds() }
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}

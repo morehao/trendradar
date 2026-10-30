@@ -14,28 +14,14 @@ import (
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/fetch"
 	"github.com/morehao/trendradar/internal/ingest"
+	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
 )
-
-type fileOut struct {
-	Path   string `json:"path"`
-	Bytes  int    `json:"bytes"`
-	SHA256 string `json:"sha256"`
-}
-
-type runOutput struct {
-	Files   []fileOut `json:"files"`
-	Skipped bool      `json:"skipped"`
-	Branch  string    `json:"branch,omitempty"`
-	PRURL   string    `json:"prUrl,omitempty"`
-	Digest  struct {
-		ContentHash string `json:"contentHash"`
-	} `json:"digest"`
-}
 
 // runRun implements `trendradar run`: ingest (network or --input) -> summarize
 // -> render -> git commit/push (+ PR when enabled).
 func runRun(args []string) error {
+	started := time.Now()
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "path to config.yaml")
 	input := fs.String("input", "", "snapshots JSON file ([]RepoSnapshot); skips network fetch")
@@ -106,11 +92,25 @@ func runRun(args []string) error {
 	}
 
 	if *asJSON {
-		out := runOutput{Skipped: result.Skipped, Branch: result.Branch, PRURL: result.PRURL}
-		out.Digest.ContentHash = result.Digest.ContentHash
+		out := ipc.RunResult{
+			IPCSchema:  ipc.SchemaVersion,
+			OK:         true,
+			Command:    string(ipc.CommandRun),
+			StartedAt:  started.UTC(),
+			FinishedAt: time.Now().UTC(),
+			Skipped:    result.Skipped,
+			Branch:     strPtr(result.Branch),
+			Commit:     strPtr(result.Commit),
+			PRUrl:      strPtr(result.PRURL),
+			Warnings:   result.Report.Warnings,
+		}
+		if result.Digest.ContentHash != "" {
+			ch := result.Digest.ContentHash
+			out.ContentHash = &ch
+		}
 		for _, f := range result.Files {
 			sum := sha256.Sum256(f.Data)
-			out.Files = append(out.Files, fileOut{Path: f.Path, Bytes: len(f.Data), SHA256: "sha256:" + hex.EncodeToString(sum[:])})
+			out.Files = append(out.Files, ipc.FileArtifact{Path: f.Path, Bytes: len(f.Data), SHA256: "sha256:" + hex.EncodeToString(sum[:])})
 		}
 		b, _ := json.Marshal(out)
 		fmt.Println(string(b))
@@ -133,6 +133,13 @@ func runRun(args []string) error {
 		fmt.Printf("  %-10s %dms\n", s.Name, s.DurationMs)
 	}
 	return nil
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func selectProvider(cfg *config.Config) (model.Provider, error) {

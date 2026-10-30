@@ -1,12 +1,12 @@
 // Package ipc defines the wire envelope shared between the trendradar core
-// binary and its DSH plugin consumer. Field names are camelCase to match the
-// TypeScript side; every payload carries an explicit ipcSchema version.
+// binary and its DSH plugin consumer. The types are aliases of the shared
+// github.com/morehao/trendradar/contract package so there is one source of truth.
 package ipc
 
-import "time"
+import contract "github.com/morehao/trendradar/contract"
 
-// SchemaVersion is the IPC envelope version. Bumped only on breaking changes.
-const SchemaVersion = 1
+// SchemaVersion is the IPC envelope version (second generation).
+const SchemaVersion = 2
 
 // Command enumerates the sub-commands the core exposes over IPC.
 type Command string
@@ -18,68 +18,26 @@ const (
 	CommandVersion Command = "version"
 )
 
-// RunRequest is the ONLY envelope struct that forbids extension fields
-// (additionalProperties: false). Everything else tolerates extra keys so the
-// plugin can roll forward without a core release.
-type RunRequest struct {
-	IPCSchema  int     `json:"ipcSchema"`
-	Command    Command `json:"command"`
-	ConfigPath string  `json:"configPath,omitempty"`
-	Date       string  `json:"date,omitempty"`
-	DryRun     bool    `json:"dryRun,omitempty"`
-	OutputDir  string  `json:"outputDir,omitempty"`
-}
+// Aliases to the contract package (single source of truth).
+type (
+	RunRequest   = contract.RunRequest
+	FileArtifact = contract.FileArtifact
+	RunResult    = contract.RunResult
+	State        = contract.State
+	StateRun     = contract.StateRun
+)
 
-// FileArtifact describes one rendered output file, without its contents.
-type FileArtifact struct {
-	Path   string `json:"path"`
-	Bytes  int64  `json:"bytes"`
-	SHA256 string `json:"sha256"`
-}
+// ErrorInfo mirrors contract.ErrorInfo but adds the error interface so the core
+// can return it as an error internally.
+type ErrorInfo contract.ErrorInfo
 
-// ErrorInfo is the machine-readable error carried by RunResult.
-type ErrorInfo struct {
-	Code      Code           `json:"code"`
-	Message   string         `json:"message"`
-	Retriable bool           `json:"retriable"`
-	Details   map[string]any `json:"details,omitempty"`
-}
-
-// RunResult is the envelope returned by a `run` invocation.
-type RunResult struct {
-	IPCSchema  int            `json:"ipcSchema"`
-	OK         bool           `json:"ok"`
-	Command    Command        `json:"command"`
-	StartedAt  time.Time      `json:"startedAt"`
-	FinishedAt time.Time      `json:"finishedAt"`
-	Skipped    bool           `json:"skipped"`
-	Files      []FileArtifact `json:"files"`
-	Error      *ErrorInfo     `json:"error,omitempty"`
-	Warnings   []string       `json:"warnings,omitempty"`
-}
-
-// State is the small bookkeeping payload the core reads back between runs to
-// decide idempotency (same contentHash -> skip).
-type State struct {
-	IPCSchema int       `json:"ipcSchema"`
-	LastRun   *StateRun `json:"lastRun,omitempty"`
-}
-
-// StateRun records the last successful run's digest identity. OutputDir is part
-// of the identity because the same date+content rendered into a different
-// output.dir is a different artifact set: skipping on date+contentHash alone
-// would silently ignore the new directory.
-type StateRun struct {
-	Date        string    `json:"date"`
-	ContentHash string    `json:"contentHash"`
-	OutputDir   string    `json:"outputDir,omitempty"`
-	RunAt       time.Time `json:"runAt"`
-}
-
-// Error implements the error interface so an ErrorInfo can be returned as an error.
+// Error implements the error interface.
 func (e *ErrorInfo) Error() string {
 	if e == nil {
 		return ""
 	}
 	return string(e.Code) + ": " + e.Message
 }
+
+// ToContract converts to the wire type.
+func (e *ErrorInfo) ToContract() *contract.ErrorInfo { return (*contract.ErrorInfo)(e) }
