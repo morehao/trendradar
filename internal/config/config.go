@@ -15,11 +15,11 @@ var ErrInvalid = errors.New("config invalid")
 
 // Config is the full trendradar configuration tree.
 type Config struct {
-	Model    ModelConfig    `yaml:"model" validate:"required"`
-	Repo     RepoConfig     `yaml:"repo" validate:"required"`
-	PR       PRConfig       `yaml:"pr" validate:"required"`
-	Trending TrendingConfig `yaml:"trending" validate:"required"`
-	Output   OutputConfig   `yaml:"output" validate:"required"`
+	Model    ModelConfig    `yaml:"model"`
+	Repo     RepoConfig     `yaml:"repo"`
+	PR       PRConfig       `yaml:"pr"`
+	Trending TrendingConfig `yaml:"trending"`
+	Output   OutputConfig   `yaml:"output"`
 	Schedule ScheduleConfig `yaml:"schedule"`
 }
 
