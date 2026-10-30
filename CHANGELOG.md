@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+### Removed (v1 contract retirement — after binding window)
+- Removed the legacy v1 contract snapshot (`contract/legacy-v1/`), the
+  `tools/contracthash` gate, the CI `contract` job, and the goreleaser
+  `CONTRACT.sha256` extra file.
+- `serve`: `/api/v1/digests/{date}` and `/api/v1/manifest` now return **410 Gone**;
+  use `/api/v2/*` (and `/feed.xml`).
+
 ## 0.3.0
 
 Adopt the shared contract v2 (`@morehao/trendradar-contract@0.2.0`; wire

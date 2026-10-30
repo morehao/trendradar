@@ -19,12 +19,12 @@ func New(store *Store) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v2/digests/{date}", s.handleDigest)
 	mux.HandleFunc("GET /api/v2/manifest", s.handleManifest)
-	// v1 kept for one release: 302 -> v2.
+	// v1 HTTP surface is retired: respond 410 Gone, point clients at v2.
 	mux.HandleFunc("GET /api/v1/digests/{date}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/api/v2/digests/"+r.PathValue("date"), http.StatusFound)
+		http.Error(w, "api v1 removed; use /api/v2/digests/{date}", http.StatusGone)
 	})
 	mux.HandleFunc("GET /api/v1/manifest", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/api/v2/manifest", http.StatusFound)
+		http.Error(w, "api v1 removed; use /api/v2/manifest", http.StatusGone)
 	})
 	mux.HandleFunc("GET /feed.xml", s.handleFeed)
 	mux.Handle("GET /", http.FileServer(http.FS(webSub())))

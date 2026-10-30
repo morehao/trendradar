@@ -60,14 +60,12 @@ func TestDigestNormalizesV1(t *testing.T) {
 	}
 }
 
-func TestV1RedirectsToV2(t *testing.T) {
+func TestV1Gone(t *testing.T) {
 	h := New(NewStore(seed(t))).Handler()
-	rec := get(h, "/api/v1/digests/2026-10-30")
-	if rec.Code != http.StatusFound {
-		t.Fatalf("v1 status = %d, want 302", rec.Code)
-	}
-	if loc := rec.Header().Get("Location"); loc != "/api/v2/digests/2026-10-30" {
-		t.Fatalf("redirect = %q", loc)
+	for _, p := range []string{"/api/v1/digests/2026-10-30", "/api/v1/manifest"} {
+		if rec := get(h, p); rec.Code != http.StatusGone {
+			t.Fatalf("%s status = %d, want 410", p, rec.Code)
+		}
 	}
 }
 

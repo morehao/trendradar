@@ -40,8 +40,6 @@ jobs:
         run: npm run verify-versions
         env:
           BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-      - name: v1 -> v2 field map complete
-        run: npm run verify-field-map
       - run: npm test
       - run: npm pack --dry-run
 

@@ -55,7 +55,7 @@ jobs:
           fi
       - run: npm ci --ignore-scripts
       - name: pre-publish gates
-        run: npm run verify-versions && npm run verify-field-map && npm test
+        run: npm run verify-versions && npm test
       - name: Publish to npm via OIDC
         run: bash ./scripts/ci-publish.sh
         env:
