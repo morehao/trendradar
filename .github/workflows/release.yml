@@ -1,0 +1,24 @@
+name: release
+
+# Enabled in M5. Until .goreleaser.yaml and npm packaging land, this is a
+# no-op so tag pushes do not fail the pipeline.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.1"
+      - name: placeholder for M5 goreleaser and npm publish
+        run: echo "Release pipeline is wired up in M5 (goreleaser matrix + npm platform packages)."

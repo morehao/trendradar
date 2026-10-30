@@ -1,0 +1,10 @@
+# trendradar contract hash (v1)
+# algorithm: sha256 per file (sorted), then sha256 of the concatenated lines
+f34aa3642938bad32df912768d543925f91858da66a8e726e4e4bf88a07d086c  fixtures/digest-degraded.json
+7bc67dcdc36c7b81df1915c4b50025cef6f0304ef2feb24f393d17771df252c9  fixtures/digest-empty-lang.json
+4fe9d91ce3f0ddcc17982e4f0acac950ebc6ec7f63427fe962ea581f3114c0c4  fixtures/digest-normal.json
+d52adbbb473d7ee2d856398a5651f96ba2019ee53ba6e14c27ef2d792b5db723  schema/api.v1.yaml
+ca9b640f374cded12a09ea00f0686eac14eee59eef94c27a61016175bc0d4ebb  schema/digest.v1.json
+16f8f69c8a01da905b2653fb360eea798c1773808737251b54f1f56b134dad22  schema/ipc.v1.json
+2140c9d538bc935c092a83fb6377e3878b2c060992bf458f2437898f4649d41d  schema/model.v1.json
+aggregate: eb7f1ac9e117a709d15d87de89cf30e309c479e62dfa3d320cb8f154d3f1dc1e

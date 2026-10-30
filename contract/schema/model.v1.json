@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/model.v1.json",
+  "title": "trendradar model v1",
+  "description": "Domain model: a scraped repository snapshot and its digested form.",
+  "$ref": "#/$defs/RepoSnapshot",
+  "$defs": {
+    "RepoSnapshot": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["fullName", "url", "language", "stars", "starsInPeriod", "rank", "source"],
+      "properties": {
+        "fullName": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "url": { "type": "string", "format": "uri" },
+        "description": { "type": "string" },
+        "language": { "type": "string" },
+        "stars": { "type": "integer", "minimum": 0 },
+        "starsInPeriod": { "type": "integer", "minimum": 0 },
+        "forks": { "type": "integer", "minimum": 0 },
+        "rank": { "type": "integer", "minimum": 1 },
+        "source": { "type": "string", "enum": ["trending-html", "search-api"] }
+      }
+    },
+    "RepoDigest": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "fullName", "url", "language", "stars", "starsInPeriod", "rank",
+        "source", "summaryZh", "summarySource"
+      ],
+      "properties": {
+        "fullName": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "url": { "type": "string", "format": "uri" },
+        "description": { "type": "string" },
+        "language": { "type": "string" },
+        "stars": { "type": "integer", "minimum": 0 },
+        "starsInPeriod": { "type": "integer", "minimum": 0 },
+        "forks": { "type": "integer", "minimum": 0 },
+        "rank": { "type": "integer", "minimum": 1 },
+        "source": { "type": "string", "enum": ["trending-html", "search-api"] },
+        "summaryZh": { "type": "string" },
+        "summarySource": { "type": "string", "enum": ["model", "original"] }
+      }
+    }
+  }
+}
