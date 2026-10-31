@@ -12,6 +12,7 @@ import (
 
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/serve"
+	"github.com/morehao/trendradar/internal/subscription"
 )
 
 // runServe implements `trendradar serve`.
@@ -23,13 +24,24 @@ func runServe(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	relSubdir, subsPath := "", ""
 	if *cfgPath != "" {
-		if cfg, err := config.Load(*cfgPath); err == nil && cfg.Output.Dir != "" {
-			*root = cfg.Output.Dir
+		if cfg, err := config.Load(*cfgPath); err == nil {
+			if cfg.Output.Dir != "" {
+				*root = cfg.Output.Dir
+			}
+			// Expose the subscription surface only when configured; otherwise the
+			// releases routes still answer with empty lists.
+			if cfg.Releases.Enabled {
+				relSubdir = cfg.Releases.OutputDir
+				if p, err := subscription.ResolveSubscriptionsPath(*cfgPath, cfg.Releases.SubscriptionsFile); err == nil {
+					subsPath = p
+				}
+			}
 		}
 	}
 
-	server := serve.New(serve.NewStore(*root))
+	server := serve.New(serve.NewStore(*root)).WithReleases(relSubdir, subsPath)
 	httpSrv := &http.Server{Addr: *addr, Handler: server.Handler()}
 
 	go func() {

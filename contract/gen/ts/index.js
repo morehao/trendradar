@@ -2,7 +2,7 @@
 import Ajv from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 
-export const contractVersion = "0.2.0"
+export const contractVersion = "0.3.0"
 
 export const errorCatalog = {
   "INTERNAL": {
@@ -299,6 +299,99 @@ export const fixtures = {
         "summarySource": "model"
       }
     ]
+  },
+  "releaseNormal": {
+    "schema": 1,
+    "date": "2026-10-31",
+    "period": "daily",
+    "contentHash": "sha256:6ffddcbca4448be9db6dcdfcc407183516c35ed78001b32c3d567ad8a4b4ff42",
+    "contentHashAlgo": "jcs-sha256-v1",
+    "coreVersion": "0.5.0",
+    "generatedAt": "2026-10-31T13:04:00Z",
+    "count": 2,
+    "degraded": false,
+    "repos": [
+      {
+        "fullName": "infiniflow/ragflow",
+        "url": "https://github.com/infiniflow/ragflow",
+        "latestTag": "v1.0.0-rc3",
+        "newCount": 1,
+        "releases": [
+          {
+            "id": 428974489,
+            "tag": "v1.0.0-rc3",
+            "name": "v1.0.0-rc3",
+            "kind": "release",
+            "publishedAt": "2026-10-30T11:53:15Z",
+            "url": "https://github.com/infiniflow/ragflow/releases/tag/v1.0.0-rc3",
+            "prerelease": false,
+            "draft": false,
+            "bodyExcerpt": "1.0.0-rc3 fixes several issues found in rc2.",
+            "summaryZh": "新增证据充分性决策模型与 Categorize 组件，兼容 rc2 schema，可直接升级。",
+            "summarySource": "model"
+          }
+        ]
+      },
+      {
+        "fullName": "deepseek-ai/deepseek-harness",
+        "url": "https://github.com/deepseek-ai/deepseek-harness",
+        "latestTag": "dsh-v0.2.2-alpha.2",
+        "newCount": 1,
+        "releases": [
+          {
+            "id": 0,
+            "tag": "dsh-v0.2.2-alpha.2",
+            "name": "dsh-v0.2.2-alpha.2",
+            "kind": "tag",
+            "url": "https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.2.2-alpha.2",
+            "prerelease": false,
+            "draft": false,
+            "summaryZh": "发布说明缺失，已回退到 commit 信息。",
+            "summarySource": "model"
+          }
+        ]
+      }
+    ]
+  },
+  "releaseDegraded": {
+    "schema": 1,
+    "date": "2026-10-31",
+    "period": "daily",
+    "contentHash": "sha256:f952f1607ff1708120c35e7a9551f0691ae747edf2ee959445edcd53bc0edf25",
+    "contentHashAlgo": "jcs-sha256-v1",
+    "count": 1,
+    "degraded": true,
+    "repos": [
+      {
+        "fullName": "acme/widget",
+        "url": "https://github.com/acme/widget",
+        "latestTag": "v2.0.0",
+        "newCount": 1,
+        "releases": [
+          {
+            "id": 0,
+            "tag": "v2.0.0",
+            "name": "v2.0.0",
+            "kind": "release",
+            "url": "https://github.com/acme/widget/releases/tag/v2.0.0",
+            "prerelease": false,
+            "draft": false,
+            "summaryZh": "版本 v2.0.0（未获取到变更说明）",
+            "summarySource": "original"
+          }
+        ]
+      }
+    ]
+  },
+  "releaseEmpty": {
+    "schema": 1,
+    "date": "2026-10-31",
+    "period": "daily",
+    "contentHash": "sha256:501d8c4be30af9d1dacdf15b2e48ccd3134cbe439695f7685deea11e00c24de8",
+    "contentHashAlgo": "jcs-sha256-v1",
+    "count": 0,
+    "degraded": false,
+    "repos": []
   }
 }
 
@@ -489,7 +582,8 @@ const ipc = {
             "run",
             "serve",
             "config",
-            "version"
+            "version",
+            "subscribe"
           ]
         },
         "configPath": {
@@ -504,8 +598,123 @@ const ipc = {
         },
         "outputDir": {
           "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "list",
+            "add",
+            "remove"
+          ]
+        },
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
         }
-      }
+      },
+      "description": "Strict request envelope. command=subscribe manages the repo subscription list: action=list needs no repo; action=add/remove require exactly one repo.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "const": "subscribe"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          },
+          "then": {
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "list",
+                  "add",
+                  "remove"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "action": {
+                      "const": "list"
+                    }
+                  },
+                  "required": [
+                    "action"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "required": [
+                      "repo"
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "action": {
+                      "enum": [
+                        "add",
+                        "remove"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "action"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "repo"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "enum": [
+                  "run",
+                  "serve",
+                  "config",
+                  "version"
+                ]
+              }
+            },
+            "required": [
+              "command"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "action"
+                  ]
+                },
+                {
+                  "required": [
+                    "repo"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     "RunResult": {
       "type": "object",
@@ -577,6 +786,9 @@ const ipc = {
         },
         "usage": {
           "$ref": "#/$defs/Usage"
+        },
+        "releases": {
+          "$ref": "releases.v2.json#/$defs/ReleasesReport"
         }
       }
     },
@@ -748,6 +960,284 @@ const digest = {
       "type": "array",
       "items": {
         "$ref": "https://github.com/morehao/trendradar/contract/schema/model.v2.json#/$defs/RepoDigest"
+      }
+    }
+  }
+}
+const releases = {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v2.json",
+  "title": "trendradar releases v2",
+  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "date",
+    "period",
+    "contentHash",
+    "contentHashAlgo",
+    "count",
+    "degraded",
+    "repos"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly"
+      ]
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contentHashAlgo": {
+      "type": "string",
+      "enum": [
+        "jcs-sha256-v1"
+      ]
+    },
+    "coreVersion": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "repos": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RepoReleases"
+      }
+    }
+  },
+  "$defs": {
+    "ReleaseItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis).",
+      "required": [
+        "id",
+        "tag",
+        "name",
+        "kind",
+        "url",
+        "prerelease",
+        "draft",
+        "summaryZh",
+        "summarySource"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "x-go-type": "int64",
+          "description": "GitHub release id; 0 when the item comes from a tag fallback."
+        },
+        "tag": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "release",
+            "tag"
+          ]
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "url": {
+          "type": "string"
+        },
+        "prerelease": {
+          "type": "boolean"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "bodyExcerpt": {
+          "type": "string",
+          "description": "Truncated raw release notes. Untrusted text: display only, never execute."
+        },
+        "summaryZh": {
+          "type": "string"
+        },
+        "summarySource": {
+          "type": "string",
+          "enum": [
+            "model",
+            "original"
+          ]
+        }
+      }
+    },
+    "RepoReleases": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "fullName",
+        "url",
+        "latestTag",
+        "newCount",
+        "releases"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "pattern": "^[^/]+/[^/]+$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "latestTag": {
+          "type": "string"
+        },
+        "newCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "releases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReleaseItem"
+          }
+        }
+      }
+    },
+    "ReleasesReport": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Per-run diagnostic for the releases stage. usage is required and always serialized so a consumer can tell 'nothing spent' (calls=0) from 'spent but not reported' (calls>0 with usageKnown=false).",
+      "required": [
+        "enabled",
+        "repos",
+        "newReleases",
+        "durationMs",
+        "usage"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "repos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "newReleases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summarized": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "degraded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rateLimited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "historyTruncated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "usage": {
+          "$ref": "https://github.com/morehao/trendradar/contract/schema/ipc.v2.json#/$defs/Usage"
+        }
+      }
+    },
+    "ReleaseManifestEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One row of GET /api/v2/releases. Cost is intentionally absent: manifests describe stored documents, which carry no run cost.",
+      "required": [
+        "date",
+        "period",
+        "count",
+        "contentHash"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "period": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "degraded": {
+          "type": "boolean"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "SubscriptionList": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Response of GET /api/v2/subscriptions.",
+      "required": [
+        "repos"
+      ],
+      "properties": {
+        "repos": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          }
+        }
       }
     }
   }
@@ -1132,20 +1622,23 @@ const errors = {
     }
   }
 }
-const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.2.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    digest.v2 schema, so the plugin can consume the same shape whether data comes\n    from the filesystem or over HTTP. Historical v1 digests read from disk are\n    normalized to this v2 shape with contentHashAlgo=legacy-struct-marshal-v1.\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
+const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.3.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    contract schemas, so the plugin and any web UI consume the same shapes\n    whether data comes from the filesystem or over HTTP. Historical v1 digests\n    read from disk are normalized to the v2 shape with\n    contentHashAlgo=legacy-struct-marshal-v1.\n\n    Release endpoints are read-only. Token cost for a releases run is NOT part of\n    a stored document (it describes one run and cannot be reproduced); it is\n    reported in `releases.usage` of `trendradar run --json` and appended to\n    `<repo>/.git/trendradar-usage.jsonl` with stage=\"releases\".\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /api/v2/releases:\n    get:\n      operationId: listReleases\n      summary: List available release digests (newest first)\n      description: |\n        Returns an empty array (not 404) when no release digest exists yet.\n        Entries carry no token cost because stored documents do not record it.\n      parameters:\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: Manifest of release digests\n          content:\n            application/json:\n              schema:\n                type: array\n                items:\n                  $ref: \"./releases.v2.json#/$defs/ReleaseManifestEntry\"\n  /api/v2/releases/{date}:\n    get:\n      operationId: getReleases\n      summary: Fetch one period's release digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: The release digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json\"\n        \"404\":\n          description: No release digest for that date\n  /api/v2/subscriptions:\n    get:\n      operationId: listSubscriptions\n      summary: List the repo subscriptions the core will poll\n      description: |\n        Read-only. Returns an empty array when the subscription file is missing\n        or empty. Writing subscriptions stays on the CLI / IPC subscribe command.\n      responses:\n        \"200\":\n          description: Current subscription list\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionList\"\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
 
-export const rawSchema = { model, ipc, digest, errors, versionInfo, api }
+export const rawSchema = { model, ipc, digest, releases, errors, versionInfo, api }
 
 const ajv = new Ajv({ allErrors: true, strict: false })
 addFormats(ajv)
 ajv.addSchema(model)
 ajv.addSchema(ipc)
 ajv.addSchema(digest)
+ajv.addSchema(releases)
 ajv.addSchema(versionInfo)
 
 export const validators = {
   runRequest: ajv.compile({ $ref: ipc.$id + '#/$defs/RunRequest' }),
   runResult: ajv.compile({ $ref: ipc.$id + '#/$defs/RunResult' }),
   digest: ajv.getSchema(digest.$id),
+  releases: ajv.getSchema(releases.$id),
+  releasesReport: ajv.compile({ $ref: releases.$id + '#/$defs/ReleasesReport' }),
   versionInfo: ajv.getSchema(versionInfo.$id),
 }

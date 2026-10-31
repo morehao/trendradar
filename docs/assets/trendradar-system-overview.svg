@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 900" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <title>trendradar 系统全景：外部系统、单二进制内核与消费者</title>
+  <desc>这张图分三层展示 trendradar 的组成。最上层是外部系统：GitHub（trending、releases、tags、commits）、LLM Provider 与数据仓远端。中层是 trendradar 单二进制，内含 run 流水线（ingest、summarize、releasewatch、render、app.Run 编排）、支撑包（config、subscription、fetch、gitx、pr、enrich）、以及 serve 与 ipc。最下层是消费者：DSH 插件、Web 页面/脚本、人。箭头表示数据与调用的流向：抓取经 fetch 到 GitHub，摘要调 LLM，写盘与提交流向数据仓远端，插件通过 CLI 与 HTTP 消费。核心结论是数据从外部流入、经内核加工、落盘后被三类消费者读取。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" />
+    </marker>
+  </defs>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --fg: #172033;
+      --muted: #5b6475;
+      --line: #64748b;
+      --neutral: #e2e8f0;
+      --input: #bfdbfe;
+      --process: #c7d2fe;
+      --storage: #99f6e4;
+      --external: #fde68a;
+      --risk: #fecaca;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --fg: #e5e7eb;
+        --muted: #a3adbd;
+        --line: #94a3b8;
+        --neutral: #334155;
+        --input: #1d4ed8;
+        --process: #4338ca;
+        --storage: #0f766e;
+        --external: #92400e;
+        --risk: #991b1b;
+      }
+    }
+    svg { background: var(--bg); }
+    .title { font-size: 20px; font-weight: 650; fill: var(--fg); }
+    .label { font-size: 14px; font-weight: 600; fill: var(--fg); }
+    .small { font-size: 12px; fill: var(--muted); }
+    .zone-label { font-size: 13px; font-weight: 650; fill: var(--muted); letter-spacing: .04em; }
+    .node { stroke: var(--line); stroke-width: 1; }
+    .neutral { fill: var(--neutral); }
+    .input { fill: var(--input); }
+    .process { fill: var(--process); }
+    .storage { fill: var(--storage); }
+    .external { fill: var(--external); }
+    .edge { stroke: var(--line); stroke-width: 1.5; fill: none; }
+    .edge-arrow { marker-end: url(#arrow); }
+    .zone { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 6 5; opacity: .8; }
+  </style>
+
+  <rect x="0" y="0" width="1240" height="900" fill="var(--bg)" />
+  <text class="title" x="40" y="46">trendradar 系统全景</text>
+
+  <!-- zone: external (top) -->
+  <rect class="zone" x="40" y="70" width="1160" height="150" rx="10" />
+  <text class="zone-label" x="60" y="96">外部系统</text>
+  <rect class="node external" x="90" y="112" width="300" height="84" rx="8" />
+  <text class="label" x="114" y="146">GitHub</text>
+  <text class="small" x="114" y="170">trending / releases / tags / commits</text>
+  <rect class="node external" x="460" y="112" width="300" height="84" rx="8" />
+  <text class="label" x="484" y="146">LLM Provider</text>
+  <text class="small" x="484" y="170">DeepSeek, OpenAI-compatible</text>
+  <rect class="node external" x="830" y="112" width="300" height="84" rx="8" />
+  <text class="label" x="854" y="146">数据仓远端</text>
+  <text class="small" x="854" y="170">GitHub, 受保护分支</text>
+
+  <!-- zone: core -->
+  <rect class="zone" x="40" y="250" width="1160" height="440" rx="10" />
+  <text class="zone-label" x="60" y="276">trendradar 单二进制</text>
+
+  <rect class="node input" x="90" y="292" width="250" height="56" rx="8" />
+  <text class="label" x="114" y="318">cmd/trendradar</text>
+  <text class="small" x="114" y="336">run · serve · subscribe · version</text>
+
+  <!-- LEFT COLUMN: pipeline, top-to-bottom -->
+  <rect class="zone" x="70" y="374" width="420" height="300" rx="8" />
+  <text class="zone-label" x="90" y="398">run 流水线（编排自上而下）</text>
+
+  <rect class="node process" x="90" y="412" width="180" height="46" rx="8" />
+  <text class="label" x="110" y="440">ingest · 抓取+解析</text>
+  <rect class="node process" x="90" y="472" width="180" height="46" rx="8" />
+  <text class="label" x="110" y="500">summarize · 榜单摘要</text>
+  <rect class="node process" x="90" y="532" width="180" height="46" rx="8" />
+  <text class="label" x="110" y="560">releasewatch · 发版</text>
+  <rect class="node process" x="300" y="412" width="170" height="46" rx="8" />
+  <text class="label" x="320" y="440">render · 产物</text>
+  <rect class="node input" x="300" y="472" width="170" height="106" rx="8" />
+  <text class="label" x="320" y="500">app.Run</text>
+  <text class="small" x="320" y="520">编排：摘要→渲染</text>
+  <text class="small" x="320" y="538">→commit/push</text>
+  <text class="small" x="320" y="556">→PR</text>
+  <rect class="node neutral" x="90" y="596" width="380" height="46" rx="8" />
+  <text class="small" x="110" y="624">支撑：config · subscription · fetch · gitx · pr · enrich</text>
+
+  <!-- RIGHT COLUMN: output & interface -->
+  <rect class="zone" x="530" y="374" width="640" height="300" rx="8" />
+  <text class="zone-label" x="550" y="398">落盘与对外接口</text>
+
+  <rect class="node storage" x="550" y="412" width="260" height="70" rx="8" />
+  <text class="label" x="570" y="442">数据仓 digests/</text>
+  <text class="small" x="570" y="464">产物与订阅，经 PR 合并</text>
+
+  <rect class="node storage" x="870" y="412" width="280" height="70" rx="8" />
+  <text class="label" x="890" y="442">serve · 只读 HTTP</text>
+  <text class="small" x="890" y="464">digests / releases / subscriptions</text>
+
+  <rect class="node neutral" x="550" y="588" width="260" height="48" rx="8" />
+  <text class="label" x="570" y="612">ipc · 信封/错误码/版本</text>
+  <text class="small" x="570" y="628">与 contract 同源</text>
+
+  <rect class="node neutral" x="870" y="588" width="280" height="48" rx="8" />
+  <text class="label" x="890" y="612">contract · 唯一真源</text>
+  <text class="small" x="890" y="628">schema → Go / TS 生成</text>
+
+  <!-- zone: consumers -->
+  <rect class="zone" x="40" y="710" width="1160" height="150" rx="10" />
+  <text class="zone-label" x="60" y="736">消费者</text>
+  <rect class="node neutral" x="90" y="752" width="330" height="80" rx="8" />
+  <text class="label" x="114" y="786">DSH 插件</text>
+  <text class="small" x="114" y="808">npm: trendradar-contract</text>
+  <rect class="node neutral" x="460" y="752" width="330" height="80" rx="8" />
+  <text class="label" x="484" y="786">Web 页面 / 脚本</text>
+  <text class="small" x="484" y="808">经 serve 的只读 HTTP</text>
+  <rect class="node neutral" x="830" y="752" width="330" height="80" rx="8" />
+  <text class="label" x="854" y="786">人</text>
+  <text class="small" x="854" y="808">直接读 Markdown 产物</text>
+
+  <!-- edges -->
+  <!-- cmd -> app.Run -->
+  <path class="edge edge-arrow" d="M 215 348 L 380 472" />
+  <!-- ingest -> GitHub -->
+  <path class="edge edge-arrow" d="M 180 412 L 220 196" />
+  <!-- summarize -> LLM -->
+  <path class="edge edge-arrow" d="M 180 472 L 500 196" />
+  <!-- releasewatch -> GitHub -->
+  <path class="edge edge-arrow" d="M 180 532 L 260 196" />
+  <!-- app.Run -> 数据仓 -->
+  <path class="edge edge-arrow" d="M 470 500 L 550 447" />
+  <!-- 数据仓 -> 数据仓远端 -->
+  <path class="edge edge-arrow" d="M 680 412 L 900 196" />
+  <!-- 数据仓 -> 人 -->
+  <path class="edge edge-arrow" d="M 660 482 L 930 752" />
+  <!-- 数据仓 -> serve -->
+  <path class="edge edge-arrow" d="M 810 447 L 870 447" />
+  <!-- serve -> Web -->
+  <path class="edge edge-arrow" d="M 1000 482 L 660 752" />
+  <!-- serve -> 插件 -->
+  <path class="edge edge-arrow" d="M 1000 482 L 300 752" />
+</svg>

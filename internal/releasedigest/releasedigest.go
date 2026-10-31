@@ -1,6 +1,9 @@
-// Package releasedigest holds the pure data types for the release-subscription
-// digest. It deliberately imports no other internal package so render and
-// releasewatch can both depend on it without a cycle.
+// Package releasedigest adapts the contract's release types for the core.
+//
+// The wire shapes live in the contract package (single source of truth: schema/
+// releases.v2.json → contract.gen.go / gen/ts). This package only adds the
+// behaviours the core needs on top of those types (content hash, derived
+// counts), mirroring how internal/digest aliases contract types.
 package releasedigest
 
 import (
@@ -9,59 +12,30 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
-	"time"
 
 	"github.com/gowebpki/jcs"
+
+	contract "github.com/morehao/trendradar/contract"
 )
 
-// Schema is the internal release-document version (distinct from the trending
-// contract digest schema, which is 2).
+// Schema is the release-document version carried in the document itself. It is
+// independent of both the contract package version and ipcSchema/digestSchema.
 const Schema = 1
 
 // ContentHashAlgo is recorded in the document so a future algorithm change is
 // distinguishable from the current one.
 const ContentHashAlgo = "jcs-sha256-v1"
 
-// ReleaseItem is one release or tag entry.
-type ReleaseItem struct {
-	ID            int64      `json:"id"`
-	Tag           string     `json:"tag"`
-	Name          string     `json:"name"`
-	Kind          string     `json:"kind"` // release | tag
-	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
-	URL           string     `json:"url"`
-	Prerelease    bool       `json:"prerelease"`
-	Draft         bool       `json:"draft"`
-	BodyExcerpt   string     `json:"bodyExcerpt,omitempty"`
-	SummaryZh     string     `json:"summaryZh"`
-	SummarySource string     `json:"summarySource"` // model | original
-}
-
-// RepoReleases groups the new items of one repository.
-type RepoReleases struct {
-	FullName  string        `json:"fullName"`
-	URL       string        `json:"url"`
-	LatestTag string        `json:"latestTag"`
-	NewCount  int           `json:"newCount"`
-	Releases  []ReleaseItem `json:"releases"`
-}
-
-// ReleaseDigest is one rendered period document.
-type ReleaseDigest struct {
-	Schema          int            `json:"schema"`
-	Date            string         `json:"date"`
-	Period          string         `json:"period"`
-	ContentHash     string         `json:"contentHash"`
-	ContentHashAlgo string         `json:"contentHashAlgo"`
-	CoreVersion     string         `json:"coreVersion,omitempty"`
-	GeneratedAt     *time.Time     `json:"generatedAt,omitempty"`
-	Count           int            `json:"count"`
-	Degraded        bool           `json:"degraded"`
-	Repos           []RepoReleases `json:"repos"`
-}
+// Aliases to the contract wire types. No duplicate struct definitions exist:
+// the shape is defined once, in contract/schema/releases.v2.json.
+type (
+	ReleaseDigest = contract.ReleaseDigest
+	RepoReleases  = contract.RepoReleases
+	ReleaseItem   = contract.ReleaseItem
+)
 
 // Key identifies an item uniquely within a repo: id when known, else tag.
-func (it ReleaseItem) Key() string {
+func ItemKey(it ReleaseItem) string {
 	if it.ID != 0 {
 		return it.Tag + "#" + strconv.FormatInt(it.ID, 10)
 	}
@@ -69,7 +43,7 @@ func (it ReleaseItem) Key() string {
 }
 
 // CountOf recomputes Count from the per-repo groups.
-func (d *ReleaseDigest) CountOf() int {
+func CountOf(d ReleaseDigest) int {
 	n := 0
 	for _, r := range d.Repos {
 		n += len(r.Releases)
@@ -78,7 +52,7 @@ func (d *ReleaseDigest) CountOf() int {
 }
 
 // DegradedOf reports whether any item fell back to the original notes.
-func (d *ReleaseDigest) DegradedOf() bool {
+func DegradedOf(d ReleaseDigest) bool {
 	for _, r := range d.Repos {
 		for _, it := range r.Releases {
 			if it.SummarySource == "original" {
@@ -90,8 +64,10 @@ func (d *ReleaseDigest) DegradedOf() bool {
 }
 
 // ContentHash computes sha256 over RFC 8785 JCS of the fixed basis, excluding
-// generatedAt/coreVersion/contentHash/contentHashAlgo (same approach as the
-// trending digest, but a release-specific basis).
+// generatedAt/coreVersion/contentHash/contentHashAlgo. The basis is
+// release-specific (no languages; repos are release groups), so this cannot
+// reuse digest.ContentHashJCS. The contract tests recompute the same basis in
+// test/contract.test.mjs — keep them in sync.
 func ContentHash(d ReleaseDigest) string {
 	basis := struct {
 		Schema   int            `json:"schema"`
@@ -100,7 +76,7 @@ func ContentHash(d ReleaseDigest) string {
 		Count    int            `json:"count"`
 		Degraded bool           `json:"degraded"`
 		Repos    []RepoReleases `json:"repos"`
-	}{d.Schema, d.Date, d.Period, d.CountOf(), d.DegradedOf(), d.Repos}
+	}{d.Schema, d.Date, d.Period, CountOf(d), DegradedOf(d), d.Repos}
 
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -108,10 +84,13 @@ func ContentHash(d ReleaseDigest) string {
 	if err := enc.Encode(basis); err != nil {
 		return ""
 	}
-	canon, err := jcs.Transform(bytes.TrimRight(buf.Bytes(), "\n"))
+	canon, err := jcsTransform(bytes.TrimRight(buf.Bytes(), "\n"))
 	if err != nil {
 		return ""
 	}
 	sum := sha256.Sum256(canon)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
+
+// jcsTransform is a thin wrapper so the JCS dependency stays in one place.
+func jcsTransform(b []byte) ([]byte, error) { return jcs.Transform(b) }

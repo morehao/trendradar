@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v2.json",
+  "title": "trendradar releases v2",
+  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "date",
+    "period",
+    "contentHash",
+    "contentHashAlgo",
+    "count",
+    "degraded",
+    "repos"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly"
+      ]
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contentHashAlgo": {
+      "type": "string",
+      "enum": [
+        "jcs-sha256-v1"
+      ]
+    },
+    "coreVersion": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "repos": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RepoReleases"
+      }
+    }
+  },
+  "$defs": {
+    "ReleaseItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis).",
+      "required": [
+        "id",
+        "tag",
+        "name",
+        "kind",
+        "url",
+        "prerelease",
+        "draft",
+        "summaryZh",
+        "summarySource"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "x-go-type": "int64",
+          "description": "GitHub release id; 0 when the item comes from a tag fallback."
+        },
+        "tag": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "release",
+            "tag"
+          ]
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "url": {
+          "type": "string"
+        },
+        "prerelease": {
+          "type": "boolean"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "bodyExcerpt": {
+          "type": "string",
+          "description": "Truncated raw release notes. Untrusted text: display only, never execute."
+        },
+        "summaryZh": {
+          "type": "string"
+        },
+        "summarySource": {
+          "type": "string",
+          "enum": [
+            "model",
+            "original"
+          ]
+        }
+      }
+    },
+    "RepoReleases": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "fullName",
+        "url",
+        "latestTag",
+        "newCount",
+        "releases"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "pattern": "^[^/]+/[^/]+$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "latestTag": {
+          "type": "string"
+        },
+        "newCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "releases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReleaseItem"
+          }
+        }
+      }
+    },
+    "ReleasesReport": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Per-run diagnostic for the releases stage. usage is required and always serialized so a consumer can tell 'nothing spent' (calls=0) from 'spent but not reported' (calls>0 with usageKnown=false).",
+      "required": [
+        "enabled",
+        "repos",
+        "newReleases",
+        "durationMs",
+        "usage"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "repos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "newReleases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summarized": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "degraded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rateLimited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "historyTruncated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "usage": {
+          "$ref": "ipc.v2.json#/$defs/Usage"
+        }
+      }
+    },
+    "ReleaseManifestEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One row of GET /api/v2/releases. Cost is intentionally absent: manifests describe stored documents, which carry no run cost.",
+      "required": [
+        "date",
+        "period",
+        "count",
+        "contentHash"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "period": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "degraded": {
+          "type": "boolean"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "SubscriptionList": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Response of GET /api/v2/subscriptions.",
+      "required": [
+        "repos"
+      ],
+      "properties": {
+        "repos": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          }
+        }
+      }
+    }
+  }
+}

@@ -38,11 +38,13 @@ export interface FileArtifact {
 
 export interface RunRequest {
   "ipcSchema": 2;
-  "command": "run" | "serve" | "config" | "version";
+  "command": "run" | "serve" | "config" | "version" | "subscribe";
   "configPath"?: string;
   "date"?: string;
   "dryRun"?: boolean;
   "outputDir"?: string;
+  "action"?: "list" | "add" | "remove";
+  "repo"?: string;
 }
 
 export interface RunResult {
@@ -60,6 +62,7 @@ export interface RunResult {
   "error"?: ErrorInfo;
   "warnings"?: Array<string>;
   "usage"?: Usage;
+  "releases"?: ReleasesReport;
   [k: string]: unknown;
 }
 
@@ -91,6 +94,60 @@ export interface State {
   [k: string]: unknown;
 }
 
+export interface ReleaseItem {
+  "id": number;
+  "tag": string;
+  "name": string;
+  "kind": "release" | "tag";
+  "publishedAt"?: string;
+  "url": string;
+  "prerelease": boolean;
+  "draft": boolean;
+  "bodyExcerpt"?: string;
+  "summaryZh": string;
+  "summarySource": "model" | "original";
+  [k: string]: unknown;
+}
+
+export interface RepoReleases {
+  "fullName": string;
+  "url": string;
+  "latestTag": string;
+  "newCount": number;
+  "releases": Array<ReleaseItem>;
+  [k: string]: unknown;
+}
+
+export interface ReleasesReport {
+  "enabled": boolean;
+  "repos": number;
+  "newReleases": number;
+  "summarized"?: number;
+  "degraded"?: number;
+  "failed"?: number;
+  "rateLimited"?: number;
+  "skipped"?: number;
+  "truncated"?: number;
+  "historyTruncated"?: number;
+  "durationMs": number;
+  "usage": Usage;
+  [k: string]: unknown;
+}
+
+export interface ReleaseManifestEntry {
+  "date": string;
+  "period": "daily" | "weekly" | "monthly";
+  "count": number;
+  "degraded"?: boolean;
+  "contentHash": string;
+  [k: string]: unknown;
+}
+
+export interface SubscriptionList {
+  "repos": Array<string>;
+  [k: string]: unknown;
+}
+
 export interface ErrorMeta {
   "retriable": boolean;
   "description": string;
@@ -111,6 +168,20 @@ export interface Digest {
   [k: string]: unknown;
 }
 
+export interface ReleaseDigest {
+  "schema": 1;
+  "date": string;
+  "period": "daily" | "weekly" | "monthly";
+  "contentHash": string;
+  "contentHashAlgo": "jcs-sha256-v1";
+  "coreVersion"?: string;
+  "generatedAt"?: string;
+  "count": number;
+  "degraded": boolean;
+  "repos": Array<RepoReleases>;
+  [k: string]: unknown;
+}
+
 export interface VersionInfo {
   "version": string;
   "commit": string;
@@ -128,13 +199,18 @@ export declare const fixtures: {
   degraded: Digest;
   emptyLang: Digest;
   missingOptional: Digest;
+  releaseNormal: ReleaseDigest;
+  releaseDegraded: ReleaseDigest;
+  releaseEmpty: ReleaseDigest;
 };
 export declare const validators: {
   runRequest: (value: unknown) => boolean;
   runResult: (value: unknown) => boolean;
   digest: (value: unknown) => boolean;
+  releases: (value: unknown) => boolean;
+  releasesReport: (value: unknown) => boolean;
   versionInfo: (value: unknown) => boolean;
 };
 export declare const rawSchema: {
-  model: object; ipc: object; digest: object; errors: object; versionInfo: object; api: string;
+  model: object; ipc: object; digest: object; releases: object; errors: object; versionInfo: object; api: string;
 };

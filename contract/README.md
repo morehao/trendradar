@@ -1,4 +1,4 @@
-# @morehao/trendradar-contract (0.2.0)
+# @morehao/trendradar-contract (0.3.0)
 
 The single source of truth for the data shapes shared by the **trendradar Go
 core** (`github.com/morehao/trendradar`) and the **DSH plugin**
@@ -12,7 +12,7 @@ artifacts from one tag:
 
 Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 
-> Version model: the **package** is `0.2.0` (its first public release), while the
+> Version model: the **package** is `0.3.0`, while the
 > **wire format** it carries is the second generation — `ipcSchema=2`,
 > `digestSchema=2`. The integers 2 distinguish this contract from the legacy
 > in-repo v1; they are intentionally decoupled from the package semver.
@@ -20,8 +20,8 @@ Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 ## Install
 
 ```bash
-npm i @morehao/trendradar-contract@0.2.0
-go get github.com/morehao/trendradar/contract@v0.2.0   # resolves tag contract/v0.2.0
+npm i @morehao/trendradar-contract@0.3.0
+go get github.com/morehao/trendradar/contract@v0.3.0   # resolves tag contract/v0.3.0
 ```
 
 ## Layout
@@ -31,10 +31,11 @@ go get github.com/morehao/trendradar/contract@v0.2.0   # resolves tag contract/v
 | `schema/model.v2.json` | `RepoSnapshot`; `RepoDigest` composes it via `allOf` |
 | `schema/ipc.v2.json` | `RunRequest` (strict), `RunResult`, `ErrorInfo`, `State`, `FileArtifact` |
 | `schema/digest.v2.json` | rendered digest document, incl. `contentHashAlgo` |
+| `schema/releases.v2.json` | release-subscription document + `ReleasesReport` (run cost) |
 | `schema/errors.v2.json` | 17 error codes with `retriable`/`description` (single source of truth) |
 | `schema/version-info.v2.json` | `trendradar version --json` handshake |
-| `schema/api.v2.yaml` | `trendradar serve` OpenAPI (`/api/v2`) |
-| `fixtures/*.json` | golden v2 digests (incl. `digest-missing-optional.json`) |
+| `schema/api.v2.yaml` | `trendradar serve` OpenAPI (`/api/v2`, incl. releases) |
+| `fixtures/*.json` | golden v2 digests + release documents |
 | `version-map.json` | schema file → version carrier → propagation |
 | `contract.gen.go` | generated Go structs + `ErrorCode` + `ErrorCatalog` + `SchemaFS` |
 | `gen/ts/index.{js,d.ts}` | generated TS types + runtime (`validators`, `errorCatalog`, `fixtures`, `rawSchema`) |
@@ -61,12 +62,18 @@ contract.SchemaFS // embedded schema/* files
 ## Versioning & compatibility
 
 - `ipcSchema` (const 2) and `digestSchema` (const 2) are the wire integers;
-  `contractVersion` (`"0.2.0"`) is the package handshake.
+  `contractVersion` (`"0.3.0"`) is the package handshake.
 - Adding an **optional** field is a minor change. Removing/renaming a field,
   changing a type, or tightening validation is **breaking**: bump the affected
   wire integer and/or the package version, declared in `version-map.json`.
   `make verify-versions` enforces this against the PR base.
-- `RunRequest` is the only strict object (`additionalProperties: false`).
+- `RunRequest` is the only strict object (`additionalProperties: false`). It
+  carries conditional rules for `command: "subscribe"`: `action` is required,
+  `list` takes no `repo`, `add`/`remove` require one, and other commands must
+  not carry either field.
+- Token cost for releases lives in `ReleasesReport.usage` (always present) and
+  **not** in the stored `ReleaseDigest`, because cost describes one run and
+  cannot be reproduced from a document.
 
 ## contentHash
 

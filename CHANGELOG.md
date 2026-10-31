@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-_Nothing yet._
+### Added — 发版订阅纳入契约（contract 0.3.0）
+- `contract/schema/releases.v2.json`：`ReleaseDigest` / `RepoReleases` /
+  `ReleaseItem` 成为契约类型；`internal/releasedigest` 改为契约别名，形状全仓只定义一次。
+- `RunRequest.command` 支持 `subscribe`（`action` + `repo`，仍严格校验）；
+  `trendradar subscribe --json` 可从 stdin 接 `RunRequest`，供插件调用。
+- `RunResult.releases` 改为契约类型（不再借 `additionalProperties` 兜底）。
+- `serve` 新增只读接口：`/api/v2/releases`、`/api/v2/releases/{date}`、
+  `/api/v2/subscriptions`。
+- 成本可见性：`releases.usage` 恒存在，用于区分「未调用」（`calls=0`）与
+  「调用了但未上报」（`calls>0 && usageKnown=false`）；旧的 5 个 `omitempty`
+  token 字段在全 0 时会被序列化吞掉，已修复。
 
 ## 0.5.0
 

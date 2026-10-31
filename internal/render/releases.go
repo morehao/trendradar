@@ -64,7 +64,11 @@ func ReleaseMarkdown(d releasedigest.ReleaseDigest) []byte {
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "date: %s\nperiod: %s\ncount: %d\ndegraded: %t\n", d.Date, d.Period, d.Count, d.Degraded)
 	fmt.Fprintf(&b, "contentHash: %s\n", d.ContentHash)
-	fmt.Fprintf(&b, "coreVersion: %s\n", d.CoreVersion)
+	coreVersion := ""
+	if d.CoreVersion != nil {
+		coreVersion = *d.CoreVersion
+	}
+	fmt.Fprintf(&b, "coreVersion: %s\n", coreVersion)
 	gen := ""
 	if d.GeneratedAt != nil {
 		gen = d.GeneratedAt.UTC().Format(time.RFC3339)
@@ -205,8 +209,8 @@ func MergeReleaseDigests(history []releasedigest.ReleaseDigest, today releasedig
 		}
 		out = append(out, h)
 	}
-	merged.Count = merged.CountOf()
-	merged.Degraded = merged.DegradedOf()
+	merged.Count = releasedigest.CountOf(merged)
+	merged.Degraded = releasedigest.DegradedOf(merged)
 	merged.ContentHash = releasedigest.ContentHash(merged)
 	out = append(out, merged)
 	return out, merged
@@ -226,10 +230,10 @@ func mergeRelease(a, b releasedigest.ReleaseDigest) releasedigest.ReleaseDigest 
 		}
 		have := map[string]bool{}
 		for _, it := range a.Repos[i].Releases {
-			have[it.Key()] = true
+			have[releasedigest.ItemKey(it)] = true
 		}
 		for _, it := range rb.Releases {
-			if !have[it.Key()] {
+			if !have[releasedigest.ItemKey(it)] {
 				a.Repos[i].Releases = append(a.Repos[i].Releases, it)
 			}
 		}
