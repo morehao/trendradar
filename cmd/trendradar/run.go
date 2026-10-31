@@ -203,25 +203,30 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		}
 	}
 
-	if !*dryRun && result.Report.Releases != nil && result.Report.Releases.UsageKnown {
+	// Releases token spend is logged separately from trending so each stage can
+	// be costed on its own. Records are written whenever the stage ran, even
+	// with usageUnknown, so "called but the provider reported nothing" is
+	// observable rather than silently missing.
+	if !*dryRun && result.Report.Releases != nil && result.Report.Releases.Usage.Calls > 0 {
 		repoPath := ""
 		providerName, modelName := "", ""
 		if cfg != nil {
 			repoPath = cfg.Repo.Path
 			providerName, modelName = cfg.Model.Provider, cfg.Model.Name
 		}
-		rr := result.Report.Releases
+		ru := result.Report.Releases.Usage
 		rec := app.UsageRecord{
 			Time:             time.Now().UTC(),
 			Provider:         providerName,
 			Model:            modelName,
 			Stage:            "releases",
-			PromptTokens:     rr.PromptTokens,
-			CompletionTokens: rr.CompletionTokens,
-			TotalTokens:      rr.TotalTokens,
-			UsageKnown:       true,
-			Calls:            rr.Calls,
-			DurationMs:       rr.DurationMs,
+			PromptTokens:     ru.PromptTokens,
+			CompletionTokens: ru.CompletionTokens,
+			TotalTokens:      ru.TotalTokens,
+			CachedTokens:     ru.CachedTokens,
+			UsageKnown:       ru.UsageKnown,
+			Calls:            ru.Calls,
+			DurationMs:       int64(result.Report.Releases.DurationMs),
 		}
 		if err := app.AppendUsageLog(repoPath, rec); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: usage log: %v\n", err)

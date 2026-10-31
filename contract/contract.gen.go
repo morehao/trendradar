@@ -66,23 +66,26 @@ type RunRequest struct {
 	Date       *string `json:"date,omitempty"`
 	DryRun     *bool   `json:"dryRun,omitempty"`
 	OutputDir  *string `json:"outputDir,omitempty"`
+	Action     *string `json:"action,omitempty"`
+	Repo       *string `json:"repo,omitempty"`
 }
 
 type RunResult struct {
-	IPCSchema   int            `json:"ipcSchema"`
-	OK          bool           `json:"ok"`
-	Command     string         `json:"command"`
-	StartedAt   time.Time      `json:"startedAt"`
-	FinishedAt  time.Time      `json:"finishedAt"`
-	Skipped     bool           `json:"skipped"`
-	Files       []FileArtifact `json:"files"`
-	Branch      *string        `json:"branch,omitempty"`
-	Commit      *string        `json:"commit,omitempty"`
-	PRUrl       *string        `json:"prUrl,omitempty"`
-	ContentHash *string        `json:"contentHash,omitempty"`
-	Error       *ErrorInfo     `json:"error,omitempty"`
-	Warnings    []string       `json:"warnings,omitempty"`
-	Usage       *Usage         `json:"usage,omitempty"`
+	IPCSchema   int             `json:"ipcSchema"`
+	OK          bool            `json:"ok"`
+	Command     string          `json:"command"`
+	StartedAt   time.Time       `json:"startedAt"`
+	FinishedAt  time.Time       `json:"finishedAt"`
+	Skipped     bool            `json:"skipped"`
+	Files       []FileArtifact  `json:"files"`
+	Branch      *string         `json:"branch,omitempty"`
+	Commit      *string         `json:"commit,omitempty"`
+	PRUrl       *string         `json:"prUrl,omitempty"`
+	ContentHash *string         `json:"contentHash,omitempty"`
+	Error       *ErrorInfo      `json:"error,omitempty"`
+	Warnings    []string        `json:"warnings,omitempty"`
+	Usage       *Usage          `json:"usage,omitempty"`
+	Releases    *ReleasesReport `json:"releases,omitempty"`
 }
 
 type Usage struct {
@@ -110,6 +113,55 @@ type State struct {
 	LastRun     *StateRun `json:"lastRun,omitempty"`
 }
 
+type ReleaseItem struct {
+	ID            int64      `json:"id"`
+	Tag           string     `json:"tag"`
+	Name          string     `json:"name"`
+	Kind          string     `json:"kind"`
+	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
+	URL           string     `json:"url"`
+	Prerelease    bool       `json:"prerelease"`
+	Draft         bool       `json:"draft"`
+	BodyExcerpt   *string    `json:"bodyExcerpt,omitempty"`
+	SummaryZh     string     `json:"summaryZh"`
+	SummarySource string     `json:"summarySource"`
+}
+
+type RepoReleases struct {
+	FullName  string        `json:"fullName"`
+	URL       string        `json:"url"`
+	LatestTag string        `json:"latestTag"`
+	NewCount  int           `json:"newCount"`
+	Releases  []ReleaseItem `json:"releases"`
+}
+
+type ReleasesReport struct {
+	Enabled          bool  `json:"enabled"`
+	Repos            int   `json:"repos"`
+	NewReleases      int   `json:"newReleases"`
+	Summarized       *int  `json:"summarized,omitempty"`
+	Degraded         *int  `json:"degraded,omitempty"`
+	Failed           *int  `json:"failed,omitempty"`
+	RateLimited      *int  `json:"rateLimited,omitempty"`
+	Skipped          *int  `json:"skipped,omitempty"`
+	Truncated        *int  `json:"truncated,omitempty"`
+	HistoryTruncated *int  `json:"historyTruncated,omitempty"`
+	DurationMs       int   `json:"durationMs"`
+	Usage            Usage `json:"usage"`
+}
+
+type ReleaseManifestEntry struct {
+	Date        string `json:"date"`
+	Period      string `json:"period"`
+	Count       int    `json:"count"`
+	Degraded    *bool  `json:"degraded,omitempty"`
+	ContentHash string `json:"contentHash"`
+}
+
+type SubscriptionList struct {
+	Repos []string `json:"repos"`
+}
+
 type ErrorMeta struct {
 	Retriable   bool   `json:"retriable"`
 	Description string `json:"description"`
@@ -127,6 +179,19 @@ type Digest struct {
 	CoreVersion     *string      `json:"coreVersion,omitempty"`
 	GeneratedAt     *time.Time   `json:"generatedAt,omitempty"`
 	Repos           []RepoDigest `json:"repos"`
+}
+
+type ReleaseDigest struct {
+	Schema          int            `json:"schema"`
+	Date            string         `json:"date"`
+	Period          string         `json:"period"`
+	ContentHash     string         `json:"contentHash"`
+	ContentHashAlgo string         `json:"contentHashAlgo"`
+	CoreVersion     *string        `json:"coreVersion,omitempty"`
+	GeneratedAt     *time.Time     `json:"generatedAt,omitempty"`
+	Count           int            `json:"count"`
+	Degraded        bool           `json:"degraded"`
+	Repos           []RepoReleases `json:"repos"`
 }
 
 type VersionInfo struct {

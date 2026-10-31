@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "date": "2026-10-31",
+  "period": "daily",
+  "contentHash": "sha256:f952f1607ff1708120c35e7a9551f0691ae747edf2ee959445edcd53bc0edf25",
+  "contentHashAlgo": "jcs-sha256-v1",
+  "count": 1,
+  "degraded": true,
+  "repos": [
+    {
+      "fullName": "acme/widget",
+      "url": "https://github.com/acme/widget",
+      "latestTag": "v2.0.0",
+      "newCount": 1,
+      "releases": [
+        {
+          "id": 0,
+          "tag": "v2.0.0",
+          "name": "v2.0.0",
+          "kind": "release",
+          "url": "https://github.com/acme/widget/releases/tag/v2.0.0",
+          "prerelease": false,
+          "draft": false,
+          "summaryZh": "版本 v2.0.0（未获取到变更说明）",
+          "summarySource": "original"
+        }
+      ]
+    }
+  ]
+}

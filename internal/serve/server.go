@@ -11,8 +11,23 @@ import (
 
 // Server is the HTTP handler set for trendradar serve.
 type Server struct {
-	store   *Store
-	handler http.Handler
+	store             *Store
+	handler           http.Handler
+	releasesSubdir    string // config releases.outputDir (default "releases")
+	subscriptionsPath string // absolute path to subscriptions.yaml ("" = none)
+}
+
+// WithReleases enables the /api/v2/releases* and /api/v2/subscriptions routes.
+// subDir is the releases sub-directory inside the digest root; subsPath is the
+// resolved subscription file. Both may be empty, in which case the routes serve
+// an empty list rather than erroring.
+func (s *Server) WithReleases(subDir, subsPath string) *Server {
+	if subDir == "" {
+		subDir = "releases"
+	}
+	s.releasesSubdir = subDir
+	s.subscriptionsPath = subsPath
+	return s
 }
 
 // New wires routes for the given store.
@@ -24,6 +39,10 @@ func New(store *Store) *Server {
 	// New additive route: explicit period.
 	mux.HandleFunc("GET /api/v2/digests/{period}/{date}", s.handleDigestByPeriod)
 	mux.HandleFunc("GET /api/v2/manifest", s.handleManifest)
+	// Release subscriptions (read-only).
+	mux.HandleFunc("GET /api/v2/releases", s.handleListReleases)
+	mux.HandleFunc("GET /api/v2/releases/{date}", s.handleGetReleases)
+	mux.HandleFunc("GET /api/v2/subscriptions", s.handleListSubscriptions)
 	// v1 HTTP surface is retired: respond 410 Gone, point clients at v2.
 	mux.HandleFunc("GET /api/v1/digests/{date}", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "api v1 removed; use /api/v2/digests/{date}", http.StatusGone)

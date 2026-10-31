@@ -1,8 +1,57 @@
 {
-  "ipc.v2.json": { "wireKey": "ipcSchema", "current": 2, "breakingBump": ["ipcSchema", "packageMajor"] },
-  "digest.v2.json": { "wireKey": "digestSchema", "current": 2, "breakingBump": ["digestSchema", "packageMajor"] },
-  "model.v2.json": { "wireKey": null, "current": 2, "propagatesTo": ["digestSchema"], "breakingBump": ["packageMajor"] },
-  "errors.v2.json": { "wireKey": null, "current": 2, "breakingBump": ["packageMajor"] },
-  "version-info.v2.json": { "wireKey": "contractVersion", "current": "0.2.0", "breakingBump": ["packageMajor"] },
-  "api.v2.yaml": { "wireKey": "info.version", "current": "0.2.0", "breakingBump": ["packageMajor"] }
+  "ipc.v2.json": {
+    "wireKey": "ipcSchema",
+    "current": 2,
+    "breakingBump": [
+      "ipcSchema",
+      "packageMajor"
+    ]
+  },
+  "digest.v2.json": {
+    "wireKey": "digestSchema",
+    "current": 2,
+    "breakingBump": [
+      "digestSchema",
+      "packageMajor"
+    ]
+  },
+  "model.v2.json": {
+    "wireKey": null,
+    "current": 2,
+    "propagatesTo": [
+      "digestSchema"
+    ],
+    "breakingBump": [
+      "packageMajor"
+    ]
+  },
+  "errors.v2.json": {
+    "wireKey": null,
+    "current": 2,
+    "breakingBump": [
+      "packageMajor"
+    ]
+  },
+  "version-info.v2.json": {
+    "wireKey": "contractVersion",
+    "current": "0.3.0",
+    "breakingBump": [
+      "packageMajor"
+    ]
+  },
+  "api.v2.yaml": {
+    "wireKey": "info.version",
+    "current": "0.3.0",
+    "breakingBump": [
+      "packageMajor"
+    ]
+  },
+  "releases.v2.json": {
+    "wireKey": null,
+    "current": 1,
+    "propagatesTo": [],
+    "breakingBump": [
+      "packageMajor"
+    ]
+  }
 }

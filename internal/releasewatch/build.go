@@ -127,8 +127,8 @@ func Build(ctx context.Context, f Fetcher, opts Options) (releasedigest.ReleaseD
 			rep.Failed++
 		}
 	}
-	d.Count = d.CountOf()
-	d.Degraded = d.DegradedOf()
+	d.Count = releasedigest.CountOf(d)
+	d.Degraded = releasedigest.DegradedOf(d)
 	d.ContentHashAlgo = releasedigest.ContentHashAlgo
 	d.ContentHash = releasedigest.ContentHash(d)
 	usage, calls := b.sum.Stats()
@@ -300,7 +300,8 @@ func (b *builder) summarizeGroup(ctx context.Context, repo string, cands []candi
 			item.URL = repoURL(repo)
 		}
 		if c.rel.Body != "" {
-			item.BodyExcerpt = truncateRunes(c.rel.Body, b.opts.MaxNotesChars)
+			excerpt := truncateRunes(c.rel.Body, b.opts.MaxNotesChars)
+			item.BodyExcerpt = &excerpt
 		}
 		b.rep.NewReleases++
 		if r.Source == "model" {

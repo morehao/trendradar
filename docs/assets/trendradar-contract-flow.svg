@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <title>trendradar 对外契约：一份 schema 生成 Go 与 TypeScript 两套类型</title>
+  <desc>这张图展示契约的单一真源与生成路径。左上 contract/schema/*.json 是唯一真源，包含 model、digest、releases、ipc、errors、version-info 与 api 七份 schema。它经 generate.mjs 生成两个产物：contract.gen.go（Go 结构体与错误码）和 gen/ts/index.js + index.d.ts（TypeScript 类型、ajv 校验器、fixtures）。Go 侧被内核以类型别名直接引用，TS 侧被 DSH 插件使用。图下方标注三条规则：别名而非复制、wire 整数与包版本解耦、零值必须可区分。核心结论是形状只定义一次，两端由同一份 schema 派生，避免漂移。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" />
+    </marker>
+  </defs>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --fg: #172033;
+      --muted: #5b6475;
+      --line: #64748b;
+      --neutral: #e2e8f0;
+      --input: #bfdbfe;
+      --process: #c7d2fe;
+      --storage: #99f6e4;
+      --external: #fde68a;
+      --risk: #fecaca;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --fg: #e5e7eb;
+        --muted: #a3adbd;
+        --line: #94a3b8;
+        --neutral: #334155;
+        --input: #1d4ed8;
+        --process: #4338ca;
+        --storage: #0f766e;
+        --external: #92400e;
+        --risk: #991b1b;
+      }
+    }
+    svg { background: var(--bg); }
+    .title { font-size: 20px; font-weight: 650; fill: var(--fg); }
+    .label { font-size: 14px; font-weight: 600; fill: var(--fg); }
+    .small { font-size: 12px; fill: var(--muted); }
+    .node { stroke: var(--line); stroke-width: 1; }
+    .neutral { fill: var(--neutral); }
+    .input { fill: var(--input); }
+    .process { fill: var(--process); }
+    .storage { fill: var(--storage); }
+    .external { fill: var(--external); }
+    .edge { stroke: var(--line); stroke-width: 1.5; fill: none; }
+    .edge-arrow { marker-end: url(#arrow); }
+  </style>
+
+  <rect x="0" y="0" width="1200" height="560" fill="var(--bg)" />
+  <text class="title" x="40" y="46">对外契约：单一真源，双端生成</text>
+
+  <!-- source -->
+  <rect class="node storage" x="70" y="90" width="300" height="150" rx="10" />
+  <text class="label" x="94" y="120">contract/schema/*.json</text>
+  <text class="small" x="94" y="146">model.v2 · digest.v2 · releases.v2</text>
+  <text class="small" x="94" y="168">ipc.v2 · errors.v2</text>
+  <text class="small" x="94" y="190">version-info.v2 · api.v2.yaml</text>
+  <text class="small" x="94" y="218">唯一真源（唯一手写处）</text>
+
+  <!-- generator -->
+  <rect class="node process" x="450" y="120" width="220" height="90" rx="10" />
+  <text class="label" x="476" y="152">generate.mjs</text>
+  <text class="small" x="476" y="176">确定性代码生成</text>
+  <text class="small" x="476" y="194">npm run generate / verify</text>
+
+  <!-- two outputs -->
+  <rect class="node input" x="760" y="90" width="350" height="96" rx="10" />
+  <text class="label" x="784" y="118">contract.gen.go</text>
+  <text class="small" x="784" y="142">Go 结构体 + ErrorCode + ErrorCatalog</text>
+  <text class="small" x="784" y="164">生成物，禁止手改</text>
+
+  <rect class="node input" x="760" y="204" width="350" height="96" rx="10" />
+  <text class="label" x="784" y="232">gen/ts/index.{js,d.ts}</text>
+  <text class="small" x="784" y="256">TS 类型 + ajv 校验器 + fixtures</text>
+  <text class="small" x="784" y="278">生成物，禁止手改</text>
+
+  <!-- consumers -->
+  <rect class="node neutral" x="760" y="330" width="350" height="60" rx="10" />
+  <text class="label" x="784" y="356">内核（internal/*）</text>
+  <text class="small" x="784" y="376">type X = contract.X · 别名而非复制</text>
+
+  <rect class="node neutral" x="760" y="410" width="350" height="60" rx="10" />
+  <text class="label" x="784" y="436">DSH 插件（npm 包）</text>
+  <text class="small" x="784" y="456">@morehao/trendradar-contract</text>
+
+  <!-- rules -->
+  <rect class="node neutral" x="70" y="330" width="620" height="140" rx="10" />
+  <text class="label" x="94" y="360">三条契约规则（违反即破坏外部消费者）</text>
+  <text class="small" x="94" y="392">1. 别名而非复制：内核 type X = contract.X，禁止在 internal/ 重复定义</text>
+  <text class="small" x="94" y="418">2. wire 整数与包版本解耦：新增可选字段只升包版本（0.2.0 → 0.3.0）</text>
+  <text class="small" x="94" y="444">3. 零值必须可区分：成本/计数 0 与「缺失」语义不同时，不用 omitempty</text>
+
+  <!-- edges -->
+  <path class="edge edge-arrow" d="M 370 165 L 450 165" />
+  <path class="edge edge-arrow" d="M 670 145 L 760 138" />
+  <path class="edge edge-arrow" d="M 670 190 L 760 252" />
+  <path class="edge edge-arrow" d="M 935 300 L 935 330" />
+  <path class="edge edge-arrow" d="M 880 300 L 880 410" />
+</svg>

@@ -267,7 +267,8 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		if rerr != nil {
 			rep.Warnings = append(rep.Warnings, "releases: "+rerr.Error())
 		} else if drel.Count > 0 {
-			drel.CoreVersion = ipc.Version
+			coreV := ipc.Version
+			drel.CoreVersion = &coreV
 			drel.GeneratedAt = &genAt
 			drel.ContentHash = releasedigest.ContentHash(drel)
 			hist, _ := render.ListReleaseDigests(historyRoot, rc.OutputDir, limits)

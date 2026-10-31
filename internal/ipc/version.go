@@ -6,7 +6,7 @@ import contract "github.com/morehao/trendradar/contract"
 const DigestSchemaVersion = 2
 
 // ContractVersion is the version of the shared contract package this core targets.
-const ContractVersion = "0.2.0"
+const ContractVersion = "0.3.0"
 
 // Build-time values. Override at release time with:
 //

@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <title>trendradar 数据与存储：数据仓内受版本控制的产物 vs 本机运行时状态</title>
+  <desc>这张图把数据分成两组。左侧是数据仓内受版本控制的内容：digests/ 目录存放榜单产物（index.md 与按日/周/月分层的 md、json），digests/releases/ 存放发版产物与订阅文件 subscriptions.yaml。右侧是本机不入库的运行时状态：摘要缓存、发版游标、发版摘要缓存、用量日志，以及 .env 与本地 subscriptions.yaml。两条虚线说明流向：数据仓产物经 PR 合并后被人、插件、Web 消费；本机状态只服务当前运行的 trendradar 进程。核心结论是「产物进仓库、状态留本机」，两者不可混淆。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" />
+    </marker>
+  </defs>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --fg: #172033;
+      --muted: #5b6475;
+      --line: #64748b;
+      --neutral: #e2e8f0;
+      --input: #bfdbfe;
+      --process: #c7d2fe;
+      --storage: #99f6e4;
+      --external: #fde68a;
+      --risk: #fecaca;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --fg: #e5e7eb;
+        --muted: #a3adbd;
+        --line: #94a3b8;
+        --neutral: #334155;
+        --input: #1d4ed8;
+        --process: #4338ca;
+        --storage: #0f766e;
+        --external: #92400e;
+        --risk: #991b1b;
+      }
+    }
+    svg { background: var(--bg); }
+    .title { font-size: 20px; font-weight: 650; fill: var(--fg); }
+    .label { font-size: 14px; font-weight: 600; fill: var(--fg); }
+    .small { font-size: 12px; fill: var(--muted); }
+    .zone-label { font-size: 13px; font-weight: 650; fill: var(--muted); letter-spacing: .04em; }
+    .node { stroke: var(--line); stroke-width: 1; }
+    .neutral { fill: var(--neutral); }
+    .input { fill: var(--input); }
+    .process { fill: var(--process); }
+    .storage { fill: var(--storage); }
+    .external { fill: var(--external); }
+    .edge { stroke: var(--line); stroke-width: 1.5; fill: none; }
+    .edge-arrow { marker-end: url(#arrow); }
+    .edge-dash { stroke: var(--line); stroke-width: 1.5; fill: none; stroke-dasharray: 6 5; }
+    .zone { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 6 5; opacity: .8; }
+  </style>
+
+  <rect x="0" y="0" width="1200" height="660" fill="var(--bg)" />
+  <text class="title" x="40" y="46">数据与存储：仓库内产物 vs 本机状态</text>
+
+  <!-- LEFT: versioned repo -->
+  <rect class="zone" x="40" y="76" width="600" height="300" rx="10" />
+  <text class="zone-label" x="60" y="102">数据仓（受版本控制，经 PR 合并）</text>
+
+  <rect class="node storage" x="70" y="122" width="250" height="96" rx="8" />
+  <text class="label" x="92" y="150">digests/（榜单）</text>
+  <text class="small" x="92" y="174">index.md</text>
+  <text class="small" x="92" y="194">daily/ weekly/ monthly/</text>
+  <text class="small" x="92" y="212">各期 .md + .json</text>
+
+  <rect class="node storage" x="350" y="122" width="260" height="96" rx="8" />
+  <text class="label" x="372" y="150">digests/releases/（发版）</text>
+  <text class="small" x="372" y="174">index.md + 各期 .md/.json</text>
+  <text class="small" x="372" y="194">subscriptions.yaml</text>
+  <text class="small" x="372" y="212">（订阅列表，随产物提交）</text>
+
+  <rect class="node neutral" x="70" y="246" width="540" height="52" rx="8" />
+  <text class="small" x="92" y="268">路径规则唯一真源：OutputRoot / BucketOf / NameOf（run 与 serve 共用）</text>
+  <text class="small" x="92" y="286">索引每期只列最近 N 期（daily 90 / weekly 12 / monthly 12）</text>
+
+  <!-- RIGHT: local runtime state -->
+  <rect class="zone" x="680" y="76" width="480" height="300" rx="10" />
+  <text class="zone-label" x="700" y="102">本机（不入库，.git/ 下）</text>
+
+  <rect class="node neutral" x="710" y="122" width="420" height="40" rx="8" />
+  <text class="small" x="730" y="147">.git/trendradar-cache.json — 摘要缓存（30 天 TTL）</text>
+  <rect class="node neutral" x="710" y="172" width="420" height="40" rx="8" />
+  <text class="small" x="730" y="197">.git/trendradar-release-state.json — 发版游标</text>
+  <rect class="node neutral" x="710" y="222" width="420" height="40" rx="8" />
+  <text class="small" x="730" y="247">.git/trendradar-release-cache.json — 发版摘要缓存</text>
+  <rect class="node neutral" x="710" y="272" width="420" height="40" rx="8" />
+  <text class="small" x="730" y="297">.git/trendradar-usage.jsonl — 用量日志（按行追加）</text>
+
+  <rect class="zone" x="680" y="396" width="480" height="96" rx="10" />
+  <text class="zone-label" x="700" y="420">本机密钥与本地覆盖</text>
+  <rect class="node neutral" x="710" y="430" width="420" height="50" rx="8" />
+  <style>.fit { font-size: 11px; fill: var(--muted); }</style>
+  <text class="fit" x="730" y="452">.env / 环境变量 — 密钥（永不入库）</text>
+  <text class="fit" x="730" y="470">本地 subscriptions.yaml — 仅迁移期兼容</text>
+
+  <!-- consumers -->
+  <rect class="zone" x="40" y="530" width="600" height="104" rx="10" />
+  <text class="zone-label" x="60" y="556">数据仓产物的消费者</text>
+  <rect class="node neutral" x="70" y="566" width="540" height="52" rx="8" />
+  <text class="small" x="92" y="588">人（直接读 Markdown） · DSH 插件 · Web 页面/脚本（经 serve 的只读 HTTP）</text>
+  <text class="small" x="92" y="606">JSON 供机器解析，Markdown 供阅读，两者同源同版本</text>
+
+  <!-- process box for local state -->
+  <rect class="zone" x="680" y="530" width="480" height="104" rx="10" />
+  <text class="zone-label" x="700" y="556">本机状态的消费者</text>
+  <rect class="node input" x="710" y="566" width="420" height="52" rx="8" />
+  <text class="small" x="730" y="588">仅当前运行的 trendradar 进程（跨机器不共享）</text>
+  <text class="small" x="730" y="606">换机器 = 游标与缓存清零，产物不受影响</text>
+
+  <!-- edges: repo -> consumers -->
+  <path class="edge-dash edge-arrow" d="M 195 218 L 50 218 L 50 566" />
+  <path class="edge-dash edge-arrow" d="M 480 218 L 640 218 L 640 566" />
+  <!-- local state -> process -->
+  <path class="edge-dash edge-arrow" d="M 800 312 L 800 566" />
+  <path class="edge-dash edge-arrow" d="M 900 480 L 900 566" />
+</svg>

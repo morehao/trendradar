@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "date": "2026-10-31",
+  "period": "daily",
+  "contentHash": "sha256:6ffddcbca4448be9db6dcdfcc407183516c35ed78001b32c3d567ad8a4b4ff42",
+  "contentHashAlgo": "jcs-sha256-v1",
+  "coreVersion": "0.5.0",
+  "generatedAt": "2026-10-31T13:04:00Z",
+  "count": 2,
+  "degraded": false,
+  "repos": [
+    {
+      "fullName": "infiniflow/ragflow",
+      "url": "https://github.com/infiniflow/ragflow",
+      "latestTag": "v1.0.0-rc3",
+      "newCount": 1,
+      "releases": [
+        {
+          "id": 428974489,
+          "tag": "v1.0.0-rc3",
+          "name": "v1.0.0-rc3",
+          "kind": "release",
+          "publishedAt": "2026-10-30T11:53:15Z",
+          "url": "https://github.com/infiniflow/ragflow/releases/tag/v1.0.0-rc3",
+          "prerelease": false,
+          "draft": false,
+          "bodyExcerpt": "1.0.0-rc3 fixes several issues found in rc2.",
+          "summaryZh": "新增证据充分性决策模型与 Categorize 组件，兼容 rc2 schema，可直接升级。",
+          "summarySource": "model"
+        }
+      ]
+    },
+    {
+      "fullName": "deepseek-ai/deepseek-harness",
+      "url": "https://github.com/deepseek-ai/deepseek-harness",
+      "latestTag": "dsh-v0.2.2-alpha.2",
+      "newCount": 1,
+      "releases": [
+        {
+          "id": 0,
+          "tag": "dsh-v0.2.2-alpha.2",
+          "name": "dsh-v0.2.2-alpha.2",
+          "kind": "tag",
+          "url": "https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.2.2-alpha.2",
+          "prerelease": false,
+          "draft": false,
+          "summaryZh": "发布说明缺失，已回退到 commit 信息。",
+          "summarySource": "model"
+        }
+      ]
+    }
+  ]
+}

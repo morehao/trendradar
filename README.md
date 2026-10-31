@@ -102,9 +102,18 @@ releases:
 - 默认 `enabled: false`，对现有 trending 零影响；`enabled: true` 时才加载订阅。
 - 空订阅/文件缺失时 `run` 跳过该阶段并 warning，不报错；订阅文件 YAML 损坏才 fail-fast。
 - 订阅数量不限（配置上限 500）；releases 阶段耗时约 `4s × 订阅数 + 5s`，建议配置 `GITHUB_READ_TOKEN`。
+- 发版摘要的 token 消耗在 `run --json` 的 `releases.usage` 里（恒存在）：
+  `calls=0` 表示没发生模型调用（如全部命中缓存），`calls>0 && usageKnown=false`
+  表示调用了但供应商没回用量——两者不要混为一谈。
 - 仓库没有 Release 时回退 Tag，并用该 tag 的 commit message 作为摘要依据。
 - 状态与摘要缓存放在 `<repo>/.git/trendradar-release-*.json`，天然不入库。
-- `run --json` 会带 `releases` 报告块；`trendradar-usage.jsonl` 额外记录一行 `stage="releases"`。
+- `run --json` 会带 `releases` 报告块（契约类型 `ReleasesReport`，见 contract v0.3.0）；
+  `trendradar-usage.jsonl` 额外记录一行 `stage="releases"`。
+- 插件可经 IPC 管理订阅：`trendradar subscribe --json` 从 stdin 读一个
+  `RunRequest`（`{"command":"subscribe","action":"add","repo":"o/r","configPath":"..."}`），
+  回写 `RunResult`。`configPath` 必填，保证 `subscribe` 与 `run` 解析到同一个订阅文件。
+- `serve` 提供只读接口：`GET /api/v2/releases`、`GET /api/v2/releases/{date}`、
+  `GET /api/v2/subscriptions`。
 
 ## 本地密钥与测试
 

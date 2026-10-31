@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/morehao/trendradar/internal/envfile"
 )
@@ -28,6 +29,21 @@ func main() {
 	case "serve":
 		err = runServe(os.Args[2:])
 	case "subscribe":
+		// `subscribe --json` reads a contract RunRequest from stdin (plugin path);
+		// otherwise the CLI flag form is used (human path).
+		if len(os.Args) > 2 && (os.Args[2] == "--json" || os.Args[2] == "-json") {
+			started := time.Now()
+			req, rerr := subscribeFromStdin()
+			if rerr != nil {
+				emitSubscribeResult(req, started, rerr)
+				err = rerr
+				break
+			}
+			rerr = runSubscribeIPC(req)
+			emitSubscribeResult(req, started, rerr)
+			err = rerr
+			break
+		}
 		err = runSubscribe(os.Args[2:])
 	case "config":
 		err = fmt.Errorf("command %q is not implemented yet", os.Args[1])
@@ -49,6 +65,7 @@ commands:
   run        fetch, parse, summarize, render (M2/M3)
   serve      serve digests over HTTP (M5)
   subscribe  manage repo subscriptions (list|add|remove)
+             add --json to read a contract RunRequest from stdin
   config     inspect/validate config
   version    print version info; add --json for machine-readable output`)
 }

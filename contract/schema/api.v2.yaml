@@ -1,12 +1,18 @@
 openapi: 3.1.0
 info:
   title: trendradar serve API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the
-    digest.v2 schema, so the plugin can consume the same shape whether data comes
-    from the filesystem or over HTTP. Historical v1 digests read from disk are
-    normalized to this v2 shape with contentHashAlgo=legacy-struct-marshal-v1.
+    contract schemas, so the plugin and any web UI consume the same shapes
+    whether data comes from the filesystem or over HTTP. Historical v1 digests
+    read from disk are normalized to the v2 shape with
+    contentHashAlgo=legacy-struct-marshal-v1.
+
+    Release endpoints are read-only. Token cost for a releases run is NOT part of
+    a stored document (it describes one run and cannot be reproduced); it is
+    reported in `releases.usage` of `trendradar run --json` and appended to
+    `<repo>/.git/trendradar-usage.jsonl` with stage="releases".
 servers:
   - url: http://127.0.0.1:8787
 paths:
@@ -63,6 +69,69 @@ paths:
                           enum: [jcs-sha256-v1, legacy-struct-marshal-v1]
                         degraded:
                           type: boolean
+  /api/v2/releases:
+    get:
+      operationId: listReleases
+      summary: List available release digests (newest first)
+      description: |
+        Returns an empty array (not 404) when no release digest exists yet.
+        Entries carry no token cost because stored documents do not record it.
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+      responses:
+        "200":
+          description: Manifest of release digests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./releases.v2.json#/$defs/ReleaseManifestEntry"
+  /api/v2/releases/{date}:
+    get:
+      operationId: getReleases
+      summary: Fetch one period's release digest
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+      responses:
+        "200":
+          description: The release digest document
+          content:
+            application/json:
+              schema:
+                $ref: "./releases.v2.json"
+        "404":
+          description: No release digest for that date
+  /api/v2/subscriptions:
+    get:
+      operationId: listSubscriptions
+      summary: List the repo subscriptions the core will poll
+      description: |
+        Read-only. Returns an empty array when the subscription file is missing
+        or empty. Writing subscriptions stays on the CLI / IPC subscribe command.
+      responses:
+        "200":
+          description: Current subscription list
+          content:
+            application/json:
+              schema:
+                $ref: "./releases.v2.json#/$defs/SubscriptionList"
   /feed.xml:
     get:
       operationId: getFeed
