@@ -40,7 +40,9 @@ func runRun(args []string) error {
 		case errors.As(err, &ie):
 			out.Error = ie.ToContract()
 		case errors.As(err, &ge):
-			out.Error = ipc.NewError(ge.Code, "%s", ge.Message).ToContract()
+			e := ipc.NewError(ge.Code, "%s", ge.Message)
+			e.Details = ge.Details
+			out.Error = e.ToContract()
 		default:
 			out.Error = ipc.NewError(ipc.CodeInternal, "%s", err.Error()).ToContract()
 		}
@@ -48,6 +50,13 @@ func runRun(args []string) error {
 		fmt.Println(string(b))
 	}
 	return err
+}
+
+// runEnvelope carries the contract RunResult plus fields the contract does not
+// type yet (RunResult declares additionalProperties, so this stays compatible).
+type runEnvelope struct {
+	ipc.RunResult
+	SkipReason string `json:"skipReason,omitempty"`
 }
 
 func runRunExec(args []string, started time.Time, asJSON *bool) error {
@@ -58,10 +67,16 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	dryRun := fs.Bool("dry-run", false, "do not write files or touch git")
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON")
 	outDir := fs.String("out", "", "output directory (overrides config.output.dir)")
+	defaultTrigger := firstNonEmpty(os.Getenv("TRENDRADAR_TRIGGER"), string(app.TriggerManual))
+	trigger := fs.String("trigger", defaultTrigger, "manual|schedule; schedule respects a human-closed PR")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	*asJSON = *jsonFlag
+	tr := app.Trigger(*trigger)
+	if tr != app.TriggerManual && tr != app.TriggerSchedule {
+		return ipc.NewError(ipc.CodeConfigInvalid, "invalid --trigger %q (want manual|schedule)", *trigger)
+	}
 
 	var cfg *config.Config
 	if *cfgPath != "" {
@@ -113,6 +128,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		DryRun:   *dryRun,
 		Token:    firstNonEmpty(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
 		Provider: provider,
+		Trigger:  tr,
 	})
 	if err != nil {
 		return err
@@ -122,17 +138,20 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	}
 
 	if *asJSON {
-		out := ipc.RunResult{
-			IPCSchema:  ipc.SchemaVersion,
-			OK:         true,
-			Command:    string(ipc.CommandRun),
-			StartedAt:  started.UTC(),
-			FinishedAt: time.Now().UTC(),
-			Skipped:    result.Skipped,
-			Branch:     strPtr(result.Branch),
-			Commit:     strPtr(result.Commit),
-			PRUrl:      strPtr(result.PRURL),
-			Warnings:   result.Report.Warnings,
+		out := runEnvelope{
+			RunResult: ipc.RunResult{
+				IPCSchema:  ipc.SchemaVersion,
+				OK:         true,
+				Command:    string(ipc.CommandRun),
+				StartedAt:  started.UTC(),
+				FinishedAt: time.Now().UTC(),
+				Skipped:    result.Skipped,
+				Branch:     strPtr(result.Branch),
+				Commit:     strPtr(result.Commit),
+				PRUrl:      strPtr(result.PRURL),
+				Warnings:   result.Report.Warnings,
+			},
+			SkipReason: result.SkipReason,
 		}
 		if result.Digest.ContentHash != "" {
 			ch := result.Digest.ContentHash
@@ -148,7 +167,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	}
 
 	if result.Skipped {
-		fmt.Printf("skipped: contentHash unchanged (%s), no commit\n", result.Digest.ContentHash)
+		fmt.Printf("skipped (%s): %s\n", result.SkipReason, result.Digest.ContentHash)
 		return nil
 	}
 	fmt.Printf("digest %s (%s): %d repos, %d files, contentHash=%s\n",
