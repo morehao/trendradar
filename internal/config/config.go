@@ -24,12 +24,25 @@ type Config struct {
 	Summarize SummarizeConfig `yaml:"summarize"`
 }
 
-// SummarizeConfig controls summary generation. External-context options (enrich
-// mode, README, rate limits) are intentionally absent until that phase is built;
-// exposing knobs that do nothing would mislead operators.
+// SummarizeConfig controls summary generation and the optional external-context
+// (enrich) stage. Enrich defaults to "none" so a run never touches GitHub extra
+// endpoints unless an operator opts in.
 type SummarizeConfig struct {
 	BatchSize  int `yaml:"batchSize" validate:"omitempty,gt=0"`
 	MaxRetries int `yaml:"maxRetries" validate:"omitempty,gte=0"`
+
+	// Enrich selects external context: none (default) | repo | readme.
+	Enrich string `yaml:"enrich" validate:"omitempty,oneof=none repo readme"`
+	// ReadmeChars is the README excerpt length in runes (default 800).
+	ReadmeChars int `yaml:"readmeChars" validate:"omitempty,gt=0"`
+	// EnrichCacheTTLHours is how long fetched topics/README stays cached.
+	EnrichCacheTTLHours int `yaml:"enrichCacheTTLHours" validate:"omitempty,gt=0"`
+	// EnrichConcurrency caps concurrent per-repo fetches.
+	EnrichConcurrency int `yaml:"enrichConcurrency" validate:"omitempty,gt=0"`
+	// EnrichTimeoutSeconds is the per-request HTTP timeout.
+	EnrichTimeoutSeconds int `yaml:"enrichTimeoutSeconds" validate:"omitempty,gt=0"`
+	// EnrichBudgetSeconds is the whole-run enrich budget (readme defaults higher).
+	EnrichBudgetSeconds int `yaml:"enrichBudgetSeconds" validate:"omitempty,gt=0"`
 }
 
 // ModelConfig maps onto golib/gllm's provider/model concept.
@@ -150,5 +163,27 @@ func (c *Config) withDefaults() {
 	}
 	if c.Summarize.MaxRetries == 0 {
 		c.Summarize.MaxRetries = 1
+	}
+	if c.Summarize.Enrich == "" {
+		c.Summarize.Enrich = "none"
+	}
+	if c.Summarize.ReadmeChars == 0 {
+		c.Summarize.ReadmeChars = 800
+	}
+	if c.Summarize.EnrichCacheTTLHours == 0 {
+		c.Summarize.EnrichCacheTTLHours = 168
+	}
+	if c.Summarize.EnrichConcurrency == 0 {
+		c.Summarize.EnrichConcurrency = 4
+	}
+	if c.Summarize.EnrichTimeoutSeconds == 0 {
+		c.Summarize.EnrichTimeoutSeconds = 5
+	}
+	if c.Summarize.EnrichBudgetSeconds == 0 {
+		if c.Summarize.Enrich == "readme" {
+			c.Summarize.EnrichBudgetSeconds = 12
+		} else {
+			c.Summarize.EnrichBudgetSeconds = 8
+		}
 	}
 }

@@ -15,6 +15,7 @@ import (
 	contract "github.com/morehao/trendradar/contract"
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/digest"
+	"github.com/morehao/trendradar/internal/enrich"
 	"github.com/morehao/trendradar/internal/gitx"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
@@ -44,9 +45,10 @@ const (
 // Options controls a run.
 type Options struct {
 	DryRun   bool
-	Token    string         // optional GitHub token for push/PR
-	Provider model.Provider // optional; defaults to the offline Fake
-	Trigger  Trigger        // optional; defaults to TriggerManual
+	Token    string           // optional GitHub token for push/PR
+	Provider model.Provider   // optional; defaults to the offline Fake
+	Trigger  Trigger          // optional; defaults to TriggerManual
+	Enricher *enrich.Enricher // optional; nil means no external context
 }
 
 // Result is the outcome of a run.
@@ -85,8 +87,12 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if summaryCache == nil {
 		summaryCache = summarize.NewCache()
 	}
+	enrichMode := enrich.ModeNone
+	if opts.Enricher != nil {
+		enrichMode = opts.Enricher.Mode()
+	}
 	if cfg != nil {
-		summaryCache.SetNamespace(summarize.NamespaceForMode(cfg.Model.Provider, cfg.Model.Name, "none"))
+		summaryCache.SetNamespace(summarize.NamespaceForMode(cfg.Model.Provider, cfg.Model.Name, string(enrichMode)))
 	}
 	batchSize, maxRetries := 10, 1
 	if cfg != nil {
@@ -102,7 +108,41 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		summarize.WithBatchSize(batchSize),
 		summarize.WithMaxRetries(maxRetries),
 	)
-	repoDigests := summarizer.SummarizeWithContext(ctx, in.Repos, nil)
+
+	// Optional external context. Only repos whose summary is not cached are
+	// enriched, so a warm run spends no extra GitHub requests. All failures are
+	// best-effort: they surface as warnings and never fail the run.
+	var byRepo map[string]summarize.Context
+	if opts.Enricher != nil && enrichMode != enrich.ModeNone {
+		enrichStart := time.Now()
+		pending := summarizer.Pending(in.Repos)
+		ctxs, er := opts.Enricher.Enrich(ctx, pending)
+		if len(ctxs) > 0 {
+			byRepo = make(map[string]summarize.Context, len(ctxs))
+			for name, c := range ctxs {
+				byRepo[name] = summarize.Context{Topics: c.Topics, ReadmeExcerpt: c.ReadmeExcerpt}
+			}
+		}
+		if err := opts.Enricher.SaveCache(); err != nil {
+			rep.Warnings = append(rep.Warnings, "enrich-cache: "+err.Error())
+		}
+		rep.Enrich = &EnrichReport{
+			Mode:        er.Mode,
+			Requested:   er.Requested,
+			Hit:         er.Hit,
+			Fetched:     er.Fetched,
+			Failed:      er.Failed,
+			RateLimited: er.RateLimited,
+			Skipped:     er.Skipped,
+		}
+		rep.Stages = append(rep.Stages, Stage{Name: "enrich", DurationMs: since(enrichStart)})
+		if er.Failed > 0 || er.RateLimited > 0 {
+			rep.Warnings = append(rep.Warnings, fmt.Sprintf(
+				"enrich requested=%d hit=%d fetched=%d failed=%d rateLimited=%d", er.Requested, er.Hit, er.Fetched, er.Failed, er.RateLimited))
+		}
+	}
+
+	repoDigests := summarizer.SummarizeWithContext(ctx, in.Repos, byRepo)
 	if cachePath != "" {
 		if err := summaryCache.Save(cachePath); err != nil {
 			rep.Warnings = append(rep.Warnings, "cache: "+err.Error())
@@ -131,6 +171,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		}
 	}
 	summaryDegraded := degradedCount > 0
+	rep.SummaryDegraded = summaryDegraded
 	rep.Stages = append(rep.Stages, Stage{Name: "summarize", DurationMs: since(sumStart), Degraded: summaryDegraded})
 	if summaryDegraded {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf(

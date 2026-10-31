@@ -13,6 +13,7 @@ import (
 
 	"github.com/morehao/trendradar/internal/app"
 	"github.com/morehao/trendradar/internal/config"
+	"github.com/morehao/trendradar/internal/enrich"
 	"github.com/morehao/trendradar/internal/fetch"
 	"github.com/morehao/trendradar/internal/gitx"
 	"github.com/morehao/trendradar/internal/ingest"
@@ -56,7 +57,9 @@ func runRun(args []string) error {
 // type yet (RunResult declares additionalProperties, so this stays compatible).
 type runEnvelope struct {
 	ipc.RunResult
-	SkipReason string `json:"skipReason,omitempty"`
+	SkipReason string            `json:"skipReason,omitempty"`
+	Stages     []app.Stage       `json:"stages,omitempty"`
+	Enrich     *app.EnrichReport `json:"enrich,omitempty"`
 }
 
 func runRunExec(args []string, started time.Time, asJSON *bool) error {
@@ -139,11 +142,16 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	if err != nil {
 		return err
 	}
+	enricher, err := buildEnricher(cfg, *dryRun)
+	if err != nil {
+		return err
+	}
 	result, err := app.Run(context.Background(), cfg, in, app.Options{
 		DryRun:   *dryRun,
 		Token:    firstNonEmpty(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
 		Provider: provider,
 		Trigger:  tr,
+		Enricher: enricher,
 	})
 	if err != nil {
 		return err
@@ -176,6 +184,9 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			Retries:          u.Retries,
 			Batches:          u.Batches,
 			CacheHits:        u.CacheHits,
+			DurationMs:       result.Report.TotalMs,
+			SummaryDegraded:  result.Report.SummaryDegraded,
+			Enrich:           result.Report.Enrich,
 		}
 		if err := app.AppendUsageLog(repoPath, rec); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: usage log: %v\n", err)
@@ -198,6 +209,8 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 				Usage:      result.Report.Usage,
 			},
 			SkipReason: result.SkipReason,
+			Stages:     result.Report.Stages,
+			Enrich:     result.Report.Enrich,
 		}
 		if result.Digest.ContentHash != "" {
 			ch := result.Digest.ContentHash
@@ -231,6 +244,10 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	for _, s := range result.Report.Stages {
 		fmt.Printf("  %-10s %dms\n", s.Name, s.DurationMs)
 	}
+	if e := result.Report.Enrich; e != nil {
+		fmt.Printf("  enrich     mode=%s requested=%d hit=%d fetched=%d failed=%d rateLimited=%d\n",
+			e.Mode, e.Requested, e.Hit, e.Fetched, e.Failed, e.RateLimited)
+	}
 	if u := result.Report.Usage; u != nil && u.UsageKnown {
 		fmt.Printf("  tokens: prompt=%d completion=%d total=%d (calls=%d retries=%d cacheHits=%d)\n",
 			u.PromptTokens, u.CompletionTokens, u.TotalTokens, u.Calls, u.Retries, u.CacheHits)
@@ -243,6 +260,42 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// buildEnricher constructs the external-context enricher from config. It returns
+// nil when enrichment is disabled, so app.Run performs no extra network I/O.
+func buildEnricher(cfg *config.Config, dryRun bool) (*enrich.Enricher, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+	mode, err := enrich.ParseMode(cfg.Summarize.Enrich)
+	if err != nil {
+		return nil, ipc.NewError(ipc.CodeConfigInvalid, "%s", err.Error())
+	}
+	if mode == enrich.ModeNone {
+		return nil, nil
+	}
+	cachePath := ""
+	if cfg.Repo.Path != "" {
+		cachePath = enrich.CachePath(cfg.Repo.Path)
+	}
+	cache, _ := enrich.LoadCache(cachePath)
+	if cache == nil {
+		cache = enrich.NewCache()
+	}
+	if ttl := time.Duration(cfg.Summarize.EnrichCacheTTLHours) * time.Hour; ttl > 0 {
+		cache.SetTTL(ttl)
+	}
+	return enrich.New(enrich.Options{
+		Mode:        mode,
+		ReadmeChars: cfg.Summarize.ReadmeChars,
+		Concurrency: cfg.Summarize.EnrichConcurrency,
+		Timeout:     time.Duration(cfg.Summarize.EnrichTimeoutSeconds) * time.Second,
+		Budget:      time.Duration(cfg.Summarize.EnrichBudgetSeconds) * time.Second,
+		Token:       firstNonEmpty(os.Getenv("GITHUB_READ_TOKEN"), os.Getenv("GITHUB_TOKEN")),
+		CachePath:   cachePath,
+		ReadOnly:    dryRun,
+	}, cache), nil
 }
 
 func selectProvider(cfg *config.Config) (model.Provider, error) {

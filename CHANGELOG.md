@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+Optional external-context enrichment (Track B) for more accurate summaries.
+
+### Added
+- `internal/enrich`: best-effort external context for pending repos. `repo` mode
+  adds GitHub topics; `readme` mode also adds an 800-rune README excerpt. Topics
+  come from the repository HTML and README from `raw.githubusercontent.com`, so
+  the REST 60/h limit is avoided. Results are cached for 7 days under
+  `<repo>/.git/trendradar-enrich-cache.json`; concurrency, per-request timeout and
+  a whole-run budget bound the work.
+- Per-repository failure isolation: 404 / timeout / 429 are recorded in an
+  `enrich` report and degrade to description-only summaries; a rate-limit signal
+  stops new requests. `--dry-run` only reads the enrich cache and never hits the
+  network.
+- Prompt now emits a dedicated `TOPICS=` line and `README_EXCERPT=` line alongside
+  the untouched `REPO=/DESC=` first line. README/topics are treated as untrusted
+  reference data (cleaned and truncated) and never executed.
+- Summary cache namespace includes the enrich mode, so A/B modes and the
+  no-context baseline never reuse each other's prose.
+- Config: `summarize.enrich` (`none|repo|readme`, default `none`),
+  `readmeChars`, `enrichCacheTTLHours`, `enrichConcurrency`,
+  `enrichTimeoutSeconds`, `enrichBudgetSeconds`.
+- Observability: `run --json` gains optional `stages` and `enrich` fields;
+  `trendradar-usage.jsonl` records `durationMs`, `summaryDegraded` and the enrich
+  counters. Digests stay `schema:2`; `RepoSnapshot`/`Digest` are unchanged.
+- Eval harness: `TRENDRADAR_EVAL_ENRICH=none|repo|readme` re-runs the 25-repo A/B.
+
 ## 0.4.1
 
 Improve summary accuracy and record per-run token usage; support local `.env`
