@@ -67,7 +67,8 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	dryRun := fs.Bool("dry-run", false, "do not write files or touch git")
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON")
 	outDir := fs.String("out", "", "output directory (overrides config.output.dir)")
-	trigger := fs.String("trigger", "manual", "manual|schedule; schedule respects a human-closed PR")
+	defaultTrigger := firstNonEmpty(os.Getenv("TRENDRADAR_TRIGGER"), string(app.TriggerManual))
+	trigger := fs.String("trigger", defaultTrigger, "manual|schedule; schedule respects a human-closed PR")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
