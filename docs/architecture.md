@@ -12,7 +12,7 @@
 |---|---|---|
 | [仓库发版订阅（releases 阶段）](specs/2026-10-31-repo-release-watch-design.md) | 已实施（v0.5.0） | 新增 `releasewatch` 阶段与 `releases/` 产物（§2、§4） |
 | [订阅能力纳入契约（contract v0.3.0）](specs/2026-10-31-contract-releases-v3-design.md) | 已实施 | `releases.v2.json` 与 serve 发版接口（§6） |
-| [订阅数据版本化（方案 A）](specs/2026-10-31-subscription-repo-versioned-design.md) | 已批准，未实施 | 订阅从本机文件迁至数据仓（§5、§7、§9） |
+| [订阅数据版本化（方案 A）](specs/2026-10-31-subscription-repo-versioned-design.md) | 已实施 | 订阅从本机文件迁至数据仓 `<output.dir>/subscriptions.yaml`（§5、§7、§9） |
 
 ---
 
@@ -189,7 +189,7 @@ daily=90 / weekly=12 / monthly=12。配置文件里的 `output.retentionDays` �
 | 落盘与提交 | 写数据仓 + PR，人工合并 | 直接推 main → 破坏受保护分支；只写本地 → 无沉淀 |
 | 发版增量 | 本地游标（id/publishedAt/seenTags） | 全量重扫 → 重复摘要、成本高 |
 | 外部形状 | 独立 contract 包，双端生成 | 各写一份 → 漂移（已发生过） |
-| 订阅存储 | 数据仓内文件（[方案 A](specs/2026-10-31-subscription-repo-versioned-design.md)，已批准未实施） | 本机文件 → 换机失忆、不可审计 |
+| 订阅存储 | 数据仓内文件 `<output.dir>/subscriptions.yaml`（[方案 A](specs/2026-10-31-subscription-repo-versioned-design.md)，已实施） | 本机文件 → 换机失忆、不可审计 |
 
 每个决策的详细权衡见上表列出的专题方案。
 
@@ -214,7 +214,7 @@ daily=90 / weekly=12 / monthly=12。配置文件里的 `output.retentionDays` �
 - **粒度**：到 Release/Tag，不做 commit 级 diff。
 - **时效**：定时轮询，延迟 ≤ 1 个调度周期；无 webhook。
 - **serve**：只读、无鉴权，仅适合本机/内网。
-- **订阅存储**：当前为本机文件；[订阅数据版本化方案](specs/2026-10-31-subscription-repo-versioned-design.md) 已评审通过、尚未实施。
+- **订阅存储**：已是数据仓内受版本控制的 `<output.dir>/subscriptions.yaml`（[方案 A](specs/2026-10-31-subscription-repo-versioned-design.md) 已实施）；`subscribe` 写 `.git/` pending，`run` 切分支后落盘并随产物提交。
 - **契约历史债**：`stages` / `enrich` 两个字段仍在 `additionalProperties` 兜底下，未进 schema。
 - **未生效的配置项**：`output.retentionDays` 仅解析不生效，索引条数实际由代码内常量决定（daily 90 / weekly 12 / monthly 12）。
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -47,13 +48,19 @@ func emitSubscribeResult(req ipc.RunRequest, started time.Time, err error) {
 }
 
 // classifySubscribeError maps a subscribe failure to a stable IPC code. Bad
-// input (missing action/repo/configPath, invalid owner/repo) is a caller error,
-// not an internal one.
+// input (missing action/repo/configPath, invalid owner/repo, explicit --file on
+// add/remove, removing a repo that is not subscribed) is a caller error, not an
+// internal one. A typed *ipc.ErrorInfo already carries its code and wins.
 func classifySubscribeError(err error) ipc.Code {
+	var ie *ipc.ErrorInfo
+	if errors.As(err, &ie) {
+		return ie.Code
+	}
 	msg := err.Error()
 	for _, s := range []string{
 		"requires action", "requires repo", "requires configPath",
 		"invalid repo", "unknown subscribe action", "repo not subscribed",
+		"does not accept --file", "is not subscribed",
 	} {
 		if strings.Contains(msg, s) {
 			return ipc.CodeConfigInvalid

@@ -17,9 +17,9 @@ trendradar run --config config.yaml            # 抓取→解析→摘要→渲�
 trendradar run --config config.yaml --dry-run  # 只产出文件，不写盘、不提交
 trendradar run --config config.yaml --period weekly --date 2026-11-01  # 指定周期
 trendradar serve --addr 127.0.0.1:8787         # 以 HTTP 提供 digest
-trendradar subscribe add owner/repo            # 订阅仓库（可多个）
-trendradar subscribe list                      # 查看订阅
-trendradar subscribe remove owner/repo         # 取消订阅
+trendradar subscribe add owner/repo            # 订阅仓库（可多个），需 --config
+trendradar subscribe list                      # 查看订阅，需 --config
+trendradar subscribe remove owner/repo         # 取消订阅，需 --config
 ```
 
 ## 输出布局
@@ -78,14 +78,21 @@ summarize:
 
 把一批自有仓库加入订阅后，`run` 会每日检查它们的新 Release（没有 Release 时回退 Tag），
 生成中文变更摘要，写入数据仓 `<output.dir>/releases/` 并与 trending 走同一次提交/PR。
-订阅列表单独存在 `subscriptions.yaml`（示例见 [`subscriptions.example.yaml`](subscriptions.example.yaml)），
-由 CLI 维护，不写进 config.yaml。
+
+订阅列表是一份**数据仓内受版本控制的文件** `<output.dir>/subscriptions.yaml`
+（默认 `digests/subscriptions.yaml`，示例见 [`subscriptions.example.yaml`](subscriptions.example.yaml)），
+由 CLI 维护（`--config` 必填，`subscribe` 与 `run` 因此解析到同一个文件），不写进 config.yaml。
 
 ```bash
-trendradar subscribe add morehao/trendradar morehao/golib
-trendradar subscribe list
-trendradar subscribe remove morehao/golib
+trendradar subscribe add morehao/trendradar morehao/golib --config config.yaml
+trendradar subscribe list --config config.yaml
+trendradar subscribe remove morehao/golib --config config.yaml
 ```
+
+订阅的写入不碰工作区：`add`/`remove` 只把「意图」写进 `<repo>/.git/trendradar-subscriptions.pending`
+（该位置不参与 `git status`，所以 `run` 的 `IsClean` 不会被判脏）。下一次 `run` 在切到当日分支后
+把 pending 合并进 `<output.dir>/subscriptions.yaml`，**随产物走同一次 commit/PR**；只有 `commit` 与
+`push` 都成功后才会清空 pending（push 失败则下次 `run` 重放，宁可重复一次 commit 也不丢订阅）。
 
 ```yaml
 releases:
@@ -102,6 +109,9 @@ releases:
 - 默认 `enabled: false`，对现有 trending 零影响；`enabled: true` 时才加载订阅。
 - 空订阅/文件缺失时 `run` 跳过该阶段并 warning，不报错；订阅文件 YAML 损坏才 fail-fast。
 - 订阅数量不限（配置上限 500）；releases 阶段耗时约 `4s × 订阅数 + 5s`，建议配置 `GITHUB_READ_TOKEN`。
+- 迁移：目标分支还没有 `subscriptions.yaml` 时，首次 `run` 会用 pending / 旧本机文件导入；
+  两边都有且不同则取并集并 warning（不覆盖）。
+- `--file` 仅用于只读排查：`list --file x` 读该文件，`add`/`remove --file` 返回 `CONFIG_INVALID`。
 - 发版摘要的 token 消耗在 `run --json` 的 `releases.usage` 里（恒存在）：
   `calls=0` 表示没发生模型调用（如全部命中缓存），`calls>0 && usageKnown=false`
   表示调用了但供应商没回用量——两者不要混为一谈。

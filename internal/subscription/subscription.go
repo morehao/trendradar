@@ -43,8 +43,12 @@ type Store struct {
 	seen  map[string]struct{}
 }
 
-// ResolveSubscriptionsPath is the single resolution rule shared by `run` and
-// `subscribe`:
+// ResolveSubscriptionsPath resolves a *filesystem* subscription file. Since the
+// subscription list became a versioned file inside the data repo (see
+// docs/specs/2026-10-31-subscription-repo-versioned-design.md), this function
+// no longer carries the repo semantics used by run/serve/subscribe — those use
+// RepoSubscriptionsPath (repo.go). It is retained only for the `--file` read-only
+// escape hatch and legacy local-file compatibility:
 //
 //	configured non-empty -> configured
 //	otherwise           -> ./subscriptions.yaml

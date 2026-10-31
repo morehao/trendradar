@@ -115,7 +115,8 @@ contract/              独立 Go module + npm 包：所有对外数据形状的�
 | 发版游标 | `<repo>/.git/trendradar-release-state.json` | 否 |
 | 发版摘要缓存 | `<repo>/.git/trendradar-release-cache.json` | 否 |
 | 用量日志 | `<repo>/.git/trendradar-usage.jsonl` | 否 |
-| 订阅列表 | `subscriptions.yaml`（相对 config 目录） | **否**（`.gitignore`）；向数据仓版本化演进中，见 §10 |
+| 订阅列表 | `<repo>/<output.dir>/subscriptions.yaml` | **是**（随产物同一次 commit/PR，见 §10） |
+| 订阅暂存 | `<repo>/.git/trendradar-subscriptions.pending` | 否（push 成功后清空） |
 | 密钥 | `.env` / 环境变量 | 否 |
 
 - **密钥永不落 config.yaml**：用 `${VAR}` 展开。
@@ -165,14 +166,21 @@ contract/              独立 Go module + npm 包：所有对外数据形状的�
 - 非 GitHub 平台（GitLab/Gitee）、私有仓库鉴权。
 - commit 级 / PR 级 diff 订阅；webhook 秒级时效。
 - `stages` / `enrich` 两个历史字段仍在契约外（`additionalProperties` 兜底），未排期。
-- 订阅列表为单机文件，不跨机同步；团队共享方案待定（见下）。
+- 订阅列表随数据仓版本化，但仍是「一份数据仓 = 一份订阅」；跨机靠数据仓同步（先 `run` 落地）。
 - serve 只读、无鉴权；暴露到公网前必须补。
 
-## 10. 待定决策
+## 10. 订阅数据的维护方式（已实施：方案 A）
 
-- **订阅数据的维护方式**：当前仍是本地 `subscriptions.yaml` + `.example` 模板。已有外部
-  消费者（插件、serve、Web）后，示例文件 + gitignore 的模式在多机/团队场景下失效
-  （换机器订阅就空、数据仓共享但订阅不共享）。方案已定并评审通过、**尚未实施**：
+- **订阅列表已成为数据仓内受版本控制的文件** `<output.dir>/subscriptions.yaml`
+  （默认 `digests/subscriptions.yaml`）。方案已评审通过并**已实施**：
   [订阅数据版本化（方案 A）](docs/specs/2026-10-31-subscription-repo-versioned-design.md)。
-  实施要点：`subscribe` 只写 `.git/` 下的 pending，`run` 切分支后落盘并随产物提交
-  （直接写工作区会被 `IsClean` 拒绝）。**动订阅存储前先读该方案，不要默认沿用 example + gitignore。**
+- 机制：`subscribe add/remove` 只写 `<repo>/.git/trendradar-subscriptions.pending`（不碰工作区，
+  绕开 run 的 `IsClean`）；`run` 在切到当日分支后把 pending 合并进 `subscriptions.yaml`，
+  与产物同一次 commit/PR 提交，`commit`+`push` 都成功后才清空 pending（失败则下次重放）。
+- 提交判定：`!artifactsUnchanged || subsDirty`，再由 `HasStagedChanges` 决定是否 commit——
+  「只有订阅变化」也会产生一次 commit（不能用 `filesMatch` 单独决定）。
+- 单一来源：`run` / `serve` / IPC `subscribe list` 都经
+  `subscription.RepoSubscriptionsPath(repo.Path, output.dir, file)` 解析同一文件（内部按
+  `render.OutputRoot` 归一，禁逃出 outDir）；分支名统一用 `subscription.RunBranchName`。
+- `--file` 已退化为只读排查入口：`add`/`remove --file` 返回 `CONFIG_INVALID`。
+- **动订阅存储前先读该方案，不要默认沿用 example + gitignore。**

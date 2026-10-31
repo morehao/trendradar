@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/morehao/trendradar/internal/config"
+	"github.com/morehao/trendradar/internal/render"
 	"github.com/morehao/trendradar/internal/serve"
 	"github.com/morehao/trendradar/internal/subscription"
 )
@@ -27,14 +28,19 @@ func runServe(args []string) error {
 	relSubdir, subsPath := "", ""
 	if *cfgPath != "" {
 		if cfg, err := config.Load(*cfgPath); err == nil {
-			if cfg.Output.Dir != "" {
-				*root = cfg.Output.Dir
-			}
+			// The digests root must be normalised through render.OutputRoot — the
+			// same single source of truth run uses — so serve's /api/v2/releases*
+			// and subscription routes point at the same directory as the artifacts
+			// run writes (cfg.Output.Dir may be "" meaning "digests").
+			rootVal := render.OutputRoot(cfg.Output.Dir)
+			*root = rootVal
 			// Expose the subscription surface only when configured; otherwise the
 			// releases routes still answer with empty lists.
 			if cfg.Releases.Enabled {
 				relSubdir = cfg.Releases.OutputDir
-				if p, err := subscription.ResolveSubscriptionsPath(*cfgPath, cfg.Releases.SubscriptionsFile); err == nil {
+				// Read the SAME versioned file run writes: repo + output.dir, not the
+				// config directory (the old resolver made serve and run disagree).
+				if p, err := subscription.RepoSubscriptionsPath(cfg.Repo.Path, cfg.Output.Dir, cfg.Releases.SubscriptionsFile); err == nil {
 					subsPath = p
 				}
 			}
