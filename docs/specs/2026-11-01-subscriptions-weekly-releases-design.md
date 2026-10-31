@@ -371,3 +371,27 @@ HTTP 面仍只读、`no-store`、不返回密钥；`serve` 默认绑 `127.0.0.1`
 - 没有新增 `POST /run/releases` 手动触发路由：本期的手动入口是 `runner.runReleases`（工具/内部调用），HTTP 面保持只读（D10）。
 - 发版运行记录挂在 `/state` 的 `status.releaseRuns`（≤30 条）；订阅页 meta 行的「上次发版检查」读同一个字段。
 
+
+## 验收对照（A1–A14）
+
+「机械覆盖」= 有自动化用例，改动后可直接重跑；「走查」= 需要真机面板/真实 GitHub 才能判。
+本期完成的是实现，发版（tag / npm 发布 / 插件发布）不在范围内。
+
+| 编号 | 状态 | 验证位置 / 说明 |
+|---|---|---|
+| A1 列表信息完整 | 机械覆盖（数据面）+ 走查 | `internal/serve/subscriptions_test.go` 断言 40 仓 fixture 的五个字段；`client/subscriptions.ts` 渲染四列 + 变更入口 |
+| A2 首屏体积 | 机械覆盖 | 契约 `test/contract.test.mjs`：`subscriptions-40.json` ≤ 10 KB（实测约 8 KB） |
+| A3 抽屉 P95 ≤ 300 ms | 走查 | 面板打开抽屉 → `GET /subscriptions/releases` → 单文件读取；未做真机计时，口径见实现要点 |
+| A4 周幂等 | 机械覆盖 | `TestPlanIsIdempotentForSameWeek`、`TestBuildWeeklyGateSkipsSecondRun`、`TestReleaseOnlyRunIsIdempotentWithinWeek` |
+| A5 无变化不写 | 机械覆盖 | 周闸门 + `changed=0` → 无文档文件（`TestReleaseOnlyRunIsIdempotentWithinWeek` 断言无新 commit） |
+| A6 卷切分边界 | 机械覆盖 | `TestPlanRollsVolumeOnlyAfterExceedingBudget`（599 行 → 不拆；下一次 → `.02.md`） |
+| A7 单一来源 | 机械覆盖 | `subscribe releases` 与 HTTP 都走 `releasedoc.Read`；`TestSubscriptionDocMatchesReadPath` 逐字段相等 |
+| A8 异常可见 | 机械覆盖（状态）+ 走查 | `TestBuildFailureIsolated` / `TestBuildRateLimitStopsRemainingRepos` 产出 `failed` / `rate_limited`；抽屉 warn 条由 `client/subscriptions.ts` 渲染 |
+| A9 外部 API 不破 | 机械覆盖 | `TestLegacyReleaseDigestStillServed`（schema 1 旧文档仍按原字段返回） |
+| A10 IPC/HTTP 同源同形 | 机械覆盖 | `TestSubscriptionDocMatchesReadPath`、`TestSubscriptionsEndpointCarriesItems`（同一 fixture 下与 IPC 读取函数逐字段一致） |
+| A11 发版定时 | 机械覆盖 | `test/schedule.test.mjs`：`isoWeekKey` / `nextReleaseOccurrence` / `isReleaseDue`（6 h 窗口）/ 每周只触发一次 / 超窗不触发 / 失败重试上限 |
+| A12 发版运行记录 | 机械覆盖 | `test/runner.test.mjs` 的 `runReleases` 用例 + `test/state.test.mjs`（≤30 条裁剪） |
+| A13 并发自适应 | 机械覆盖 | 核心 `internal/config/auto_test.go`（40→4/150、100→8/300）；插件 `test/config.test.mjs` 断言 `toCoreConfig` 解析出的数字 |
+| A14 不碰订阅文件 | 机械覆盖 | `TestReleaseOnlyRunLeavesSubscriptionsAlone`（前后 sha256 相同、pending 未被清空） |
+
+未覆盖（本期明确不做）：批量添加、跨仓聚合、升级前历史回填、HTTP 鉴权/限流。
