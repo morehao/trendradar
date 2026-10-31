@@ -49,3 +49,22 @@ summarize:
 # 开启 enrich=repo/readme 时，建议在 .env 配一个独立只读 token：
 #   GITHUB_READ_TOKEN=ghp_xxx
 # 未配则按未认证访问；readme 模式在慢网络下可能因预算耗尽而跳过部分仓库（自动降级，不影响 run）。
+
+# 仓库发版订阅（可选）。订阅列表由 `trendradar subscribe` 维护在独立文件里，
+# 不写在本文件；这里只放全局行为参数。enabled=false 时 releases 阶段完全旁路。
+releases:
+  enabled: false
+  subscriptionsFile: subscriptions.yaml   # 相对 config 文件目录；也可 --file 覆盖
+  includePrerelease: false
+  includeDrafts: false
+  fallbackToTags: true                   # 无 Release 时回退 Tag
+  baselineOnFirstRun: true               # 首次只记基线，不补发历史
+  backfillLatest: 0                      # 首次补发最近 N 个（0=不补）
+  perRepoLimit: 5                        # 单仓库单次最多处理，其余下次继续
+  maxNotesChars: 4000                    # notes 截断
+  concurrency: 3
+  timeoutSeconds: 20
+  budgetSeconds: 60
+  maxPages: 10                           # 单仓库翻页上限（兜底 300 条历史）
+  outputDir: releases                    # 产物在 <output.dir>/releases/
+  period: daily

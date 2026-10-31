@@ -17,6 +17,9 @@ trendradar run --config config.yaml            # 抓取→解析→摘要→渲�
 trendradar run --config config.yaml --dry-run  # 只产出文件，不写盘、不提交
 trendradar run --config config.yaml --period weekly --date 2026-11-01  # 指定周期
 trendradar serve --addr 127.0.0.1:8787         # 以 HTTP 提供 digest
+trendradar subscribe add owner/repo            # 订阅仓库（可多个）
+trendradar subscribe list                      # 查看订阅
+trendradar subscribe remove owner/repo         # 取消订阅
 ```
 
 ## 输出布局
@@ -71,6 +74,38 @@ summarize:
 - 回退判据：`enrich.failed/requested > 5%`、`usage.totalTokens` 超过基线约 4 倍、或
   `summaryDegraded` 明显上升时，把 `enrich` 调回 `none`/`repo`。
 
+## 仓库发版订阅（可选）
+
+把一批自有仓库加入订阅后，`run` 会每日检查它们的新 Release（没有 Release 时回退 Tag），
+生成中文变更摘要，写入数据仓 `<output.dir>/releases/` 并与 trending 走同一次提交/PR。
+订阅列表单独存在 `subscriptions.yaml`（示例见 [`subscriptions.example.yaml`](subscriptions.example.yaml)），
+由 CLI 维护，不写进 config.yaml。
+
+```bash
+trendradar subscribe add morehao/trendradar morehao/golib
+trendradar subscribe list
+trendradar subscribe remove morehao/golib
+```
+
+```yaml
+releases:
+  enabled: true
+  subscriptionsFile: subscriptions.yaml
+  period: daily            # daily | weekly | monthly
+  fallbackToTags: true
+  baselineOnFirstRun: true # 首次只记基线，不补发历史
+  perRepoLimit: 5
+```
+
+要点：
+
+- 默认 `enabled: false`，对现有 trending 零影响；`enabled: true` 时才加载订阅。
+- 空订阅/文件缺失时 `run` 跳过该阶段并 warning，不报错；订阅文件 YAML 损坏才 fail-fast。
+- 订阅数量不限（配置上限 500）；releases 阶段耗时约 `4s × 订阅数 + 5s`，建议配置 `GITHUB_READ_TOKEN`。
+- 仓库没有 Release 时回退 Tag，并用该 tag 的 commit message 作为摘要依据。
+- 状态与摘要缓存放在 `<repo>/.git/trendradar-release-*.json`，天然不入库。
+- `run --json` 会带 `releases` 报告块；`trendradar-usage.jsonl` 额外记录一行 `stage="releases"`。
+
 ## 本地密钥与测试
 
 不要把 API key 写进 config.yaml。复制 `.env.example` 为 `.env`（已被
@@ -103,5 +138,7 @@ BASE_URL/API_KEY`，然后 `make test-eval`。加 `TRENDRADAR_EVAL_ENRICH=repo|r
 - `cmd/trendradar` — CLI 入口与子命令
 - `internal/ipc` — 与插件共享的 IPC 信封、错误码、版本信息
 - `internal/config` — config.yaml 加载与校验
+- `internal/subscription` — 订阅列表读写与校验
+- `internal/releasewatch` / `internal/releasedigest` — 发版订阅抓取、摘要与文档
 - `contract/` — 四份 schema 与 fixtures（Go 与插件共用，唯一真源）
 - `.dsh/docs/` — 过程性文档（不入库）

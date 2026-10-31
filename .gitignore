@@ -12,3 +12,6 @@
 .env
 .env.local
 .env.*.local
+
+# 本地订阅列表（用户数据，不入库）；示例见 subscriptions.example.yaml
+subscriptions.yaml
