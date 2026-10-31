@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Changed — 订阅数据版本化（方案 A）
+- 订阅列表从本机 `subscriptions.yaml`（`.gitignore`）迁到数据仓内受版本控制的
+  `<output.dir>/subscriptions.yaml`（默认 `digests/subscriptions.yaml`），随产物同一次
+  commit/PR 提交。`run` / `serve` / IPC `subscribe list` 三处经
+  `subscription.RepoSubscriptionsPath` 读取同一文件，`serve` 的 digests root 与订阅路径
+  统一用 `render.OutputRoot` 归一（此前 serve 按 config 目录解析，与 run 不同源）。
+- `subscribe add/remove` 只写 `<repo>/.git/trendradar-subscriptions.pending`（不碰工作区，
+  绕开 `run` 的 `IsClean`）；`run` 切到当日分支后把 pending 合并进订阅文件，`commit`+`push`
+  都成功后才 `ClearPending`（push 失败下次 run 重放，宁可重复一次 commit 不丢订阅）。
+- 提交判定独立于产物：`!artifactsUnchanged || subsDirty`，再由 `HasStagedChanges` 决定是否
+  commit——修掉「产物不变但订阅变了却被 `filesMatch` 跳过」的丢提交问题。
+- `subscribe --file` 退化为只读排查入口：`list --file` 可读，`add`/`remove --file` 返回
+  `CONFIG_INVALID`。`subscribe add/remove/list` 现要求 `--config`（保证与 `run` 同源）。
+- 迁移：目标分支无订阅文件时用 pending / 旧本机文件合并导入；两边都有且不同则取并集并 warning。
+- `.gitignore` 的 `subscriptions.yaml` 收窄为 `/subscriptions.yaml`（仅根目录），
+  数据仓内 `<output.dir>/subscriptions.yaml` 必须入库；`subscriptions.example.yaml` 改为空模板。
+- 契约不变（订阅仍是 `string[]`）。
+
 ### Added — 发版订阅纳入契约（contract 0.3.0）
 - `contract/schema/releases.v2.json`：`ReleaseDigest` / `RepoReleases` /
   `ReleaseItem` 成为契约类型；`internal/releasedigest` 改为契约别名，形状全仓只定义一次。

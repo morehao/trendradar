@@ -23,6 +23,7 @@ import (
 	"github.com/morehao/trendradar/internal/releasedigest"
 	"github.com/morehao/trendradar/internal/releasewatch"
 	"github.com/morehao/trendradar/internal/render"
+	"github.com/morehao/trendradar/internal/subscription"
 	"github.com/morehao/trendradar/internal/summarize"
 )
 
@@ -62,6 +63,17 @@ type ReleasesOptions struct {
 	Fetcher   releasewatch.Fetcher
 	StatePath string
 	CachePath string
+
+	// Repo-versioned subscriptions (design 2026-10-31). When SubscriptionsPath is
+	// non-empty, run lands the merged list on the checked-out date branch and
+	// clears the pending queue only after a successful push. Repos above is the
+	// poll list (branch ∪ pending), computed by cmd; it must equal what run would
+	// derive here.
+	SubscriptionsPath string
+	// PendingRepos is the .git pending queue. HasPending distinguishes "no queue"
+	// from "an empty queue that removes everything".
+	PendingRepos []string
+	HasPending   bool
 }
 
 // Result is the outcome of a run.
@@ -395,12 +407,39 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	}
 	res.Branch = branch
 
+	// Compute the repo-versioned subscription state on the branch we just
+	// checked out. The subscription change never touched the working tree before
+	// this point (subscribe writes .git/pending), so IsClean above saw a clean
+	// tree. Now we replay pending onto the date branch and let it ride the same
+	// commit as the artifacts.
+	subsEnabled := opts.Releases != nil && opts.Releases.SubscriptionsPath != ""
+	var subsDirty bool
+	if subsEnabled {
+		// The checked-out branch == target branch here, so reading the working
+		// file equals reading the branch version. Re-merge with pending so run is
+		// the single place that lands the intent.
+		baseSubs, err := subscription.Load(opts.Releases.SubscriptionsPath)
+		if err != nil {
+			return res, err
+		}
+		merged, _ := subscription.MergeUnique(baseSubs.List(), opts.Releases.PendingRepos)
+		if opts.Releases.HasPending && !equalStrings(merged, baseSubs.List()) {
+			if err := subscription.SaveList(opts.Releases.SubscriptionsPath, merged); err != nil {
+				return res, err
+			}
+			subsDirty = true
+		}
+	}
+
 	// The repo is the truth: if the branch already holds the same artifacts
 	// (generatedAt aside), there is nothing to publish. This replaces the old
 	// contentHash-vs-local-state skip, which drifted whenever the model reworded
 	// a summary or the state file lived on another machine.
-	unchanged := filesMatch(files, cfg.Repo.Path)
-	if !unchanged {
+	artifactsUnchanged := filesMatch(files, cfg.Repo.Path)
+	// A change to the subscription file must trigger a write + stage on its own,
+	// even when the artifacts are byte-identical — otherwise "only the
+	// subscription changed" would be silently dropped (review blocker #2).
+	if !artifactsUnchanged || subsDirty {
 		for _, f := range files {
 			p := filepath.Join(cfg.Repo.Path, filepath.FromSlash(f.Path))
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -410,18 +449,18 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 				return res, err
 			}
 		}
+		// AddAll(outDir) covers both the rendered artifacts and the subscription
+		// file (it lives inside outDir), so a subscription-only change is staged.
 		if err := g.AddAll(ctx, outDir); err != nil {
 			return res, err
 		}
 	}
 
-	changed := false
-	if !unchanged {
-		changed, err = g.HasStagedChanges(ctx)
-		if err != nil {
-			return res, err
-		}
+	changed, err := g.HasStagedChanges(ctx)
+	if err != nil {
+		return res, err
 	}
+	pushed := false
 	if changed {
 		if err := g.Commit(ctx, commitMessage(cfg, period, name), cfg.Repo.AuthorName, cfg.Repo.AuthorEmail); err != nil {
 			return res, err
@@ -431,6 +470,21 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		}
 		if err := pushWithRetry(ctx, g, remote, branch, opts.Token); err != nil {
 			return res, pushFailure(err, branch, remote)
+		}
+		pushed = true
+	}
+
+	// Clear the pending queue only after commit + push both succeeded. If the
+	// push failed above we returned early, so pending is preserved and replayed
+	// by the next run — repeating a commit is acceptable, losing the subscription
+	// change is not. When there was nothing dirty to commit (merged already equals
+	// the branch, e.g. a duplicate add), the intent is already satisfied, so it is
+	// safe to clear too.
+	if subsEnabled && opts.Releases.HasPending {
+		if pushed || !subsDirty {
+			if err := subscription.ClearPending(cfg.Repo.Path); err != nil {
+				rep.Warnings = append(rep.Warnings, "subscriptions: clear pending: "+err.Error())
+			}
 		}
 	}
 	rep.Stages = append(rep.Stages, Stage{Name: "git", DurationMs: since(gitStart)})
@@ -618,3 +672,16 @@ func languagesOf(repos []digest.RepoSnapshot) []string {
 }
 
 func since(t time.Time) int64 { return time.Since(t).Milliseconds() }
+
+// equalStrings reports whether two string slices are element-wise equal.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

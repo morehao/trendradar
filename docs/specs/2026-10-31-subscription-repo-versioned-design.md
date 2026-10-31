@@ -1,6 +1,6 @@
 # 订阅数据版本化技术方案（方案 A：订阅随数据仓）
 
-> 状态：已批准 ｜ 实施：未开始 ｜ 作者：DSH Agent ｜ 评审人：morehao ｜ 拍板人：morehao ｜ 最后更新：2026-10-31
+> 状态：已实施 ｜ 实施：P1–P5 完成 ｜ 作者：DSH Agent ｜ 评审人：morehao ｜ 拍板人：morehao ｜ 最后更新：2026-10-31
 
 > 落点：B（既有系统 `trendradar` 的新增子系统）+ C（既有 `internal/subscription` 的行为变更）。主场景：S4 替换与迁移（存储位置从本机迁到数据仓）。档位：标准档。用途：构建契约。
 > 相关：整体架构见 [architecture.md](../architecture.md)（§5 数据与存储）；前置能力见 [发版订阅方案](2026-10-31-repo-release-watch-design.md) 与 [contract v0.3.0 方案](2026-10-31-contract-releases-v3-design.md)。

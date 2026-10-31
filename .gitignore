@@ -13,5 +13,7 @@
 .env.local
 .env.*.local
 
-# 本地订阅列表（用户数据，不入库）；示例见 subscriptions.example.yaml
-subscriptions.yaml
+# 本地订阅列表（仅仓库根目录的临时/迁移文件不入库）；示例见 subscriptions.example.yaml。
+# 注意：数据仓内的 <output.dir>/subscriptions.yaml 是受版本控制的资产，必须入库，
+# 所以这里只忽略根目录那一份（/subscriptions.yaml），不要用无边界的 subscriptions.yaml。
+/subscriptions.yaml

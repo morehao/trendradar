@@ -1,6 +1,12 @@
-# 复制为 subscriptions.yaml（已被 .gitignore 忽略），然后按需增删。
-# 也可以用 CLI 维护：trendradar subscribe add owner/repo
+# 订阅列表格式示例（仅说明结构，不要直接当数据用）。
+#
+# 实际订阅列表是数据仓内受版本控制的 <output.dir>/subscriptions.yaml
+# （默认 digests/subscriptions.yaml），由 CLI 维护：
+#   trendradar subscribe add    owner/repo --config config.yaml
+#   trendradar subscribe list              --config config.yaml
+#   trendradar subscribe remove owner/repo --config config.yaml
+# add/remove 只写 <repo>/.git/trendradar-subscriptions.pending，随下一次 run 提交。
 schema: 1
-subscriptions:
-  - morehao/trendradar
-  - morehao/golib
+subscriptions: []
+  # - owner1/repo1
+  # - owner2/repo2

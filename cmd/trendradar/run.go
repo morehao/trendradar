@@ -150,7 +150,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	if err != nil {
 		return err
 	}
-	relOpts, err := buildReleasesOptions(cfg, *cfgPath)
+	relOpts, err := buildReleasesOptions(cfg, in.Date)
 	if err != nil {
 		return err
 	}
@@ -339,23 +339,41 @@ func buildEnricher(cfg *config.Config, dryRun bool) (*enrich.Enricher, error) {
 	}, cache), nil
 }
 
-// buildReleasesOptions resolves subscriptions and builds the release fetcher
-// when releases.enabled. It returns nil (stage bypassed) otherwise.
-func buildReleasesOptions(cfg *config.Config, cfgPath string) (*app.ReleasesOptions, error) {
+// buildReleasesOptions resolves subscriptions from the data repo and builds the
+// release fetcher when releases.enabled. It returns nil (stage bypassed)
+// otherwise.
+//
+// The subscription list is versioned inside the data repo
+// (<repo>/<output.dir>/subscriptions.yaml). The poll list for this run is that
+// file's content on today's target branch unioned with any pending queue under
+// .git/. The pending queue is replayed onto the branch by app.Run after its
+// IsClean check; here we only read it to (a) know what to poll and (b) hand it
+// to app for the write/replay. Reading the *target branch* (not the current
+// checkout) avoids a stale baseline when the repo is sitting on main.
+func buildReleasesOptions(cfg *config.Config, date string) (*app.ReleasesOptions, error) {
 	if cfg == nil || !cfg.Releases.Enabled {
 		return nil, nil
 	}
-	path, err := subscription.ResolveSubscriptionsPath(cfgPath, cfg.Releases.SubscriptionsFile)
+	subsPath, err := subscription.RepoSubscriptionsPath(cfg.Repo.Path, cfg.Output.Dir, cfg.Releases.SubscriptionsFile)
 	if err != nil {
 		return nil, err
 	}
-	store, err := subscription.Load(path)
+	branch := subscription.RunBranchName(cfg.Output.BranchPrefix, cfg.Releases.Period, date)
+	baseStore, err := subscription.ReadRepoOnTargetBranch(cfg.Repo.Path, cfg.Output.Dir, cfg.Releases.SubscriptionsFile, branch)
 	if err != nil {
 		return nil, err
 	}
-	repos := store.List()
+	base := baseStore.List()
+	pend, hasPending, err := subscription.ReadPending(cfg.Repo.Path)
+	if err != nil {
+		return nil, err
+	}
+	repos, added := subscription.MergeUnique(base, pend)
+	if hasPending && len(base) > 0 && added > 0 {
+		fmt.Fprintf(os.Stderr, "warn: subscription migration merged %d pending repo(s) into the %d already on branch %s; verify the union\n", added, len(base), branch)
+	}
 	if len(repos) == 0 {
-		fmt.Fprintf(os.Stderr, "warn: releases enabled but no subscriptions in %s\n", path)
+		fmt.Fprintf(os.Stderr, "warn: releases enabled but no subscriptions (branch %s, pending=%v)\n", branch, hasPending)
 	}
 	statePath, cachePath := "", ""
 	if cfg.Repo.Path != "" {
@@ -366,7 +384,15 @@ func buildReleasesOptions(cfg *config.Config, cfgPath string) (*app.ReleasesOpti
 		Timeout: time.Duration(cfg.Releases.TimeoutSeconds) * time.Second,
 		Token:   firstNonEmpty(os.Getenv("GITHUB_READ_TOKEN"), os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
 	})
-	return &app.ReleasesOptions{Repos: repos, Fetcher: client, StatePath: statePath, CachePath: cachePath}, nil
+	return &app.ReleasesOptions{
+		Repos:             repos,
+		Fetcher:           client,
+		StatePath:         statePath,
+		CachePath:         cachePath,
+		SubscriptionsPath: subsPath,
+		PendingRepos:      pend,
+		HasPending:        hasPending,
+	}, nil
 }
 
 func selectProvider(cfg *config.Config) (model.Provider, error) {
