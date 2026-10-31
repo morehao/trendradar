@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+_Nothing yet._
+
+## 0.5.0
+
+Repo release subscriptions: track new releases of the repositories you care
+about and get Chinese changelog summaries in the data repo.
+
+### Added
+- `trendradar subscribe add|remove|list` and `internal/subscription`: the
+  subscription list lives in its own `subscriptions.yaml` (validated,
+  deduplicated, atomically written), so it is never rewritten into
+  `config.yaml`. `run` and `subscribe` share one path rule
+  (`--file` → `config.releases.subscriptionsFile` → `./subscriptions.yaml`,
+  anchored at the config directory).
+- `releases` stage in `trendradar run` (config `releases.*`, disabled by
+  default): fetches new GitHub releases per subscription (falling back to tags
+  only for repos with no releases), summarizes them in Chinese, and renders
+  `<output.dir>/releases/<period>/<bucket>/<name>.{md,json}` plus
+  `releases/index.md` on the same branch and PR as the trending digest.
+- Incremental detection paces through pages until the cursor is crossed;
+  `perRepoLimit` overflow is deferred (oldest first) instead of dropped, and
+  the first run can record a baseline instead of backfilling history.
+- Tag-only repos use the tagged commit's message as the summary basis.
+- Same-day runs are union-merged by `repo@id/tag`; unchanged content produces
+  no commit, and the cursor is persisted only after a successful publish.
+- Observability: `run --json` gains a `releases` block and
+  `trendradar-usage.jsonl` gains a `stage="releases"` line.
+
 Optional external-context enrichment (Track B) for more accurate summaries.
 
 ### Added
