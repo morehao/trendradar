@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
+
+Improve summary accuracy and record per-run token usage; support local `.env`
+for test secrets.
 
 ### Added
 - Local secret loading: `trendradar` auto-loads nearest `.env.local` / `.env`
