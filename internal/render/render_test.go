@@ -206,3 +206,32 @@ func TestJSONV2ShapeAndOptionalOmission(t *testing.T) {
 }
 
 func tptr(t time.Time) *time.Time { return &t }
+
+// Two renders of the same digest differ only by generatedAt; idempotency must
+// treat them as the same artifact.
+func TestComparableIgnoresGeneratedAt(t *testing.T) {
+	base := fixtureDigest()
+	d2 := base
+	gen := base.GeneratedAt.Add(3 * time.Hour)
+	d2.GeneratedAt = &gen
+
+	md1, md2 := Markdown(base), Markdown(d2)
+	if bytes.Equal(md1, md2) {
+		t.Fatal("fixture should differ before normalization")
+	}
+	if !bytes.Equal(Comparable("2026-10-30.md", md1), Comparable("2026-10-30.md", md2)) {
+		t.Fatal("markdown comparable bytes must ignore generatedAt")
+	}
+
+	js1, err := JSON(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	js2, err := JSON(d2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(Comparable("2026-10-30.json", js1), Comparable("2026-10-30.json", js2)) {
+		t.Fatal("json comparable bytes must ignore generatedAt")
+	}
+}

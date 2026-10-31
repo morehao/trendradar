@@ -45,6 +45,11 @@ type Pull struct {
 // Merged reports whether the PR was merged (as opposed to closed unmerged).
 func (p *Pull) Merged() bool { return p != nil && p.MergedAt != nil }
 
+// ClosedUnmerged reports whether a human closed the PR without merging it.
+// Automated runs treat this as "this date was rejected" and do not reopen it;
+// a manual run may.
+func (p *Pull) ClosedUnmerged() bool { return p != nil && p.State == "closed" && p.MergedAt == nil }
+
 var remoteRe = regexp.MustCompile(`github\.com[:/]+([^/]+)/([^/]+?)(?:\.git)?$`)
 
 // ParseRemote extracts owner/repo from a git remote URL.
