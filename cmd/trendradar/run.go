@@ -67,6 +67,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	dryRun := fs.Bool("dry-run", false, "do not write files or touch git")
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON")
 	outDir := fs.String("out", "", "output directory (overrides config.output.dir)")
+	period := fs.String("period", "", "daily|weekly|monthly (overrides config.trending.since)")
 	defaultTrigger := firstNonEmpty(os.Getenv("TRENDRADAR_TRIGGER"), string(app.TriggerManual))
 	trigger := fs.String("trigger", defaultTrigger, "manual|schedule; schedule respects a human-closed PR")
 	if err := fs.Parse(args); err != nil {
@@ -91,6 +92,20 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			cfg = &config.Config{}
 		}
 		cfg.Output.Dir = *outDir
+	}
+	// --period overrides the config's trending.since so "what we fetch" and
+	// "what we label/store" stay in sync. Validate loudly instead of silently
+	// falling back.
+	if *period != "" {
+		switch *period {
+		case "daily", "weekly", "monthly":
+		default:
+			return ipc.NewError(ipc.CodeConfigInvalid, "invalid --period %q (want daily|weekly|monthly)", *period)
+		}
+		if cfg == nil {
+			cfg = &config.Config{}
+		}
+		cfg.Trending.Since = *period
 	}
 
 	in := app.Inputs{Date: *date}

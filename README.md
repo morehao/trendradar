@@ -15,8 +15,25 @@ go install github.com/morehao/trendradar/cmd/trendradar@latest
 trendradar version --json     # 握手：version / ipcSchema / digestSchema / providers
 trendradar run --config config.yaml            # 抓取→解析→摘要→渲染→提交
 trendradar run --config config.yaml --dry-run  # 只产出文件，不写盘、不提交
+trendradar run --config config.yaml --period weekly --date 2026-11-01  # 指定周期
 trendradar serve --addr 127.0.0.1:8787         # 以 HTTP 提供 digest
 ```
+
+## 输出布局
+
+产出按周期分层，日 / 周 / 月三榜可在同一天共存、互不覆盖：
+
+```
+trending/
+├── index.md                              # 日/周/月 分节索引
+├── daily/2026-10/2026-10-31.{md,json}
+├── weekly/2026/2026-W44.{md,json}        # date=2026-11-01（ISO 周）
+└── monthly/2026/2026-10.{md,json}
+```
+
+`--period` 取 `daily|weekly|monthly`（缺省用 `config.trending.since`）；
+`--date` 传该周期的结束日（周榜周日、月榜月末）。分支名为
+`trending/<period>/<name>`。
 
 ## 开发
 

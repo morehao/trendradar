@@ -83,11 +83,11 @@ func TestE2ECommitPushAndIdempotent(t *testing.T) {
 	if r1.Skipped {
 		t.Fatal("first run should not be skipped")
 	}
-	if r1.Branch != "trending/2026-10-30" {
+	if r1.Branch != "trending/daily/2026-10-30" {
 		t.Fatalf("branch = %q", r1.Branch)
 	}
 	base := countRef(t, remote, "main")
-	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != base+1 {
 		t.Fatalf("remote branch commits = %d, want %d", got, base+1)
 	}
 
@@ -98,7 +98,7 @@ func TestE2ECommitPushAndIdempotent(t *testing.T) {
 	if !r2.Skipped {
 		t.Fatal("second run should be skipped (same contentHash)")
 	}
-	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != base+1 {
 		t.Fatalf("second run added commits: got %d, want %d", got, base+1)
 	}
 }
@@ -137,11 +137,11 @@ func TestSecondDateDoesNotBlockOnTrackedIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second date run: %v", err)
 	}
-	if r.Branch != "trending/2026-10-31" {
+	if r.Branch != "trending/daily/2026-10-31" {
 		t.Fatalf("branch = %q", r.Branch)
 	}
 	base := countRef(t, remote, "main")
-	if got := countRef(t, remote, "trending/2026-10-31"); got != base+1 {
+	if got := countRef(t, remote, "trending/daily/2026-10-31"); got != base+1 {
 		t.Fatalf("branch commits = %d, want %d", got, base+1)
 	}
 }
@@ -156,14 +156,14 @@ func TestCustomOutputDirHonored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run with custom output dir: %v", err)
 	}
-	if r.Branch != "trending/2026-10-30" {
+	if r.Branch != "trending/daily/2026-10-30" {
 		t.Fatalf("branch = %q", r.Branch)
 	}
 	base := countRef(t, remote, "main")
-	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != base+1 {
 		t.Fatalf("branch commits = %d, want %d", got, base+1)
 	}
-	for _, rel := range []string{"trending/2026-10-30/2026-10-30.md", "trending/2026-10-30/2026-10-30.json", "trending/index.md"} {
+	for _, rel := range []string{"trending/daily/2026-10/2026-10-30.md", "trending/daily/2026-10/2026-10-30.json", "trending/index.md"} {
 		if _, err := os.Stat(filepath.Join(work, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("missing %s: %v", rel, err)
 		}
@@ -195,7 +195,7 @@ func TestDegradedSummariesMarkedAndWarned(t *testing.T) {
 	if len(r.Report.Warnings) == 0 {
 		t.Fatal("expected a degradation warning")
 	}
-	md, err := os.ReadFile(filepath.Join(work, "digests", "2026-10-30", "2026-10-30.md"))
+	md, err := os.ReadFile(filepath.Join(work, "digests", "daily", "2026-10", "2026-10-30.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestOpenPRAutoMergesNewPR(t *testing.T) {
 		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
 		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
 	}
-	url, err := openPR(context.Background(), fake, cfg, "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 3})
+	url, err := openPR(context.Background(), fake, cfg, "trending/daily/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 3})
 	if err != nil {
 		t.Fatalf("openPR: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestOpenPRMergesExisting(t *testing.T) {
 		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
 		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
 	}
-	if _, err := openPR(context.Background(), fake, cfg, "trending/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 1}); err != nil {
+	if _, err := openPR(context.Background(), fake, cfg, "trending/daily/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 1}); err != nil {
 		t.Fatalf("openPR: %v", err)
 	}
 	if len(fake.merged) != 1 || fake.merged[0] != 9 {
@@ -293,7 +293,7 @@ func TestSameDateRerunAppendsCommit(t *testing.T) {
 		t.Fatalf("first run: %v", err)
 	}
 	base := countRef(t, remote, "main")
-	first := refSHA(t, remote, "trending/2026-10-30")
+	first := refSHA(t, remote, "trending/daily/2026-10-30")
 
 	in2 := fixtureInputs()
 	in2.Repos[0].Stars += 99 // same date, different content
@@ -304,11 +304,11 @@ func TestSameDateRerunAppendsCommit(t *testing.T) {
 	if r2.Skipped {
 		t.Fatal("rerun with changed content must not be skipped")
 	}
-	second := refSHA(t, remote, "trending/2026-10-30")
+	second := refSHA(t, remote, "trending/daily/2026-10-30")
 	if second == first {
 		t.Fatalf("remote branch was not updated; still %s", first)
 	}
-	if got, want := countRef(t, remote, "trending/2026-10-30"), base+2; got != want {
+	if got, want := countRef(t, remote, "trending/daily/2026-10-30"), base+2; got != want {
 		t.Fatalf("remote branch commits = %d, want %d (append, not force-replace)", got, want)
 	}
 }
@@ -339,7 +339,7 @@ func TestPRFailureRetriedWithoutNewCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second run: %v", err)
 	}
-	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != base+1 {
 		t.Fatalf("retry added a commit: got %d, want %d", got, base+1)
 	}
 	if fake.creates != 1 {
@@ -365,7 +365,7 @@ func TestMergedPRSkipsWholeRun(t *testing.T) {
 	if !r.Skipped {
 		t.Fatal("a date with a merged PR must be skipped")
 	}
-	if got := countRef(t, remote, "trending/2026-10-30"); got != 0 {
+	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != 0 {
 		t.Fatalf("unexpected branch pushed for merged date: %d commits", got)
 	}
 }
@@ -390,7 +390,7 @@ func TestClosedPRRebuildsAndReopens(t *testing.T) {
 		t.Fatalf("expected a fresh PR to be created, creates=%d", fake.creates)
 	}
 	base := countRef(t, remote, "main")
-	if got := countRef(t, remote, "trending/2026-10-30"); got != base+1 {
+	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != base+1 {
 		t.Fatalf("branch commits = %d, want %d", got, base+1)
 	}
 	if r.PRURL != created.HTMLURL {
@@ -418,7 +418,7 @@ func TestClosedPRSkippedOnScheduledRun(t *testing.T) {
 	if fake.creates != 0 {
 		t.Fatalf("scheduled run reopened a closed PR: creates=%d", fake.creates)
 	}
-	if got := countRef(t, remote, "trending/2026-10-30"); got != 0 {
+	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != 0 {
 		t.Fatalf("scheduled run pushed a rejected date: %d commits", got)
 	}
 }
@@ -431,7 +431,7 @@ func TestRemoteBranchDeletedIsRecreated(t *testing.T) {
 		t.Fatalf("first run: %v", err)
 	}
 	base := countRef(t, remote, "main")
-	runGit(t, "", "--git-dir", remote, "update-ref", "-d", "refs/heads/trending/2026-10-30")
+	runGit(t, "", "--git-dir", remote, "update-ref", "-d", "refs/heads/trending/daily/2026-10-30")
 
 	in2 := fixtureInputs()
 	in2.Repos[0].Stars += 7
@@ -442,7 +442,7 @@ func TestRemoteBranchDeletedIsRecreated(t *testing.T) {
 	if r2.Skipped {
 		t.Fatal("changed content after the remote branch was deleted must not be skipped")
 	}
-	if got, want := countRef(t, remote, "trending/2026-10-30"), base+2; got != want {
+	if got, want := countRef(t, remote, "trending/daily/2026-10-30"), base+2; got != want {
 		t.Fatalf("recreated branch commits = %d, want %d", got, want)
 	}
 }
@@ -463,8 +463,65 @@ func TestOutputDirChangeIsNotSkipped(t *testing.T) {
 	if r2.Skipped {
 		t.Fatal("changing output.dir must not hit the contentHash skip")
 	}
-	rel := "digests-alt/2026-10-30/2026-10-30.md"
+	rel := "digests-alt/daily/2026-10/2026-10-30.md"
 	if _, err := os.Stat(filepath.Join(work, filepath.FromSlash(rel))); err != nil {
 		t.Fatalf("missing %s after output.dir change: %v", rel, err)
+	}
+}
+
+// G2: the same date must produce three distinct branches/artifacts for
+// daily/weekly/monthly without overwriting each other.
+func TestSameDayThreePeriodsDistinctBranches(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	base := countRef(t, remote, "main")
+	branches := map[string]bool{}
+	for _, period := range []string{"daily", "weekly", "monthly"} {
+		in := fixtureInputs()
+		in.Date = "2026-11-01"
+		in.Period = period
+		r, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake()})
+		if err != nil {
+			t.Fatalf("%s run: %v", period, err)
+		}
+		if r.Skipped {
+			t.Fatalf("%s run unexpectedly skipped", period)
+		}
+		branches[r.Branch] = true
+	}
+	want := []string{"trending/daily/2026-11-01", "trending/weekly/2026-W44", "trending/monthly/2026-11"}
+	for _, b := range want {
+		if !branches[b] {
+			t.Fatalf("missing branch %q in %v", b, branches)
+		}
+		if got := countRef(t, remote, b); got != base+1 {
+			t.Fatalf("%s commits = %d, want %d", b, got, base+1)
+		}
+	}
+	if len(branches) != 3 {
+		t.Fatalf("want 3 distinct branches, got %v", branches)
+	}
+}
+
+// G3: two daily runs must accumulate two rows in index.md, linked under daily/.
+func TestIndexAccumulatesTwoDates(t *testing.T) {
+	_, work, cfg := setupRepo(t)
+	if _, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()}); err != nil {
+		t.Fatalf("first date: %v", err)
+	}
+	in2 := fixtureInputs()
+	in2.Date = "2026-10-31"
+	if _, err := Run(context.Background(), cfg, in2, Options{Provider: model.NewFake()}); err != nil {
+		t.Fatalf("second date: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(work, "digests", "index.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := string(b)
+	if !strings.Contains(idx, "digests/daily/2026-10/2026-10-30.md") || !strings.Contains(idx, "digests/daily/2026-10/2026-10-31.md") {
+		t.Fatalf("index links are not daily paths:\n%s", idx)
+	}
+	if rows := strings.Count(idx, "| 2026-"); rows != 2 {
+		t.Fatalf("expected exactly two daily rows, got %d:\n%s", rows, idx)
 	}
 }

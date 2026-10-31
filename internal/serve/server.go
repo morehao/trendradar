@@ -5,6 +5,8 @@ import (
 	"encoding/xml"
 	"errors"
 	"net/http"
+
+	"github.com/morehao/trendradar/internal/render"
 )
 
 // Server is the HTTP handler set for trendradar serve.
@@ -17,7 +19,10 @@ type Server struct {
 func New(store *Store) *Server {
 	s := &Server{store: store}
 	mux := http.NewServeMux()
+	// Legacy date-only route maps to daily (old behavior preserved).
 	mux.HandleFunc("GET /api/v2/digests/{date}", s.handleDigest)
+	// New additive route: explicit period.
+	mux.HandleFunc("GET /api/v2/digests/{period}/{date}", s.handleDigestByPeriod)
 	mux.HandleFunc("GET /api/v2/manifest", s.handleManifest)
 	// v1 HTTP surface is retired: respond 410 Gone, point clients at v2.
 	mux.HandleFunc("GET /api/v1/digests/{date}", func(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +37,16 @@ func New(store *Store) *Server {
 	return s
 }
 
+// validPeriod reports whether p is a supported period.
+func validPeriod(p string) bool {
+	switch p {
+	case render.PeriodDaily, render.PeriodWeekly, render.PeriodMonthly:
+		return true
+	default:
+		return false
+	}
+}
+
 // Handler returns the root handler.
 func (s *Server) Handler() http.Handler { return s.handler }
 
@@ -41,11 +56,25 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// handleDigest serves the legacy date-only route, which means the daily digest.
 func (s *Server) handleDigest(w http.ResponseWriter, r *http.Request) {
-	date := r.PathValue("date")
-	d, err := s.store.Digest(date)
+	s.writeDigest(w, r.PathValue("date"), render.PeriodDaily)
+}
+
+// handleDigestByPeriod serves the explicit {period}/{date} route.
+func (s *Server) handleDigestByPeriod(w http.ResponseWriter, r *http.Request) {
+	period := r.PathValue("period")
+	if !validPeriod(period) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid period", "period": period})
+		return
+	}
+	s.writeDigest(w, r.PathValue("date"), period)
+}
+
+func (s *Server) writeDigest(w http.ResponseWriter, date, period string) {
+	d, err := s.store.Digest(period, date)
 	if errors.Is(err, ErrNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "digest not found", "date": date})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "digest not found", "date": date, "period": period})
 		return
 	}
 	if err != nil {
@@ -56,7 +85,7 @@ func (s *Server) handleDigest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
-	m, err := s.store.Manifest()
+	m, err := s.store.Manifest(r.URL.Query().Get("period"))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -85,7 +114,7 @@ type item struct {
 }
 
 func (s *Server) handleFeed(w http.ResponseWriter, r *http.Request) {
-	m, err := s.store.Manifest()
+	m, err := s.store.Manifest(render.PeriodDaily)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

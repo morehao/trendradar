@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.0
+
+Per-period output layout: daily / weekly / monthly trending digests can now
+coexist on the same date without overwriting each other.
+
+### Changed (Breaking: daily path moved)
+- Artifacts now live at `<out>/<period>/<bucket>/<name>.{md,json}`:
+  - daily → `daily/<YYYY-MM>/<YYYY-MM-DD>.{md,json}`
+  - weekly → `weekly/<ISO-year>/<YYYY-Wnn>.{md,json}` (ISO week/year, e.g.
+    `2026-11-01` → `weekly/2026/2026-W44`)
+  - monthly → `monthly/<YYYY>/<YYYY-MM>.{md,json}`
+  The old `trending/<date>/<date>.*` layout is gone; the data repo must be
+  migrated into `daily/` (one-off `git mv`).
+- Branches are now `trending/<period>/<name>` (e.g. `trending/weekly/2026-W44`),
+  so the same date's three periods get distinct branches/PRs.
+- `index.md` is grouped into daily/weekly/monthly sections and accumulates
+  history (daily 90 / weekly 12 / monthly 12) instead of being rewritten to a
+  single row each run.
+
+### Added
+- `run --period daily|weekly|monthly` overrides `config.trending.since` for both
+  the fetch and the stored period.
+- `serve`: `GET /api/v2/digests/{period}/{date}` (validated period; invalid → 400)
+  and `GET /api/v2/manifest?period=` filtering. Manifest entries gain a `period`
+  field. `/feed.xml` stays daily-only.
+
+### Unchanged (compatibility)
+- Digests are still v2 (`schema:2`, `contentHashAlgo`) and the contract wire is
+  unchanged (`ipcSchema=2` / `digestSchema=2` / `contractVersion=0.2.0`).
+- `GET /api/v2/digests/{date}` is preserved and maps to daily; its response is
+  byte-identical to before.
+
 ## 0.3.2
 
 ### Removed (v1 contract retirement)
