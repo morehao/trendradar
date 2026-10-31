@@ -381,7 +381,7 @@ HTTP 面仍只读、`no-store`、不返回密钥；`serve` 默认绑 `127.0.0.1`
 |---|---|---|
 | A1 列表信息完整 | 机械覆盖（数据面）+ 走查 | `internal/serve/subscriptions_test.go` 断言 40 仓 fixture 的五个字段；`client/subscriptions.ts` 渲染四列 + 变更入口 |
 | A2 首屏体积 | 机械覆盖 | 契约 `test/contract.test.mjs`：`subscriptions-40.json` ≤ 10 KB（实测约 8 KB） |
-| A3 抽屉 P95 ≤ 300 ms | 走查 | 面板打开抽屉 → `GET /subscriptions/releases` → 单文件读取；未做真机计时，口径见实现要点 |
+| A3 抽屉 P95 ≤ 300 ms | 机械覆盖（IPC 段）+ 走查 | 在 484 行 / 16.8 KB 的仓文档上跑 10 次 `subscribe releases --json`（冷启动预热 3 次）：p50 7.1 ms、p95 7.4 ms、max 7.4 ms；口径是「本地 IPC + 单文件读取」，不含浏览器渲染。浏览器渲染与面板交互仍需真机走查 |
 | A4 周幂等 | 机械覆盖 | `TestPlanIsIdempotentForSameWeek`、`TestBuildWeeklyGateSkipsSecondRun`、`TestReleaseOnlyRunIsIdempotentWithinWeek` |
 | A5 无变化不写 | 机械覆盖 | 周闸门 + `changed=0` → 无文档文件（`TestReleaseOnlyRunIsIdempotentWithinWeek` 断言无新 commit） |
 | A6 卷切分边界 | 机械覆盖 | `TestPlanRollsVolumeOnlyAfterExceedingBudget`（599 行 → 不拆；下一次 → `.02.md`） |
