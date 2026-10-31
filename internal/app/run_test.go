@@ -4,16 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/digest"
+	"github.com/morehao/trendradar/internal/enrich"
 	"github.com/morehao/trendradar/internal/gitx"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
@@ -562,5 +566,71 @@ func TestRunRecordsUsage(t *testing.T) {
 	}
 	if u.Calls != 1 || u.Batches != 1 {
 		t.Fatalf("calls/batches = %d/%d, want 1/1", u.Calls, u.Batches)
+	}
+}
+
+// captureProvider records the user prompts it was asked to summarize so tests can
+// assert that enrich context reached the model.
+type captureProvider struct {
+	inner   model.Provider
+	mu      sync.Mutex
+	prompts []string
+}
+
+func (p *captureProvider) Name() string { return "capture" }
+func (p *captureProvider) Complete(ctx context.Context, system, user string) (model.Result, error) {
+	p.mu.Lock()
+	p.prompts = append(p.prompts, user)
+	p.mu.Unlock()
+	return p.inner.Complete(ctx, system, user)
+}
+
+// TestRunEnrichInjectsContext wires a fake enrich server end-to-end: the enrich
+// stage must fetch topics + README for pending repos, inject TOPICS=/README_EXCERPT=
+// into the prompt, and report the enrich stage without failing the run.
+func TestRunEnrichInjectsContext(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/README.md"):
+			_, _ = w.Write([]byte("# Title\n\n<b>Widgets</b> for busy teams.\n"))
+		default:
+			_, _ = w.Write([]byte(`<a href="/topics/ai">ai</a><script>{"defaultBranch":"main"}</script>`))
+		}
+	}))
+	defer srv.Close()
+
+	enr := enrich.New(enrich.Options{
+		Mode:     enrich.ModeReadme,
+		HTMLBase: srv.URL,
+		RawBase:  srv.URL,
+		Budget:   5 * time.Second,
+		Timeout:  2 * time.Second,
+	}, enrich.NewCache())
+	cp := &captureProvider{inner: model.NewFake()}
+	cfg := &config.Config{
+		Output:   config.OutputConfig{Dir: t.TempDir()},
+		Trending: config.TrendingConfig{Since: "daily"},
+	}
+	res, err := Run(context.Background(), cfg, fixtureInputs(), Options{DryRun: true, Provider: cp, Enricher: enr})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if res.Report.Enrich == nil || res.Report.Enrich.Requested != 2 || res.Report.Enrich.Fetched != 2 {
+		t.Fatalf("enrich report = %+v", res.Report.Enrich)
+	}
+	if len(res.Report.Stages) < 2 || res.Report.Stages[0].Name != "enrich" || res.Report.Stages[1].Name != "summarize" {
+		t.Fatalf("stages = %+v, want enrich before summarize", res.Report.Stages)
+	}
+	cp.mu.Lock()
+	joined := strings.Join(cp.prompts, "\n---\n")
+	cp.mu.Unlock()
+	if !strings.Contains(joined, "TOPICS=ai") {
+		t.Fatalf("prompt missing TOPICS line:\n%s", joined)
+	}
+	if !strings.Contains(joined, "README_EXCERPT=") {
+		t.Fatalf("prompt missing README_EXCERPT line:\n%s", joined)
+	}
+	if strings.Contains(joined, "<b>") {
+		t.Fatalf("prompt leaked raw HTML from README:\n%s", joined)
 	}
 }

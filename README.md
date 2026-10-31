@@ -43,6 +43,27 @@ make test           # go vet + go test
 make test-eval      # 真实模型评估（读取 .env 里的 TRENDRADAR_EVAL_*）
 ```
 
+## 摘要外部增强（可选）
+
+默认 `summarize.enrich: none`，只用仓库名/描述/语言/Star/排名。设为 `repo`
+会额外抓取 GitHub topics；设为 `readme` 再追加 800 字 README 摘录，用于提升
+摘要具体性。抓取走仓库 HTML（topics + 默认分支）与 `raw.githubusercontent.com`
+（README），不消耗 REST 60/h 配额；结果缓存 7 天，仅对摘要缓存未命中的仓库拉取，
+单仓库失败逐仓库降级、不影响 run。
+
+```yaml
+summarize:
+  enrich: repo            # none | repo | readme，默认 none
+  readmeChars: 800        # README 截断字符数
+  enrichCacheTTLHours: 168
+  enrichConcurrency: 4
+  enrichTimeoutSeconds: 5
+  enrichBudgetSeconds: 8  # readme 模式默认 12
+```
+
+`run --json` 会新增可选 `stages` 与 `enrich` 字段，`<repo>/.git/trendradar-usage.jsonl`
+每行也记录 `durationMs`、`summaryDegraded` 与 `enrich` 计数，便于观测与回退。
+
 ## 本地密钥与测试
 
 不要把 API key 写进 config.yaml。复制 `.env.example` 为 `.env`（已被
@@ -67,7 +88,8 @@ model:
 ```
 
 评估 harness 也用同一套变量：`.env` 里放 `TRENDRADAR_EVAL_PROVIDER/MODEL/
-BASE_URL/API_KEY`，然后 `make test-eval`。
+BASE_URL/API_KEY`，然后 `make test-eval`。加 `TRENDRADAR_EVAL_ENRICH=repo|readme`
+即可复测带外部上下文的 A/B 摘要。
 
 ## 目录
 

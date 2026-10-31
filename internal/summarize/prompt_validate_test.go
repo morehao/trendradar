@@ -28,8 +28,11 @@ func TestBuildUserPromptIncludesMetadata(t *testing.T) {
 	if !strings.Contains(got, "META=lang=go; stars=1234; starsPeriod=56; rank=3") {
 		t.Fatalf("missing meta:\n%s", got)
 	}
-	if !strings.Contains(got, "topics=ai,llm") {
-		t.Fatalf("missing topics:\n%s", got)
+	if !strings.Contains(got, "TOPICS=ai,llm") {
+		t.Fatalf("missing topics line:\n%s", got)
+	}
+	if strings.Contains(got, "META=lang=go; stars=1234; starsPeriod=56; rank=3; topics=") {
+		t.Fatalf("topics must be a separate TOPICS= line, not inside META:\n%s", got)
 	}
 	if !strings.Contains(got, "README_EXCERPT=line one line two") {
 		t.Fatalf("readme should be single line:\n%s", got)

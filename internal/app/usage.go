@@ -11,19 +11,22 @@ import (
 // of a single run. It is intentionally flat so the file can be tailed/parsed by
 // simple tools and later aggregated.
 type UsageRecord struct {
-	Time             time.Time `json:"time"`
-	Provider         string    `json:"provider,omitempty"`
-	Model            string    `json:"model,omitempty"`
-	ContentHash      string    `json:"contentHash,omitempty"`
-	PromptTokens     int       `json:"promptTokens"`
-	CompletionTokens int       `json:"completionTokens"`
-	TotalTokens      int       `json:"totalTokens"`
-	CachedTokens     int       `json:"cachedTokens,omitempty"`
-	UsageKnown       bool      `json:"usageKnown"`
-	Calls            int       `json:"calls"`
-	Retries          int       `json:"retries"`
-	Batches          int       `json:"batches"`
-	CacheHits        int       `json:"cacheHits"`
+	Time             time.Time     `json:"time"`
+	Provider         string        `json:"provider,omitempty"`
+	Model            string        `json:"model,omitempty"`
+	ContentHash      string        `json:"contentHash,omitempty"`
+	PromptTokens     int           `json:"promptTokens"`
+	CompletionTokens int           `json:"completionTokens"`
+	TotalTokens      int           `json:"totalTokens"`
+	CachedTokens     int           `json:"cachedTokens,omitempty"`
+	UsageKnown       bool          `json:"usageKnown"`
+	Calls            int           `json:"calls"`
+	Retries          int           `json:"retries"`
+	Batches          int           `json:"batches"`
+	CacheHits        int           `json:"cacheHits"`
+	DurationMs       int64         `json:"durationMs,omitempty"`
+	SummaryDegraded  bool          `json:"summaryDegraded,omitempty"`
+	Enrich           *EnrichReport `json:"enrich,omitempty"`
 }
 
 // UsageLogPath returns <repo>/.git/trendradar-usage.jsonl. Keeping it under

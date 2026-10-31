@@ -23,7 +23,7 @@ const SystemPrompt = `你是资深技术编辑。根据仓库名称、描述、�
 
 // buildUserPrompt encodes the batch in a machine-parseable form. The first
 // "REPO=\tDESC=" line is kept byte-compatible with the offline Fake provider;
-// additional context goes on following META/README_EXCERPT lines.
+// additional context goes on following META / TOPICS / README_EXCERPT lines.
 func buildUserPrompt(batch []digest.RepoSnapshot, byRepo map[string]Context) string {
 	var b strings.Builder
 	b.WriteString("为下列仓库生成中文摘要：\n")
@@ -39,15 +39,15 @@ func buildUserPrompt(batch []digest.RepoSnapshot, byRepo map[string]Context) str
 			"; stars=" + strconv.Itoa(r.Stars) +
 			"; starsPeriod=" + strconv.Itoa(r.StarsInPeriod) +
 			"; rank=" + strconv.Itoa(r.Rank)
+		b.WriteString(meta + "\n")
 		if c, ok := byRepo[r.FullName]; ok {
 			if len(c.Topics) > 0 {
-				meta += "; topics=" + strings.Join(c.Topics, ",")
+				b.WriteString("TOPICS=" + strings.Join(c.Topics, ",") + "\n")
 			}
 			if excerpt := oneLine(c.ReadmeExcerpt); excerpt != "" {
-				meta += "\nREADME_EXCERPT=" + excerpt
+				b.WriteString("README_EXCERPT=" + excerpt + "\n")
 			}
 		}
-		b.WriteString(meta + "\n")
 	}
 	return b.String()
 }

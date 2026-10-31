@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/morehao/trendradar/internal/digest"
+	"github.com/morehao/trendradar/internal/enrich"
 	"github.com/morehao/trendradar/internal/envfile"
 	"github.com/morehao/trendradar/internal/model"
 )
@@ -43,24 +46,72 @@ func TestEvalSummaries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build provider: %v", err)
 	}
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("TRENDRADAR_EVAL_ENRICH")))
+	if mode == "" {
+		mode = string(enrich.ModeNone)
+	}
+	em, err := enrich.ParseMode(mode)
+	if err != nil {
+		t.Fatalf("parse enrich mode: %v", err)
+	}
+
+	ctx := context.Background()
 	s := New(provider, WithCache(NewCache()))
-	out := s.Summarize(context.Background(), repos)
+	var out []digest.RepoDigest
+	var er enrich.Report
+	if em == enrich.ModeNone {
+		out = s.Summarize(ctx, repos)
+	} else {
+		readmeChars := 0
+		if v := os.Getenv("TRENDRADAR_EVAL_README_CHARS"); v != "" {
+			readmeChars, _ = strconv.Atoi(v)
+		}
+		budgetSeconds, _ := strconv.Atoi(os.Getenv("TRENDRADAR_EVAL_ENRICH_BUDGET_SECONDS"))
+		concurrency, _ := strconv.Atoi(os.Getenv("TRENDRADAR_EVAL_ENRICH_CONCURRENCY"))
+		enr := enrich.New(enrich.Options{
+			Mode:        em,
+			ReadmeChars: readmeChars,
+			Concurrency: concurrency,
+			Budget:      time.Duration(budgetSeconds) * time.Second,
+			HTMLBase:    os.Getenv("TRENDRADAR_EVAL_HTML_BASE"),
+			RawBase:     os.Getenv("TRENDRADAR_EVAL_RAW_BASE"),
+		}, enrich.NewCache())
+		// Only enrich repos whose summary is not cached, mirroring app.Run.
+		pending := s.Pending(repos)
+		ctxs, report := enr.Enrich(ctx, pending)
+		er = report
+		byRepo := make(map[string]Context, len(ctxs))
+		for name, c := range ctxs {
+			byRepo[name] = Context{Topics: c.Topics, ReadmeExcerpt: c.ReadmeExcerpt}
+		}
+		out = s.SummarizeWithContext(ctx, repos, byRepo)
+	}
 	stats := s.Stats()
 
 	type report struct {
-		Total            int  `json:"total"`
-		Model            int  `json:"model"`
-		Degraded         int  `json:"degraded"`
-		LengthOK         int  `json:"lengthOk"`
-		ChineseOK        int  `json:"chineseOk"`
-		RepeatDesc       int  `json:"repeatDesc"`
-		EmptyPhrase      int  `json:"emptyPhrase"`
-		PromptTokens     int  `json:"promptTokens"`
-		CompletionTokens int  `json:"completionTokens"`
-		TotalTokens      int  `json:"totalTokens"`
-		UsageKnown       bool `json:"usageKnown"`
+		Total             int    `json:"total"`
+		Model             int    `json:"model"`
+		Degraded          int    `json:"degraded"`
+		LengthOK          int    `json:"lengthOk"`
+		ChineseOK         int    `json:"chineseOk"`
+		RepeatDesc        int    `json:"repeatDesc"`
+		EmptyPhrase       int    `json:"emptyPhrase"`
+		PromptTokens      int    `json:"promptTokens"`
+		CompletionTokens  int    `json:"completionTokens"`
+		TotalTokens       int    `json:"totalTokens"`
+		UsageKnown        bool   `json:"usageKnown"`
+		EnrichMode        string `json:"enrichMode"`
+		EnrichRequested   int    `json:"enrichRequested"`
+		EnrichFetched     int    `json:"enrichFetched"`
+		EnrichFailed      int    `json:"enrichFailed"`
+		EnrichRateLimited int    `json:"enrichRateLimited"`
 	}
-	rep := report{Total: len(out), PromptTokens: stats.Usage.PromptTokens, CompletionTokens: stats.Usage.CompletionTokens, TotalTokens: stats.Usage.TotalTokens, UsageKnown: stats.Usage.Known}
+	rep := report{
+		Total: len(out), PromptTokens: stats.Usage.PromptTokens, CompletionTokens: stats.Usage.CompletionTokens,
+		TotalTokens: stats.Usage.TotalTokens, UsageKnown: stats.Usage.Known,
+		EnrichMode: string(em), EnrichRequested: er.Requested, EnrichFetched: er.Fetched,
+		EnrichFailed: er.Failed, EnrichRateLimited: er.RateLimited,
+	}
 	for _, d := range out {
 		if d.SummarySource == "model" {
 			rep.Model++
