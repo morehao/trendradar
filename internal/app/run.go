@@ -3,7 +3,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,7 +19,6 @@ import (
 	"github.com/morehao/trendradar/internal/model"
 	"github.com/morehao/trendradar/internal/pr"
 	"github.com/morehao/trendradar/internal/render"
-	"github.com/morehao/trendradar/internal/state"
 	"github.com/morehao/trendradar/internal/summarize"
 )
 
@@ -29,22 +30,34 @@ type Inputs struct {
 	Period   string
 }
 
+// Trigger says who asked for the run. It only changes the PR lifecycle policy:
+// an automated run respects a human closing the PR, while a manual run is an
+// explicit request to re-open it.
+type Trigger string
+
+const (
+	TriggerManual   Trigger = "manual"
+	TriggerSchedule Trigger = "schedule"
+)
+
 // Options controls a run.
 type Options struct {
 	DryRun   bool
 	Token    string         // optional GitHub token for push/PR
 	Provider model.Provider // optional; defaults to the offline Fake
+	Trigger  Trigger        // optional; defaults to TriggerManual
 }
 
 // Result is the outcome of a run.
 type Result struct {
-	Digest  digest.Digest
-	Files   []render.File
-	Report  Report
-	Skipped bool
-	Branch  string
-	Commit  string
-	PRURL   string
+	Digest     digest.Digest
+	Files      []render.File
+	Report     Report
+	Skipped    bool
+	SkipReason string // merged | pr-closed | unchanged
+	Branch     string
+	Commit     string
+	PRURL      string
 }
 
 // Run executes the pipeline.
@@ -59,7 +72,27 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	}
 
 	sumStart := time.Now()
-	repoDigests := summarize.New(provider, summarize.WithCache(summarize.NewCache())).Summarize(ctx, in.Repos)
+	// Persisted summary cache: without it every run re-asks the model, the
+	// rendered text drifts, and "same input" never yields the same digest.
+	// The cache is keyed by repo+description+prompt/model namespace, so a model
+	// or prompt change misses instead of silently reusing stale prose.
+	cachePath := ""
+	if cfg != nil && !opts.DryRun && cfg.Repo.Path != "" {
+		cachePath = summarize.CachePath(cfg.Repo.Path)
+	}
+	summaryCache, _ := summarize.LoadCache(cachePath)
+	if summaryCache == nil {
+		summaryCache = summarize.NewCache()
+	}
+	if cfg != nil {
+		summaryCache.SetNamespace(summarize.NamespaceFor(cfg.Model.Provider, cfg.Model.Name))
+	}
+	repoDigests := summarize.New(provider, summarize.WithCache(summaryCache)).Summarize(ctx, in.Repos)
+	if cachePath != "" {
+		if err := summaryCache.Save(cachePath); err != nil {
+			rep.Warnings = append(rep.Warnings, "cache: "+err.Error())
+		}
+	}
 	degradedCount := 0
 	for _, rd := range repoDigests {
 		if rd.SummarySource == "original" {
@@ -123,20 +156,6 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		return res, err
 	}
 
-	st, err := state.Load(cfg.Repo.Path)
-	if err != nil {
-		return res, err
-	}
-	// Idempotency key is date + contentHash + output.dir. Including the output
-	// directory means changing only output.dir re-renders instead of being
-	// silently skipped as "same content".
-	if st.LastRun != nil && st.LastRun.ContentHash == d.ContentHash && st.LastRun.Date == d.Date && derefStr(st.LastRun.OutputDir) == outDir {
-		res.Skipped = true
-		rep.TotalMs = since(start)
-		res.Report = rep
-		return res, nil
-	}
-
 	clean, err := g.IsClean(ctx)
 	if err != nil {
 		return res, err
@@ -145,6 +164,10 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		return res, &gitx.Error{Code: ipc.CodeRepoDirty, Message: "working tree has tracked changes"}
 	}
 
+	trigger := opts.Trigger
+	if trigger == "" {
+		trigger = TriggerManual
+	}
 	remote := cfg.Repo.Remote
 	if remote == "" {
 		remote = "origin"
@@ -163,105 +186,178 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	}
 	branch := prefix + d.Date
 
-	// PR lifecycle pre-check: decide from the most recent PR for this branch
-	// whether the date is already done (merged -> skip) or was closed unmerged
-	// (rebuild the branch and open a fresh PR). It runs before any git work so a
-	// merged date never leaves a stray re-created branch behind.
+	// PR lifecycle pre-check, before any git work:
+	//   merged            -> the date is done, skip;
+	//   closed + schedule -> a human said no; an automated run must not reopen it;
+	//   closed + manual   -> explicit request, rebuild/reopen.
 	prRequested := cfg.PR.Enabled && opts.Token != ""
-	prOK := true
 	var prClient prAPI
 	if prRequested {
 		c, cerr := newPRClientFor(ctx, g, cfg, opts.Token)
 		if cerr != nil {
-			prOK = false
 			rep.Warnings = append(rep.Warnings, "PR: "+cerr.Error())
 		} else {
 			latest, lerr := c.FindForBranch(ctx, branch, base)
 			switch {
 			case lerr != nil:
-				prOK = false
 				rep.Warnings = append(rep.Warnings, "PR: "+lerr.Error())
 			case latest.Merged():
-				// Already merged for this date: nothing to push or open.
 				res.Skipped = true
-				st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: strPtr(outDir), RunAt: time.Now().UTC()}
-				if err := state.Save(cfg.Repo.Path, st); err != nil {
-					return res, err
-				}
+				res.SkipReason = "merged"
+				rep.TotalMs = since(start)
+				res.Report = rep
+				return res, nil
+			case latest.ClosedUnmerged() && trigger == TriggerSchedule:
+				res.Skipped = true
+				res.SkipReason = "pr-closed"
 				rep.TotalMs = since(start)
 				res.Report = rep
 				return res, nil
 			default:
-				// open, closed-unmerged, or no PR: (re)build the branch below.
-				// C1's force-with-lease push safely replaces a closed PR's stale
-				// branch; an open PR is later updated by openPR.
 				prClient = c
 			}
 		}
 	}
 
-	// Switch before writing: tracked files from a previous date would otherwise
-	// block `git switch -C` with "local changes would be overwritten".
-	if err := g.SwitchCreate(ctx, branch, remote+"/"+base); err != nil {
+	// Append-only branches: reuse what exists instead of resetting from the base.
+	// A reset made every rerun a rewritten branch (hence the old force-with-lease);
+	// appending means a plain push is always a fast-forward and nothing a human
+	// committed on the branch is ever clobbered.
+	hasLocal, err := g.HasRef(ctx, "refs/heads/"+branch)
+	if err != nil {
 		return res, err
 	}
-	for _, f := range files {
-		p := filepath.Join(cfg.Repo.Path, filepath.FromSlash(f.Path))
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	hasRemote, err := g.HasRef(ctx, "refs/remotes/"+remote+"/"+branch)
+	if err != nil {
+		return res, err
+	}
+	switch {
+	case hasLocal:
+		if err := g.Switch(ctx, branch); err != nil {
 			return res, err
 		}
-		if err := os.WriteFile(p, f.Data, 0o644); err != nil {
+	case hasRemote:
+		if err := g.SwitchCreate(ctx, branch, remote+"/"+branch); err != nil {
 			return res, err
 		}
-	}
-	if err := g.AddAll(ctx, outDir); err != nil {
-		return res, err
-	}
-	if has, _ := g.HasStagedChanges(ctx); !has {
-		res.Skipped = true
-		rep.TotalMs = since(start)
-		res.Report = rep
-		return res, nil
-	}
-	if err := g.Commit(ctx, commitMessage(cfg, d.Date), cfg.Repo.AuthorName, cfg.Repo.AuthorEmail); err != nil {
-		return res, err
-	}
-	if gitx.IsOwnedBranch(branch, prefix) {
-		// Own per-date branch rebuilt from base each run: force-with-lease (C1).
-		if err := g.PushForceWithLease(ctx, remote, branch, opts.Token); err != nil {
+	default:
+		if err := g.SwitchCreate(ctx, branch, remote+"/"+base); err != nil {
 			return res, err
 		}
-	} else if err := g.Push(ctx, remote, branch, opts.Token); err != nil {
-		return res, err
 	}
 	res.Branch = branch
+
+	// The repo is the truth: if the branch already holds the same artifacts
+	// (generatedAt aside), there is nothing to publish. This replaces the old
+	// contentHash-vs-local-state skip, which drifted whenever the model reworded
+	// a summary or the state file lived on another machine.
+	unchanged := filesMatch(files, cfg.Repo.Path)
+	if !unchanged {
+		for _, f := range files {
+			p := filepath.Join(cfg.Repo.Path, filepath.FromSlash(f.Path))
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				return res, err
+			}
+			if err := os.WriteFile(p, f.Data, 0o644); err != nil {
+				return res, err
+			}
+		}
+		if err := g.AddAll(ctx, outDir); err != nil {
+			return res, err
+		}
+	}
+
+	changed := false
+	if !unchanged {
+		changed, err = g.HasStagedChanges(ctx)
+		if err != nil {
+			return res, err
+		}
+	}
+	if changed {
+		if err := g.Commit(ctx, commitMessage(cfg, d.Date), cfg.Repo.AuthorName, cfg.Repo.AuthorEmail); err != nil {
+			return res, err
+		}
+		if sha, err := g.HeadSHA(ctx); err == nil {
+			res.Commit = sha
+		}
+		if err := pushWithRetry(ctx, g, remote, branch, opts.Token); err != nil {
+			return res, pushFailure(err, branch, remote)
+		}
+	}
 	rep.Stages = append(rep.Stages, Stage{Name: "git", DurationMs: since(gitStart)})
 
+	// The PR is ensured even when the content did not change: a previous run may
+	// have pushed and then failed to open the PR, and that must be retryable
+	// without inventing a new commit.
 	if prRequested && prClient != nil {
 		url, werr := openPR(ctx, prClient, cfg, branch, d)
 		if url != "" {
 			res.PRURL = url
 		}
 		if werr != nil {
-			prOK = false
 			rep.Warnings = append(rep.Warnings, "PR: "+werr.Error())
 		}
 	}
 
-	// Persist state only once the whole run -- including the PR -- succeeded. If
-	// the push worked but the PR failed, leaving state unsaved makes the next run
-	// with the same content re-attempt instead of skipping and never retrying the
-	// PR (C2).
-	if prOK {
-		st.LastRun = &ipc.StateRun{Date: d.Date, ContentHash: d.ContentHash, OutputDir: strPtr(outDir), RunAt: time.Now().UTC()}
-		if err := state.Save(cfg.Repo.Path, st); err != nil {
-			return res, err
-		}
+	res.Skipped = !changed
+	if res.Skipped {
+		res.SkipReason = "unchanged"
 	}
-
 	rep.TotalMs = since(start)
 	res.Report = rep
 	return res, nil
+}
+
+// filesMatch reports whether every rendered artifact already exists on the
+// checked-out branch with the same comparable content (generatedAt aside).
+func filesMatch(files []render.File, repoPath string) bool {
+	for _, f := range files {
+		p := filepath.Join(repoPath, filepath.FromSlash(f.Path))
+		old, err := os.ReadFile(p)
+		if err != nil {
+			return false
+		}
+		if !bytes.Equal(render.Comparable(f.Path, old), render.Comparable(f.Path, f.Data)) {
+			return false
+		}
+	}
+	return true
+}
+
+// pushWithRetry pushes and, when the remote moved under us, rebases once onto
+// the remote branch and retries. It never forces: the branch is append-only, so
+// a rejected push means "someone else appended first", not "rewrite history".
+func pushWithRetry(ctx context.Context, g *gitx.Git, remote, branch, token string) error {
+	err := g.Push(ctx, remote, branch, token)
+	if err == nil || !gitx.PushRejected(err) {
+		return err
+	}
+	if ferr := g.Fetch(ctx, remote); ferr != nil {
+		return err
+	}
+	if rerr := g.PullRebase(ctx, remote, branch); rerr != nil {
+		// A rebase conflict is the real blocker (two writers touched the same
+		// file); surface it instead of the now-stale push rejection.
+		return rerr
+	}
+	return g.Push(ctx, remote, branch, token)
+}
+
+// pushFailure adds machine-readable context to a push error so the plugin can
+// render an explanation without parsing git's prose.
+func pushFailure(err error, branch, remote string) error {
+	var ge *gitx.Error
+	if !errors.As(err, &ge) {
+		return err
+	}
+	ge.Details = map[string]any{
+		"stage":  "push",
+		"branch": branch,
+		"remote": remote,
+		"reason": gitx.ClassifyPushFailure(ge.Message),
+	}
+	return ge
 }
 
 // prAPI is the subset of pr.Client used when opening/merging a PR. It is
@@ -348,17 +444,3 @@ func languagesOf(repos []digest.RepoSnapshot) []string {
 }
 
 func since(t time.Time) int64 { return time.Since(t).Milliseconds() }
-
-func strPtr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func derefStr(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}

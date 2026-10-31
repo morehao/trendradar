@@ -3,6 +3,7 @@ package render
 import (
 	"encoding/json"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -60,3 +61,21 @@ func OutputRoot(outDir string) string {
 
 // CountFiles is a tiny helper for CLI output.
 func CountFiles(files []File) string { return strconv.Itoa(len(files)) }
+
+var (
+	// generatedAt is the only field whose value changes on every run even when
+	// the digest content is identical. It is metadata about the run, not the
+	// digest, so it is excluded when deciding "did anything change?".
+	genAtMarkdown = regexp.MustCompile(`(?m)^generatedAt:.*\n?`)
+	genAtJSON     = regexp.MustCompile(`"generatedAt":\s*("[^"]*"|null)`)
+)
+
+// Comparable returns data with volatile per-run fields removed, so two renders
+// of the same digest compare equal. It is used for idempotency: a branch whose
+// files already normalize to the same bytes must not gain another commit.
+func Comparable(filePath string, data []byte) []byte {
+	if strings.HasSuffix(strings.ToLower(filePath), ".json") {
+		return genAtJSON.ReplaceAll(data, []byte(`"generatedAt":null`))
+	}
+	return genAtMarkdown.ReplaceAll(data, nil)
+}

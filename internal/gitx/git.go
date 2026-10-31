@@ -90,20 +90,12 @@ func (g *Git) Commit(ctx context.Context, message, name, email string) error {
 // Push pushes branch to remote (fast-forward only). When token is non-empty it
 // is fed through a temporary GIT_ASKPASS helper (0600, removed after), never via
 // argv.
+//
+// The automation never force-pushes: per-date branches are append-only, so a
+// rejected push means the remote moved and the caller should fetch + rebase +
+// retry once (see app.pushWithRetry).
 func (g *Git) Push(ctx context.Context, remote, branch, token string) error {
 	return g.push(ctx, []string{"push", "-u", remote, branch}, token)
-}
-
-// PushForceWithLease pushes branch with --force-with-lease. It is meant for the
-// automation's own per-date branches, which are rebuilt from the base branch on
-// every run: a rebuilt branch is not a descendant of the previous push, so a
-// plain push would be rejected as non-fast-forward. The lease keeps this safe by
-// only overwriting the remote branch if it still points where our last fetch saw
-// it; if someone else pushed in between, the push is refused instead of
-// clobbering their commits. The caller must fetch first so the lease baseline is
-// current.
-func (g *Git) PushForceWithLease(ctx context.Context, remote, branch, token string) error {
-	return g.push(ctx, []string{"push", "--force-with-lease", "-u", remote, branch}, token)
 }
 
 func (g *Git) push(ctx context.Context, args []string, token string) error {
@@ -125,15 +117,77 @@ func (g *Git) push(ctx context.Context, args []string, token string) error {
 	return err
 }
 
-// IsOwnedBranch reports whether branch belongs to the automation and may
-// therefore be force-pushed. Ownership is defined by the configured output
-// branch prefix (default "trending/"); everything else must use a plain push so
-// a misconfiguration can never force over a human branch.
-func IsOwnedBranch(branch, prefix string) bool {
-	if prefix == "" {
-		prefix = "trending/"
+// HasRef reports whether a fully qualified ref exists locally (e.g.
+// refs/heads/x or refs/remotes/origin/x). A missing ref is not an error.
+func (g *Git) HasRef(ctx context.Context, ref string) (bool, error) {
+	_, _, err := g.run(ctx, "rev-parse", "--verify", "--quiet", ref)
+	if err == nil {
+		return true, nil
 	}
-	return strings.HasPrefix(branch, prefix)
+	var ge *Error
+	if errors.As(err, &ge) {
+		var ee *exec.ExitError
+		if errors.As(ge.Err, &ee) && ee.ExitCode() == 1 {
+			return false, nil
+		}
+	}
+	return false, err
+}
+
+// Switch checks out an existing branch without resetting it.
+func (g *Git) Switch(ctx context.Context, branch string) error {
+	_, _, err := g.run(ctx, "switch", branch)
+	return err
+}
+
+// HeadSHA returns the current HEAD commit.
+func (g *Git) HeadSHA(ctx context.Context) (string, error) {
+	out, _, err := g.run(ctx, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// PushRejected reports whether a push failed because the remote moved (the only
+// case worth fetch+rebase+retry). Auth/protected/hook failures are not retried.
+func PushRejected(err error) bool {
+	var ge *Error
+	if !errors.As(err, &ge) {
+		return false
+	}
+	msg := ge.Message
+	if strings.Contains(msg, "stale info") {
+		return false
+	}
+	return strings.Contains(msg, "non-fast-forward") ||
+		strings.Contains(msg, "fetch first") ||
+		strings.Contains(msg, "[rejected]")
+}
+
+// ClassifyPushFailure turns git's stderr into a stable reason the consumer can
+// map to localized copy. It never changes the error code.
+func ClassifyPushFailure(stderr string) string {
+	switch {
+	case strings.Contains(stderr, "stale info"):
+		// Force-with-lease only; kept for old branches that still force.
+		return "stale-lease"
+	case strings.Contains(stderr, "non-fast-forward") || strings.Contains(stderr, "fetch first"):
+		return "non-fast-forward"
+	case strings.Contains(stderr, "Permission denied"),
+		strings.Contains(stderr, "Authentication failed"),
+		strings.Contains(stderr, "could not read Username"),
+		strings.Contains(stderr, "Invalid username or password"):
+		return "auth"
+	case strings.Contains(stderr, "protected branch"), strings.Contains(stderr, "GH006"):
+		return "protected"
+	case strings.Contains(stderr, "hook declined"), strings.Contains(stderr, "pre-receive hook"):
+		return "hook"
+	case strings.Contains(stderr, "pathspec"):
+		return "pathspec"
+	default:
+		return "unknown"
+	}
 }
 
 // PullRebase rebases the current branch onto the remote branch.

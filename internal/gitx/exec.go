@@ -18,6 +18,9 @@ import (
 type Error struct {
 	Code    ipc.Code
 	Message string
+	// Details is machine-readable context for the consumer (stage, reason,
+	// branch, remote). It never contains secrets and never changes the code.
+	Details map[string]any
 	Err     error
 }
 

@@ -71,28 +71,9 @@ func setupRepoPair(t *testing.T) (remote, work string) {
 	return remote, work
 }
 
-func TestIsOwnedBranch(t *testing.T) {
-	cases := []struct {
-		branch, prefix string
-		want           bool
-	}{
-		{"trending/2026-10-31", "trending/", true},
-		{"trending/2026-10-31", "", true}, // empty prefix -> default "trending/"
-		{"bot/2026-10-31", "bot/", true},
-		{"main", "trending/", false},
-		{"feature/x", "trending/", false},
-		{"release/v1", "trending/", false},
-	}
-	for _, c := range cases {
-		if got := IsOwnedBranch(c.branch, c.prefix); got != c.want {
-			t.Errorf("IsOwnedBranch(%q, %q) = %v, want %v", c.branch, c.prefix, got, c.want)
-		}
-	}
-}
-
-// C1: a branch rebuilt from base is not a descendant of the previous push, so a
-// plain push fails; force-with-lease must replace the remote branch cleanly.
-func TestPushForceWithLeaseReplacesOwnBranch(t *testing.T) {
+// The automation never rewrites a branch: a rerun appends a commit, so a plain
+// push stays a fast-forward.
+func TestPushAppendsOnExistingBranch(t *testing.T) {
 	remote, work := setupRepoPair(t)
 	ctx := context.Background()
 	g := New(work)
@@ -102,30 +83,20 @@ func TestPushForceWithLeaseReplacesOwnBranch(t *testing.T) {
 	if err := g.Push(ctx, "origin", "trending/2026-10-31", ""); err != nil {
 		t.Fatalf("initial push: %v", err)
 	}
-	first := refSHA(t, remote, "trending/2026-10-31")
+	base := refCount(t, remote, "main")
 
-	// Simulate a same-date rerun: fetch, rebuild the branch from origin/main and
-	// commit different content, then push again.
-	if err := g.Fetch(ctx, "origin"); err != nil {
-		t.Fatalf("fetch: %v", err)
-	}
-	gitRun(t, work, "switch", "-C", "trending/2026-10-31", "origin/main")
 	commitFile(t, work, "digests/2026-10-31.md", "B\n", "B")
-	if err := g.PushForceWithLease(ctx, "origin", "trending/2026-10-31", ""); err != nil {
-		t.Fatalf("force-with-lease push: %v", err)
+	if err := g.Push(ctx, "origin", "trending/2026-10-31", ""); err != nil {
+		t.Fatalf("append push: %v", err)
 	}
-	second := refSHA(t, remote, "trending/2026-10-31")
-	if second == first {
-		t.Fatal("remote branch was not replaced")
-	}
-	if got, want := refCount(t, remote, "trending/2026-10-31"), refCount(t, remote, "main")+1; got != want {
-		t.Fatalf("branch commits = %d, want %d (force replaces, not stacks)", got, want)
+	if got, want := refCount(t, remote, "trending/2026-10-31"), base+2; got != want {
+		t.Fatalf("branch commits = %d, want %d (append, not replace)", got, want)
 	}
 }
 
-// C1 safety: force-with-lease must refuse to overwrite commits pushed by someone
-// else after our last fetch.
-func TestPushForceWithLeaseRefusesWhenRemoteMoved(t *testing.T) {
+// A push rejected because the remote moved must be recognizable, so the caller
+// can fetch+rebase+retry instead of surfacing a dead end.
+func TestPushRejectedWhenRemoteMoved(t *testing.T) {
 	remote, work := setupRepoPair(t)
 	ctx := context.Background()
 	g := New(work)
@@ -135,25 +106,76 @@ func TestPushForceWithLeaseRefusesWhenRemoteMoved(t *testing.T) {
 	if err := g.Push(ctx, "origin", "trending/2026-10-31", ""); err != nil {
 		t.Fatalf("initial push: %v", err)
 	}
+	base := refCount(t, remote, "main")
 
-	// A different actor pushes another commit to the same branch.
+	// Another actor appends first.
 	other := filepath.Join(t.TempDir(), "other")
 	gitRun(t, "", "clone", remote, other)
 	gitRun(t, other, "config", "user.name", "other")
 	gitRun(t, other, "config", "user.email", "other@example.com")
 	gitRun(t, other, "switch", "trending/2026-10-31")
-	commitFile(t, other, "digests/2026-10-31.md", "theirs\n", "theirs")
+	commitFile(t, other, "digests/2026-10-31-notes.md", "theirs\n", "theirs")
 	gitRun(t, other, "push", "origin", "trending/2026-10-31")
-	theirs := refSHA(t, remote, "trending/2026-10-31")
 
-	// Local rebuild WITHOUT fetching: our remote-tracking ref still points at the
-	// old commit, so the lease no longer matches the (moved) remote.
-	gitRun(t, work, "switch", "-C", "trending/2026-10-31", "origin/main")
 	commitFile(t, work, "digests/2026-10-31.md", "ours\n", "ours")
-	if err := g.PushForceWithLease(ctx, "origin", "trending/2026-10-31", ""); err == nil {
-		t.Fatal("force-with-lease must be rejected when the remote branch moved after our fetch")
+	err := g.Push(ctx, "origin", "trending/2026-10-31", "")
+	if err == nil {
+		t.Fatal("push must be rejected after the remote moved")
 	}
-	if got := refSHA(t, remote, "trending/2026-10-31"); got != theirs {
-		t.Fatalf("remote branch was clobbered: got %s, want %s", got, theirs)
+	if !PushRejected(err) {
+		t.Fatalf("PushRejected = false for %v", err)
+	}
+
+	// The documented recovery path: fetch, rebase onto the remote, push again.
+	if err := g.Fetch(ctx, "origin"); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if err := g.PullRebase(ctx, "origin", "trending/2026-10-31"); err != nil {
+		t.Fatalf("pull --rebase: %v", err)
+	}
+	if err := g.Push(ctx, "origin", "trending/2026-10-31", ""); err != nil {
+		t.Fatalf("push after rebase: %v", err)
+	}
+	if got, want := refCount(t, remote, "trending/2026-10-31"), base+3; got != want {
+		t.Fatalf("branch commits = %d, want %d (both sides preserved)", got, want)
+	}
+}
+
+func TestClassifyPushFailure(t *testing.T) {
+	cases := []struct {
+		stderr string
+		want   string
+	}{
+		{"! [rejected] trending/x -> trending/x (non-fast-forward)", "non-fast-forward"},
+		{"! [rejected] trending/x -> trending/x (stale info)", "stale-lease"},
+		{"git@github.com: Permission denied (publickey).", "auth"},
+		{"remote: error: GH006: Protected branch update failed", "protected"},
+		{"remote: error: hook declined to update refs/heads/x", "hook"},
+		{"error: pathspec 'trending' did not match any files", "pathspec"},
+		{"fatal: something unexpected", "unknown"},
+	}
+	for _, c := range cases {
+		if got := ClassifyPushFailure(c.stderr); got != c.want {
+			t.Errorf("ClassifyPushFailure(%q) = %q, want %q", c.stderr, got, c.want)
+		}
+	}
+}
+
+func TestHasRef(t *testing.T) {
+	_, work := setupRepoPair(t)
+	ctx := context.Background()
+	g := New(work)
+
+	if ok, err := g.HasRef(ctx, "refs/heads/main"); err != nil || !ok {
+		t.Fatalf("refs/heads/main = %v, %v", ok, err)
+	}
+	if ok, err := g.HasRef(ctx, "refs/heads/nope"); err != nil || ok {
+		t.Fatalf("missing ref = %v, %v (err must be nil)", ok, err)
+	}
+	if err := g.Fetch(ctx, "origin"); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if ok, err := g.HasRef(ctx, "refs/remotes/origin/main"); err != nil || !ok {
+		t.Fatalf("refs/remotes/origin/main = %v, %v", ok, err)
 	}
 }
