@@ -113,10 +113,9 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		outDir = render.OutputRoot(cfg.Output.Dir)
 	}
 
-	period := in.Period
-	if period == "" {
-		period = "daily"
-	}
+	// Normalize the period here so both the digest and the branch/artifact paths
+	// agree (PeriodOf maps anything outside daily|weekly|monthly to daily).
+	period := render.PeriodOf(digest.Digest{Period: in.Period})
 	coreV := ipc.Version
 	genAt := time.Now().UTC()
 	d := digest.Digest{
@@ -132,8 +131,20 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		Repos:           repoDigests,
 	}
 	d.ContentHash = render.ContentHash(d)
+	name := render.NameOf(period, d.Date)
 
-	files, err := render.Build(d, []digest.Digest{d}, 90, outDir)
+	// Index history: scan the checked-out branch for prior digests so index.md
+	// accumulates instead of being rewritten to a single day. The repo is the
+	// source of truth, so read from cfg.Repo.Path (dry runs may have no cfg).
+	limits := map[string]int{"daily": 90, "weekly": 12, "monthly": 12}
+	historyRoot := outDir
+	if cfg != nil && cfg.Repo.Path != "" {
+		historyRoot = filepath.Join(cfg.Repo.Path, outDir)
+	}
+	history, _ := render.ListDigests(historyRoot, limits)
+	merged := mergeDigests(history, d)
+
+	files, err := render.Build(d, merged, limits, outDir)
 	if err != nil {
 		return res, err
 	}
@@ -184,7 +195,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if prefix == "" {
 		prefix = "trending/"
 	}
-	branch := prefix + d.Date
+	branch := prefix + period + "/" + name
 
 	// PR lifecycle pre-check, before any git work:
 	//   merged            -> the date is done, skip;
@@ -275,7 +286,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		}
 	}
 	if changed {
-		if err := g.Commit(ctx, commitMessage(cfg, d.Date), cfg.Repo.AuthorName, cfg.Repo.AuthorEmail); err != nil {
+		if err := g.Commit(ctx, commitMessage(cfg, period, name), cfg.Repo.AuthorName, cfg.Repo.AuthorEmail); err != nil {
 			return res, err
 		}
 		if sha, err := g.HeadSHA(ctx); err == nil {
@@ -387,8 +398,9 @@ var newPRClientFor = func(ctx context.Context, g *gitx.Git, cfg *config.Config, 
 }
 
 func openPR(ctx context.Context, client prAPI, cfg *config.Config, branch string, d digest.Digest) (string, error) {
-	title := fmt.Sprintf("trending %s", d.Date)
-	bodyText := fmt.Sprintf("automated trending digest for %s (%d repos).", d.Date, d.Count)
+	period := render.PeriodOf(d)
+	title := fmt.Sprintf("trending %s %s", period, d.Date)
+	bodyText := fmt.Sprintf("automated %s trending digest for %s (%d repos).", period, d.Date, d.Count)
 
 	existing, err := client.FindOpen(ctx, branch, cfg.Repo.BaseBranch)
 	if err != nil {
@@ -420,15 +432,34 @@ func openPR(ctx context.Context, client prAPI, cfg *config.Config, branch string
 	return p.HTMLURL, nil
 }
 
-func commitMessage(cfg *config.Config, date string) string {
+func commitMessage(cfg *config.Config, period, name string) string {
 	msg := strings.TrimSpace(cfg.Output.CommitMessage)
 	if msg == "" {
-		return "chore(trending): " + date
+		return "chore(trending): " + period + " " + name
 	}
 	if strings.Contains(msg, "%s") {
-		return fmt.Sprintf(msg, date)
+		return fmt.Sprintf(msg, name)
 	}
 	return msg
+}
+
+// mergeDigests merges today's digest into the history for the index, deduping by
+// period+date so a same-day rerun updates a row instead of adding a duplicate.
+// today wins on a key collision.
+func mergeDigests(history []digest.Digest, today digest.Digest) []digest.Digest {
+	key := func(d digest.Digest) string { return render.PeriodOf(d) + "\x00" + d.Date }
+	seen := map[string]bool{key(today): true}
+	out := make([]digest.Digest, 0, len(history)+1)
+	out = append(out, today)
+	for _, d := range history {
+		k := key(d)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, d)
+	}
+	return out
 }
 
 func languagesOf(repos []digest.RepoSnapshot) []string {

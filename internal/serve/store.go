@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	contract "github.com/morehao/trendradar/contract"
 	"github.com/morehao/trendradar/internal/ipc"
+	"github.com/morehao/trendradar/internal/render"
 )
 
 // ErrNotFound is returned when a digest for the requested date is absent.
@@ -18,7 +20,9 @@ var ErrNotFound = errors.New("digest not found")
 
 var dateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
-// Store reads digests from a directory laid out as <root>/<date>/<date>.json.
+// Store reads digests from a directory laid out as
+// <root>/<period>/<bucket>/<name>.json, where (bucket, name) are derived from
+// (period, date) by the shared render helpers so serve and write never diverge.
 type Store struct {
 	root string
 }
@@ -31,17 +35,25 @@ func NewStore(root string) *Store {
 	return &Store{root: root}
 }
 
-func (s *Store) path(date string) string {
-	return filepath.Join(s.root, date, date+".json")
+// path resolves the on-disk file for (period, date). date is always the period
+// end date (YYYY-MM-DD); the bucket and filename are period-specific.
+func (s *Store) path(period, date string) string {
+	return filepath.Join(s.root, period, render.BucketOf(period, date), render.NameOf(period, date)+".json")
 }
 
-// Digest loads one day's digest normalized to the v2 contract shape. Historical
-// v1 files are upgraded on read (schema:2, contentHashAlgo legacy, hash kept).
-func (s *Store) Digest(date string) (*contract.Digest, error) {
+// Digest loads one period's digest normalized to the v2 contract shape.
+// Historical v1 files are upgraded on read (schema:2, contentHashAlgo legacy,
+// hash kept).
+func (s *Store) Digest(period, date string) (*contract.Digest, error) {
 	if !dateRe.MatchString(date) {
 		return nil, ErrNotFound
 	}
-	data, err := os.ReadFile(s.path(date))
+	return readDigestFile(s.path(period, date))
+}
+
+// readDigestFile reads a digest JSON file, normalizing v1 files to the v2 shape.
+func readDigestFile(p string) (*contract.Digest, error) {
+	data, err := os.ReadFile(p)
 	if os.IsNotExist(err) {
 		return nil, ErrNotFound
 	}
@@ -70,6 +82,7 @@ func (s *Store) Digest(date string) (*contract.Digest, error) {
 // ManifestEntry is one row of the manifest.
 type ManifestEntry struct {
 	Date            string `json:"date"`
+	Period          string `json:"period"`
 	ContentHash     string `json:"contentHash"`
 	Schema          int    `json:"schema"`
 	ContentHashAlgo string `json:"contentHashAlgo"`
@@ -82,26 +95,70 @@ type Manifest struct {
 	Entries     []ManifestEntry `json:"entries"`
 }
 
-// Manifest scans the digests directory.
-func (s *Store) Manifest() (Manifest, error) {
-	entries, err := os.ReadDir(s.root)
+// Manifest scans the digests directory. An empty period scans all periods; a
+// non-empty one restricts the scan to that period.
+func (s *Store) Manifest(period string) (Manifest, error) {
+	var periods []string
+	if period == "" {
+		periods = []string{render.PeriodDaily, render.PeriodWeekly, render.PeriodMonthly}
+	} else {
+		periods = []string{period}
+	}
+
+	out := []ManifestEntry{}
+	for _, p := range periods {
+		entries, err := s.scanPeriod(p)
+		if err != nil {
+			return Manifest{}, err
+		}
+		out = append(out, entries...)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Date != out[j].Date {
+			return out[i].Date > out[j].Date
+		}
+		return out[i].Period > out[j].Period
+	})
+	return Manifest{CoreVersion: ipc.Version, Entries: out}, nil
+}
+
+// scanPeriod walks root/<period>/<bucket>/ and reads each matching digest file.
+func (s *Store) scanPeriod(period string) ([]ManifestEntry, error) {
+	periodDir := filepath.Join(s.root, period)
+	buckets, err := os.ReadDir(periodDir)
 	if os.IsNotExist(err) {
-		return Manifest{CoreVersion: ipc.Version, Entries: []ManifestEntry{}}, nil
+		return nil, nil
 	}
 	if err != nil {
-		return Manifest{}, err
+		return nil, err
 	}
-	out := make([]ManifestEntry, 0, len(entries))
-	for _, e := range entries {
-		if !e.IsDir() || !dateRe.MatchString(e.Name()) {
+	var out []ManifestEntry
+	for _, b := range buckets {
+		if !b.IsDir() {
 			continue
 		}
-		d, err := s.Digest(e.Name())
+		dir := filepath.Join(periodDir, b.Name())
+		files, err := os.ReadDir(dir)
 		if err != nil {
 			continue
 		}
-		out = append(out, ManifestEntry{Date: d.Date, ContentHash: d.ContentHash, Schema: d.Schema, ContentHashAlgo: d.ContentHashAlgo, Degraded: d.Degraded})
+		for _, f := range files {
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
+				continue
+			}
+			d, err := readDigestFile(filepath.Join(dir, f.Name()))
+			if err != nil {
+				continue
+			}
+			out = append(out, ManifestEntry{
+				Date:            d.Date,
+				Period:          period,
+				ContentHash:     d.ContentHash,
+				Schema:          d.Schema,
+				ContentHashAlgo: d.ContentHashAlgo,
+				Degraded:        d.Degraded,
+			})
+		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Date > out[j].Date })
-	return Manifest{CoreVersion: ipc.Version, Entries: out}, nil
+	return out, nil
 }

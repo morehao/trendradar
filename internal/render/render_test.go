@@ -81,9 +81,13 @@ func TestMarkdownGolden(t *testing.T) {
 	}
 }
 
+func indexLimits() map[string]int {
+	return map[string]int{"daily": 90, "weekly": 12, "monthly": 12}
+}
+
 func TestBuildProducesThreeFiles(t *testing.T) {
 	d := fixtureDigest()
-	files, err := Build(d, []digest.Digest{d}, 90, "digests")
+	files, err := Build(d, []digest.Digest{d}, indexLimits(), "digests")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +98,7 @@ func TestBuildProducesThreeFiles(t *testing.T) {
 	for _, f := range files {
 		paths[f.Path] = true
 	}
-	for _, want := range []string{"digests/2026-10-30/2026-10-30.md", "digests/2026-10-30/2026-10-30.json", "digests/index.md"} {
+	for _, want := range []string{"digests/daily/2026-10/2026-10-30.md", "digests/daily/2026-10/2026-10-30.json", "digests/index.md"} {
 		if !paths[want] {
 			t.Fatalf("missing %s in %v", want, paths)
 		}
@@ -105,7 +109,7 @@ func TestBuildProducesThreeFiles(t *testing.T) {
 // `git add <output.dir>` stages exactly what was written.
 func TestBuildHonorsOutputDir(t *testing.T) {
 	d := fixtureDigest()
-	files, err := Build(d, []digest.Digest{d}, 90, "trending")
+	files, err := Build(d, []digest.Digest{d}, indexLimits(), "trending")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,13 +121,81 @@ func TestBuildHonorsOutputDir(t *testing.T) {
 			index = f.Data
 		}
 	}
-	for _, want := range []string{"trending/2026-10-30/2026-10-30.md", "trending/2026-10-30/2026-10-30.json", "trending/index.md"} {
+	for _, want := range []string{"trending/daily/2026-10/2026-10-30.md", "trending/daily/2026-10/2026-10-30.json", "trending/index.md"} {
 		if !paths[want] {
 			t.Fatalf("missing %s in %v", want, paths)
 		}
 	}
-	if !strings.Contains(string(index), "(trending/2026-10-30/2026-10-30.md)") {
+	if !strings.Contains(string(index), "(trending/daily/2026-10/2026-10-30.md)") {
 		t.Fatalf("index link not rewritten to output dir:\n%s", index)
+	}
+}
+
+func TestBuildWeeklyPath(t *testing.T) {
+	d := fixtureDigest()
+	d.Period = "weekly"
+	d.Date = "2026-11-01" // Sunday -> ISO 2026-W44
+	files, err := Build(d, []digest.Digest{d}, indexLimits(), "digests")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, f := range files {
+		paths[f.Path] = true
+	}
+	for _, want := range []string{"digests/weekly/2026/2026-W44.md", "digests/weekly/2026/2026-W44.json", "digests/index.md"} {
+		if !paths[want] {
+			t.Fatalf("missing %s in %v", want, paths)
+		}
+	}
+}
+
+func TestBuildMonthlyPath(t *testing.T) {
+	d := fixtureDigest()
+	d.Period = "monthly"
+	d.Date = "2026-10-31"
+	files, err := Build(d, []digest.Digest{d}, indexLimits(), "digests")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, f := range files {
+		paths[f.Path] = true
+	}
+	for _, want := range []string{"digests/monthly/2026/2026-10.md", "digests/monthly/2026/2026-10.json", "digests/index.md"} {
+		if !paths[want] {
+			t.Fatalf("missing %s in %v", want, paths)
+		}
+	}
+}
+
+func TestIndexSections(t *testing.T) {
+	daily := []digest.Digest{
+		{Date: "2026-10-30", Period: "daily", Count: 10},
+		{Date: "2026-10-31", Period: "daily", Count: 11},
+	}
+	weekly := digest.Digest{Date: "2026-11-01", Period: "weekly", Count: 12}
+	monthly := digest.Digest{Date: "2026-10-31", Period: "monthly", Count: 13}
+	out := string(Index(append(append([]digest.Digest{}, daily...), weekly, monthly), indexLimits(), "digests"))
+
+	for _, want := range []string{"## 日榜", "## 周榜", "## 月榜"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing section %q:\n%s", want, out)
+		}
+	}
+	// daily newest first with the right leaf links.
+	if !strings.Contains(out, "(digests/daily/2026-10/2026-10-31.md)") || !strings.Contains(out, "(digests/daily/2026-10/2026-10-30.md)") {
+		t.Fatalf("daily links wrong:\n%s", out)
+	}
+	if !strings.Contains(out, "(digests/weekly/2026/2026-W44.md)") {
+		t.Fatalf("weekly link wrong:\n%s", out)
+	}
+	if !strings.Contains(out, "(digests/monthly/2026/2026-10.md)") {
+		t.Fatalf("monthly link wrong:\n%s", out)
+	}
+	// The newest daily (2026-10-31) must appear before the older one.
+	if strings.Index(out, "2026-10-31.md") > strings.Index(out, "2026-10-30.md") {
+		t.Fatalf("daily section not newest-first:\n%s", out)
 	}
 }
 

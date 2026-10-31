@@ -26,24 +26,30 @@ func JSON(d digest.Digest) ([]byte, error) {
 }
 
 // Build returns the markdown, json and index files for a digest. indexDigests
-// is the set of digests to list on the index page (newest first by date).
+// is the set of digests to list on the index page (newest first, grouped by
+// period). limits caps how many entries each period keeps on the index.
+//
+// Artifacts live at root/<period>/<bucket>/<name>.{md,json}; see PeriodOf,
+// BucketOf and NameOf for the per-period rules.
 //
 // outDir is the digest root inside the repository (config.output.dir). It MUST
 // match what the caller stages with `git add`, otherwise a run writes files
 // under one directory and stages another. Empty means "digests". Every returned
 // path is relative to the repository root.
-func Build(d digest.Digest, indexDigests []digest.Digest, indexLimit int, outDir string) ([]File, error) {
+func Build(d digest.Digest, indexDigests []digest.Digest, limits map[string]int, outDir string) ([]File, error) {
 	root := OutputRoot(outDir)
 	md := Markdown(d)
 	js, err := JSON(d)
 	if err != nil {
 		return nil, err
 	}
-	dir := path.Join(root, d.Date)
+	period := PeriodOf(d)
+	dir := path.Join(root, period, BucketOf(period, d.Date))
+	name := NameOf(period, d.Date)
 	return []File{
-		{Path: path.Join(dir, d.Date+".md"), Data: md},
-		{Path: path.Join(dir, d.Date+".json"), Data: js},
-		{Path: path.Join(root, "index.md"), Data: Index(indexDigests, indexLimit, root)},
+		{Path: path.Join(dir, name+".md"), Data: md},
+		{Path: path.Join(dir, name+".json"), Data: js},
+		{Path: path.Join(root, "index.md"), Data: Index(indexDigests, limits, root)},
 	}, nil
 }
 
