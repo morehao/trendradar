@@ -82,6 +82,19 @@ type RunResult struct {
 	ContentHash *string        `json:"contentHash,omitempty"`
 	Error       *ErrorInfo     `json:"error,omitempty"`
 	Warnings    []string       `json:"warnings,omitempty"`
+	Usage       *Usage         `json:"usage,omitempty"`
+}
+
+type Usage struct {
+	PromptTokens     int  `json:"promptTokens"`
+	CompletionTokens int  `json:"completionTokens"`
+	TotalTokens      int  `json:"totalTokens"`
+	CachedTokens     int  `json:"cachedTokens"`
+	UsageKnown       bool `json:"usageKnown"`
+	Calls            int  `json:"calls"`
+	Retries          int  `json:"retries"`
+	Batches          int  `json:"batches"`
+	CacheHits        int  `json:"cacheHits"`
 }
 
 type StateRun struct {

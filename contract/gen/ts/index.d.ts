@@ -59,6 +59,20 @@ export interface RunResult {
   "contentHash"?: string;
   "error"?: ErrorInfo;
   "warnings"?: Array<string>;
+  "usage"?: Usage;
+  [k: string]: unknown;
+}
+
+export interface Usage {
+  "promptTokens": number;
+  "completionTokens": number;
+  "totalTokens": number;
+  "cachedTokens": number;
+  "usageKnown": boolean;
+  "calls": number;
+  "retries": number;
+  "batches": number;
+  "cacheHits": number;
   [k: string]: unknown;
 }
 
