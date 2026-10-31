@@ -90,6 +90,7 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("%w: parse yaml: %v", ErrInvalid, err)
 	}
+	c.expandEnv()
 	c.withDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -104,6 +105,22 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	return nil
+}
+
+// expandEnv substitutes ${VAR} in string fields so secrets can live in a local
+// .env file instead of committed config.yaml.
+func (c *Config) expandEnv() {
+	c.Model.Provider = os.ExpandEnv(c.Model.Provider)
+	c.Model.Name = os.ExpandEnv(c.Model.Name)
+	c.Model.BaseURL = os.ExpandEnv(c.Model.BaseURL)
+	c.Model.APIKey = os.ExpandEnv(c.Model.APIKey)
+	c.Repo.Path = os.ExpandEnv(c.Repo.Path)
+	c.Repo.Remote = os.ExpandEnv(c.Repo.Remote)
+	c.Repo.BaseBranch = os.ExpandEnv(c.Repo.BaseBranch)
+	c.Repo.AuthorName = os.ExpandEnv(c.Repo.AuthorName)
+	c.Repo.AuthorEmail = os.ExpandEnv(c.Repo.AuthorEmail)
+	c.Output.Dir = os.ExpandEnv(c.Output.Dir)
+	c.Output.BranchPrefix = os.ExpandEnv(c.Output.BranchPrefix)
 }
 
 func (c *Config) withDefaults() {

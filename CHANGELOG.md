@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Local secret loading: `trendradar` auto-loads nearest `.env.local` / `.env`
+  (or `TRENDRADAR_ENV_FILE`); real env wins. `config.yaml` supports `${VAR}`
+  expansion, so API keys stay out of the repo. `.env.example` is committed.
 - Summary prompt v2: each request now includes language, stars, stars-in-period
   and rank, with explicit style rules and few-shot examples; default temperature
   is 0.2 when unset. `PromptVersion` is bumped to `v2`.

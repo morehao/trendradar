@@ -12,21 +12,20 @@ import (
 	"unicode/utf8"
 
 	"github.com/morehao/trendradar/internal/digest"
+	"github.com/morehao/trendradar/internal/envfile"
 	"github.com/morehao/trendradar/internal/model"
 )
 
 // TestEvalSummaries is a manual, live-model evaluation harness. It is excluded
-// from normal CI by the `eval` build tag. Run it with:
+// from normal CI by the `eval` build tag. Put keys in a git-ignored .env and run:
 //
-//	TRENDRADAR_EVAL_PROVIDER=deepseek \
-//	TRENDRADAR_EVAL_MODEL=deepseek-chat \
-//	TRENDRADAR_EVAL_BASE_URL=https://api.deepseek.com/v1 \
-//	TRENDRADAR_EVAL_API_KEY=... \
-//	go test -tags eval ./internal/summarize -run TestEvalSummaries -v
+//	make test-eval
+//	# or: go test -tags eval ./internal/summarize -run TestEvalSummaries -v
 //
-// Quality scores (具体性 / 事实错误) still need a human reviewer; this harness
-// reports the automatic metrics and can dump the summaries for review.
+// It reads TRENDRADAR_EVAL_PROVIDER/MODEL/BASE_URL/API_KEY (after loading the
+// nearest .env), reports automatic metrics, and can dump summaries for review.
 func TestEvalSummaries(t *testing.T) {
+	_, _ = envfile.ApplyDefault(".")
 	input := os.Getenv("TRENDRADAR_EVAL_INPUT")
 	if input == "" {
 		input = "testdata/summary-eval/repos.json"

@@ -40,7 +40,34 @@ trending/
 ```bash
 make build          # -> bin/trendradar
 make test           # go vet + go test
+make test-eval      # 真实模型评估（读取 .env 里的 TRENDRADAR_EVAL_*）
 ```
+
+## 本地密钥与测试
+
+不要把 API key 写进 config.yaml。复制 `.env.example` 为 `.env`（已被
+`.gitignore` 忽略）并填入：
+
+```dotenv
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_MODEL=deepseek-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+```
+
+`trendradar` 启动时会自动向上查找最近的 `.env.local` / `.env`，也可用
+`TRENDRADAR_ENV_FILE=/path/to/file` 指定。真实 shell 环境变量优先于文件。
+config.yaml 支持 `${VAR}` 引用，例如：
+
+```yaml
+model:
+  provider: deepseek
+  name: ${DEEPSEEK_MODEL}
+  baseURL: ${DEEPSEEK_BASE_URL}
+  apiKey: ${DEEPSEEK_API_KEY}
+```
+
+评估 harness 也用同一套变量：`.env` 里放 `TRENDRADAR_EVAL_PROVIDER/MODEL/
+BASE_URL/API_KEY`，然后 `make test-eval`。
 
 ## 目录
 
