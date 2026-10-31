@@ -22,6 +22,48 @@ type Config struct {
 	Output    OutputConfig    `yaml:"output"`
 	Schedule  ScheduleConfig  `yaml:"schedule"`
 	Summarize SummarizeConfig `yaml:"summarize"`
+	Releases  ReleasesConfig  `yaml:"releases"`
+}
+
+// ReleasesConfig controls the optional repo-release subscription stage. The
+// subscription list itself lives in a separate subscriptions.yaml managed by
+// `trendradar subscribe`; this struct only holds global behaviour knobs.
+type ReleasesConfig struct {
+	Enabled           bool   `yaml:"enabled"`
+	SubscriptionsFile string `yaml:"subscriptionsFile"`
+	IncludePrerelease bool   `yaml:"includePrerelease"`
+	IncludeDrafts     bool   `yaml:"includeDrafts"`
+
+	// Pointers so an absent key defaults to true while an explicit false is
+	// still honoured (plain bool cannot tell "unset" from "false").
+	FallbackToTags     *bool `yaml:"fallbackToTags"`
+	BaselineOnFirstRun *bool `yaml:"baselineOnFirstRun"`
+
+	BackfillLatest int    `yaml:"backfillLatest" validate:"omitempty,gte=0"`
+	PerRepoLimit   int    `yaml:"perRepoLimit" validate:"omitempty,gte=1,lte=20"`
+	MaxNotesChars  int    `yaml:"maxNotesChars" validate:"omitempty,gte=500,lte=20000"`
+	Concurrency    int    `yaml:"concurrency" validate:"omitempty,gte=1,lte=8"`
+	TimeoutSeconds int    `yaml:"timeoutSeconds" validate:"omitempty,gte=1,lte=60"`
+	BudgetSeconds  int    `yaml:"budgetSeconds" validate:"omitempty,gte=1,lte=300"`
+	MaxPages       int    `yaml:"maxPages" validate:"omitempty,gte=1,lte=50"`
+	OutputDir      string `yaml:"outputDir"`
+	Period         string `yaml:"period" validate:"omitempty,oneof=daily weekly monthly"`
+}
+
+// FallbackToTagsEnabled reports the effective fallbackToTags (default true).
+func (r ReleasesConfig) FallbackToTagsEnabled() bool {
+	if r.FallbackToTags == nil {
+		return true
+	}
+	return *r.FallbackToTags
+}
+
+// BaselineOnFirstRunEnabled reports the effective baselineOnFirstRun (default true).
+func (r ReleasesConfig) BaselineOnFirstRunEnabled() bool {
+	if r.BaselineOnFirstRun == nil {
+		return true
+	}
+	return *r.BaselineOnFirstRun
 }
 
 // SummarizeConfig controls summary generation and the optional external-context
@@ -134,6 +176,8 @@ func (c *Config) expandEnv() {
 	c.Repo.AuthorEmail = os.ExpandEnv(c.Repo.AuthorEmail)
 	c.Output.Dir = os.ExpandEnv(c.Output.Dir)
 	c.Output.BranchPrefix = os.ExpandEnv(c.Output.BranchPrefix)
+	c.Releases.SubscriptionsFile = os.ExpandEnv(c.Releases.SubscriptionsFile)
+	c.Releases.OutputDir = os.ExpandEnv(c.Releases.OutputDir)
 }
 
 func (c *Config) withDefaults() {
@@ -185,5 +229,32 @@ func (c *Config) withDefaults() {
 		} else {
 			c.Summarize.EnrichBudgetSeconds = 8
 		}
+	}
+	if c.Releases.SubscriptionsFile == "" {
+		c.Releases.SubscriptionsFile = "subscriptions.yaml"
+	}
+	if c.Releases.PerRepoLimit == 0 {
+		c.Releases.PerRepoLimit = 5
+	}
+	if c.Releases.MaxNotesChars == 0 {
+		c.Releases.MaxNotesChars = 4000
+	}
+	if c.Releases.Concurrency == 0 {
+		c.Releases.Concurrency = 3
+	}
+	if c.Releases.TimeoutSeconds == 0 {
+		c.Releases.TimeoutSeconds = 20
+	}
+	if c.Releases.BudgetSeconds == 0 {
+		c.Releases.BudgetSeconds = 60
+	}
+	if c.Releases.MaxPages == 0 {
+		c.Releases.MaxPages = 10
+	}
+	if c.Releases.OutputDir == "" {
+		c.Releases.OutputDir = "releases"
+	}
+	if c.Releases.Period == "" {
+		c.Releases.Period = "daily"
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/morehao/trendradar/internal/app"
@@ -19,6 +20,8 @@ import (
 	"github.com/morehao/trendradar/internal/ingest"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
+	"github.com/morehao/trendradar/internal/releasewatch"
+	"github.com/morehao/trendradar/internal/subscription"
 )
 
 // runRun implements `trendradar run`. In --json mode it always emits a contract
@@ -57,9 +60,10 @@ func runRun(args []string) error {
 // type yet (RunResult declares additionalProperties, so this stays compatible).
 type runEnvelope struct {
 	ipc.RunResult
-	SkipReason string            `json:"skipReason,omitempty"`
-	Stages     []app.Stage       `json:"stages,omitempty"`
-	Enrich     *app.EnrichReport `json:"enrich,omitempty"`
+	SkipReason string             `json:"skipReason,omitempty"`
+	Stages     []app.Stage        `json:"stages,omitempty"`
+	Enrich     *app.EnrichReport  `json:"enrich,omitempty"`
+	Releases   *app.ReleaseReport `json:"releases,omitempty"`
 }
 
 func runRunExec(args []string, started time.Time, asJSON *bool) error {
@@ -146,12 +150,17 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	if err != nil {
 		return err
 	}
+	relOpts, err := buildReleasesOptions(cfg, *cfgPath)
+	if err != nil {
+		return err
+	}
 	result, err := app.Run(context.Background(), cfg, in, app.Options{
 		DryRun:   *dryRun,
 		Token:    firstNonEmpty(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
 		Provider: provider,
 		Trigger:  tr,
 		Enricher: enricher,
+		Releases: relOpts,
 	})
 	if err != nil {
 		return err
@@ -187,6 +196,32 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			DurationMs:       result.Report.TotalMs,
 			SummaryDegraded:  result.Report.SummaryDegraded,
 			Enrich:           result.Report.Enrich,
+			Stage:            "trending",
+		}
+		if err := app.AppendUsageLog(repoPath, rec); err != nil {
+			fmt.Fprintf(os.Stderr, "warn: usage log: %v\n", err)
+		}
+	}
+
+	if !*dryRun && result.Report.Releases != nil && result.Report.Releases.UsageKnown {
+		repoPath := ""
+		providerName, modelName := "", ""
+		if cfg != nil {
+			repoPath = cfg.Repo.Path
+			providerName, modelName = cfg.Model.Provider, cfg.Model.Name
+		}
+		rr := result.Report.Releases
+		rec := app.UsageRecord{
+			Time:             time.Now().UTC(),
+			Provider:         providerName,
+			Model:            modelName,
+			Stage:            "releases",
+			PromptTokens:     rr.PromptTokens,
+			CompletionTokens: rr.CompletionTokens,
+			TotalTokens:      rr.TotalTokens,
+			UsageKnown:       true,
+			Calls:            rr.Calls,
+			DurationMs:       rr.DurationMs,
 		}
 		if err := app.AppendUsageLog(repoPath, rec); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: usage log: %v\n", err)
@@ -211,6 +246,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			SkipReason: result.SkipReason,
 			Stages:     result.Report.Stages,
 			Enrich:     result.Report.Enrich,
+			Releases:   result.Report.Releases,
 		}
 		if result.Digest.ContentHash != "" {
 			ch := result.Digest.ContentHash
@@ -296,6 +332,36 @@ func buildEnricher(cfg *config.Config, dryRun bool) (*enrich.Enricher, error) {
 		CachePath:   cachePath,
 		ReadOnly:    dryRun,
 	}, cache), nil
+}
+
+// buildReleasesOptions resolves subscriptions and builds the release fetcher
+// when releases.enabled. It returns nil (stage bypassed) otherwise.
+func buildReleasesOptions(cfg *config.Config, cfgPath string) (*app.ReleasesOptions, error) {
+	if cfg == nil || !cfg.Releases.Enabled {
+		return nil, nil
+	}
+	path, err := subscription.ResolveSubscriptionsPath(cfgPath, cfg.Releases.SubscriptionsFile)
+	if err != nil {
+		return nil, err
+	}
+	store, err := subscription.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	repos := store.List()
+	if len(repos) == 0 {
+		fmt.Fprintf(os.Stderr, "warn: releases enabled but no subscriptions in %s\n", path)
+	}
+	statePath, cachePath := "", ""
+	if cfg.Repo.Path != "" {
+		statePath = releasewatch.StatePath(cfg.Repo.Path)
+		cachePath = filepath.Join(cfg.Repo.Path, ".git", "trendradar-release-cache.json")
+	}
+	client := fetch.NewClient(fetch.Options{
+		Timeout: time.Duration(cfg.Releases.TimeoutSeconds) * time.Second,
+		Token:   firstNonEmpty(os.Getenv("GITHUB_READ_TOKEN"), os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
+	})
+	return &app.ReleasesOptions{Repos: repos, Fetcher: client, StatePath: statePath, CachePath: cachePath}, nil
 }
 
 func selectProvider(cfg *config.Config) (model.Provider, error) {

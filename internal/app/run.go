@@ -20,6 +20,8 @@ import (
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
 	"github.com/morehao/trendradar/internal/pr"
+	"github.com/morehao/trendradar/internal/releasedigest"
+	"github.com/morehao/trendradar/internal/releasewatch"
 	"github.com/morehao/trendradar/internal/render"
 	"github.com/morehao/trendradar/internal/summarize"
 )
@@ -49,6 +51,17 @@ type Options struct {
 	Provider model.Provider   // optional; defaults to the offline Fake
 	Trigger  Trigger          // optional; defaults to TriggerManual
 	Enricher *enrich.Enricher // optional; nil means no external context
+	Releases *ReleasesOptions // optional; nil means no release subscription stage
+}
+
+// ReleasesOptions carries the already-resolved subscription data for the
+// optional releases stage (cmd resolves the subscription file and constructs
+// the fetcher; app only orchestrates).
+type ReleasesOptions struct {
+	Repos     []string
+	Fetcher   releasewatch.Fetcher
+	StatePath string
+	CachePath string
 }
 
 // Result is the outcome of a run.
@@ -220,7 +233,58 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if err != nil {
 		return res, err
 	}
-	res.Digest, res.Files = d, files
+	res.Digest = d
+
+	// Optional repo-release subscription stage. Its artifacts are appended to
+	// the same files list, so one commit/PR carries both trending and releases.
+	var relState *releasewatch.State
+	relStatePath := ""
+	if opts.Releases != nil && cfg != nil && cfg.Releases.Enabled && len(opts.Releases.Repos) > 0 {
+		rc := cfg.Releases
+		relStart := time.Now()
+		ro := releasewatch.Options{
+			Repos:              opts.Releases.Repos,
+			Date:               in.Date,
+			Period:             rc.Period,
+			IncludePrerelease:  rc.IncludePrerelease,
+			IncludeDrafts:      rc.IncludeDrafts,
+			FallbackToTags:     rc.FallbackToTagsEnabled(),
+			BaselineOnFirstRun: rc.BaselineOnFirstRunEnabled(),
+			BackfillLatest:     rc.BackfillLatest,
+			PerRepoLimit:       rc.PerRepoLimit,
+			MaxNotesChars:      rc.MaxNotesChars,
+			MaxPages:           rc.MaxPages,
+			Provider:           provider,
+			ProviderName:       cfg.Model.Provider,
+			ModelName:          cfg.Model.Name,
+			StatePath:          opts.Releases.StatePath,
+			CachePath:          opts.Releases.CachePath,
+			ReadOnly:           opts.DryRun,
+		}
+		drel, st, rrep, rerr := releasewatch.Build(ctx, opts.Releases.Fetcher, ro)
+		relState, relStatePath = st, opts.Releases.StatePath
+		rep.Releases = fromReleaseWatch(rrep)
+		if rerr != nil {
+			rep.Warnings = append(rep.Warnings, "releases: "+rerr.Error())
+		} else if drel.Count > 0 {
+			drel.CoreVersion = ipc.Version
+			drel.GeneratedAt = &genAt
+			drel.ContentHash = releasedigest.ContentHash(drel)
+			hist, _ := render.ListReleaseDigests(historyRoot, rc.OutputDir, limits)
+			mergedRel, todayRel := render.MergeReleaseDigests(hist, drel)
+			relFiles, berr := render.BuildReleases(todayRel, mergedRel, limits, outDir, rc.OutputDir)
+			if berr != nil {
+				rep.Warnings = append(rep.Warnings, "releases render: "+berr.Error())
+			} else {
+				files = append(files, relFiles...)
+			}
+		}
+		rep.Stages = append(rep.Stages, Stage{Name: "releases", DurationMs: since(relStart)})
+	} else if opts.Releases != nil {
+		rep.Releases = &ReleaseReport{Enabled: cfg != nil && cfg.Releases.Enabled, Repos: len(opts.Releases.Repos)}
+	}
+
+	res.Files = files
 
 	if opts.DryRun {
 		rep.TotalMs = since(start)
@@ -380,6 +444,12 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		}
 		if werr != nil {
 			rep.Warnings = append(rep.Warnings, "PR: "+werr.Error())
+		}
+	}
+
+	if relState != nil && relStatePath != "" && !opts.DryRun {
+		if err := relState.Save(relStatePath); err != nil {
+			rep.Warnings = append(rep.Warnings, "release-state: "+err.Error())
 		}
 	}
 

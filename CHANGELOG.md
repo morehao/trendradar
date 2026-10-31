@@ -28,6 +28,21 @@ Optional external-context enrichment (Track B) for more accurate summaries.
   counters. Digests stay `schema:2`; `RepoSnapshot`/`Digest` are unchanged.
 - Eval harness: `TRENDRADAR_EVAL_ENRICH=none|repo|readme` re-runs the 25-repo A/B.
 
+### Added — 仓库发版订阅（releases）
+
+- `internal/subscription` + `trendradar subscribe add|remove|list`: 手动维护订阅列表，
+  存于独立 `subscriptions.yaml`（默认相对 config 文件目录；`--file` 可覆盖），
+  带 `owner/repo` 校验、去重、原子写（0600）；重复 add 幂等，remove 不存在返回非 0。
+- `internal/releasewatch`: 每日增量拉取订阅仓库的新 Release（无 Release 时回退 Tag），
+  按 `id/publishedAt/seenTags` 推进游标；首次可只记基线（`baselineOnFirstRun`）。
+  分页覆盖到越过游标，避免页码边界漏项；`perRepoLimit` 溢出按最旧优先延后到下次。
+- 中文发版摘要：专用 prompt、notes 注入防护（`<RELEASE_NOTES>` 定界）、
+  缓存与单条失败降级（`summarySource=original`），支持 `includePrerelease/drafts`。
+- 渲染 `<output.dir>/releases/<period>/<bucket>/<name>.{md,json}` 与 `releases/index.md`，
+  与 trending 同分支/同一次 PR；同日二次运行按 `repo@id/tag` 并集合并，不覆盖丢条目。
+- 幂等：`render.Comparable` + contentHash；只有发布成功后回写游标。
+- 可观测：`run --json` 增 `releases` 报告块；`trendradar-usage.jsonl` 增 `stage="releases"` 行。
+
 ## 0.4.1
 
 Improve summary accuracy and record per-run token usage; support local `.env`

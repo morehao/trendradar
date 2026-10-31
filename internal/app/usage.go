@@ -26,6 +26,7 @@ type UsageRecord struct {
 	CacheHits        int           `json:"cacheHits"`
 	DurationMs       int64         `json:"durationMs,omitempty"`
 	SummaryDegraded  bool          `json:"summaryDegraded,omitempty"`
+	Stage            string        `json:"stage,omitempty"`
 	Enrich           *EnrichReport `json:"enrich,omitempty"`
 }
 

@@ -27,6 +27,8 @@ func main() {
 		err = runRun(os.Args[2:])
 	case "serve":
 		err = runServe(os.Args[2:])
+	case "subscribe":
+		err = runSubscribe(os.Args[2:])
 	case "config":
 		err = fmt.Errorf("command %q is not implemented yet", os.Args[1])
 	default:
@@ -44,8 +46,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: trendradar <command> [flags]
 
 commands:
-  run       fetch, parse, summarize, render (M2/M3)
-  serve     serve digests over HTTP (M5)
-  config    inspect/validate config
-  version   print version info; add --json for machine-readable output`)
+  run        fetch, parse, summarize, render (M2/M3)
+  serve      serve digests over HTTP (M5)
+  subscribe  manage repo subscriptions (list|add|remove)
+  config     inspect/validate config
+  version    print version info; add --json for machine-readable output`)
 }

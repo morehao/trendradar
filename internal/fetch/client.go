@@ -45,6 +45,9 @@ type Options struct {
 	Timeout       time.Duration // default 10s
 	MaxRetry      int           // total attempts incl. first, default 2
 	RetryInterval time.Duration // default 1s
+	// Token is an optional GitHub token. It only raises the API rate limit for
+	// public repos today; private repos are out of scope.
+	Token string
 }
 
 // Client wraps the HTML and API ghttp clients.
@@ -52,6 +55,7 @@ type Client struct {
 	html      *ghttp.Client
 	api       *ghttp.Client
 	userAgent string
+	token     string
 }
 
 // NewClient builds a Client with sensible defaults applied.
@@ -90,15 +94,20 @@ func NewClient(opts Options) *Client {
 		html:      newHTTP(opts.BaseURL),
 		api:       newHTTP(opts.APIBaseURL),
 		userAgent: opts.UserAgent,
+		token:     opts.Token,
 	}
 }
 
 func (c *Client) headers() map[string]string {
-	return map[string]string{
+	h := map[string]string{
 		"User-Agent":      c.userAgent,
 		"Accept":          "text/html,application/vnd.github+json",
 		"Accept-Language": "en-US,en;q=0.9",
 	}
+	if c.token != "" {
+		h["Authorization"] = "Bearer " + c.token
+	}
+	return h
 }
 
 func (c *Client) getHTML(ctx context.Context, path string) ([]byte, error) {
