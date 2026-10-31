@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0
+
 ### Changed — 订阅数据版本化（方案 A）
 - 订阅列表从本机 `subscriptions.yaml`（`.gitignore`）迁到数据仓内受版本控制的
   `<output.dir>/subscriptions.yaml`（默认 `digests/subscriptions.yaml`），随产物同一次
