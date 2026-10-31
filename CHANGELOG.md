@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- Summary prompt v2: each request now includes language, stars, stars-in-period
+  and rank, with explicit style rules and few-shot examples; default temperature
+  is 0.2 when unset. `PromptVersion` is bumped to `v2`.
+- Summary output validation/sanitization: Markdown links/images, HTML tags, bare
+  URLs and control characters are stripped; only missing/invalid repos are
+  re-requested instead of re-billing the whole batch.
+- `summarize.batchSize` / `summarize.maxRetries` config knobs.
 - Per-run token accounting: summaries record prompt/completion/total (and cached)
   tokens by reading the model response's usage. `run --json` now carries a
   `usage` block (contract `Usage`), and non-dry runs append one line to

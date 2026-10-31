@@ -15,12 +15,21 @@ var ErrInvalid = errors.New("config invalid")
 
 // Config is the full trendradar configuration tree.
 type Config struct {
-	Model    ModelConfig    `yaml:"model"`
-	Repo     RepoConfig     `yaml:"repo"`
-	PR       PRConfig       `yaml:"pr"`
-	Trending TrendingConfig `yaml:"trending"`
-	Output   OutputConfig   `yaml:"output"`
-	Schedule ScheduleConfig `yaml:"schedule"`
+	Model     ModelConfig     `yaml:"model"`
+	Repo      RepoConfig      `yaml:"repo"`
+	PR        PRConfig        `yaml:"pr"`
+	Trending  TrendingConfig  `yaml:"trending"`
+	Output    OutputConfig    `yaml:"output"`
+	Schedule  ScheduleConfig  `yaml:"schedule"`
+	Summarize SummarizeConfig `yaml:"summarize"`
+}
+
+// SummarizeConfig controls summary generation. External-context options (enrich
+// mode, README, rate limits) are intentionally absent until that phase is built;
+// exposing knobs that do nothing would mislead operators.
+type SummarizeConfig struct {
+	BatchSize  int `yaml:"batchSize" validate:"omitempty,gt=0"`
+	MaxRetries int `yaml:"maxRetries" validate:"omitempty,gte=0"`
 }
 
 // ModelConfig maps onto golib/gllm's provider/model concept.
@@ -118,5 +127,11 @@ func (c *Config) withDefaults() {
 	}
 	if c.Output.RetentionDays == 0 {
 		c.Output.RetentionDays = 90
+	}
+	if c.Summarize.BatchSize == 0 {
+		c.Summarize.BatchSize = 10
+	}
+	if c.Summarize.MaxRetries == 0 {
+		c.Summarize.MaxRetries = 1
 	}
 }

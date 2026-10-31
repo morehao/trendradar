@@ -10,6 +10,14 @@ import (
 	"github.com/morehao/trendradar/internal/model"
 )
 
+// Context is optional external context for one repository. It is internal to
+// the core and never written to the digest wire.
+type Context struct {
+	Topics        []string
+	Homepage      string
+	ReadmeExcerpt string
+}
+
 // Stats reports token consumption and call counts for a Summarize call. The
 // counts are per-run diagnostics: Calls includes every real provider request
 // (including retries) so token spend is not undercounted.
@@ -44,7 +52,9 @@ func WithBatchSize(n int) Option {
 	}
 }
 
-// WithMaxRetries sets extra attempts after the first failure (default 1).
+// WithMaxRetries sets extra attempts after the first failure (default 1). The
+// extra attempt is used to repair only the missing/invalid repos, not the whole
+// batch.
 func WithMaxRetries(n int) Option {
 	return func(s *Summarizer) {
 		if n >= 0 {
@@ -66,8 +76,15 @@ func New(chat model.Provider, opts ...Option) *Summarizer {
 }
 
 // Summarize produces a RepoDigest per input snapshot. Failed batches degrade to
-// the original description (source "original").
+// the original description (source "original"). It is equivalent to
+// SummarizeWithContext with no external context.
 func (s *Summarizer) Summarize(ctx context.Context, repos []digest.RepoSnapshot) []digest.RepoDigest {
+	return s.SummarizeWithContext(ctx, repos, nil)
+}
+
+// SummarizeWithContext is Summarize plus optional per-repo external context
+// (topics / README excerpt) supplied by the enrich stage.
+func (s *Summarizer) SummarizeWithContext(ctx context.Context, repos []digest.RepoSnapshot, byRepo map[string]Context) []digest.RepoDigest {
 	s.mu.Lock()
 	s.stats = Stats{}
 	s.mu.Unlock()
@@ -82,7 +99,7 @@ func (s *Summarizer) Summarize(ctx context.Context, repos []digest.RepoSnapshot)
 		s.mu.Lock()
 		s.stats.Batches++
 		s.mu.Unlock()
-		sums := s.summarizeBatch(ctx, batch)
+		sums := s.summarizeBatch(ctx, batch, byRepo)
 		for _, r := range batch {
 			if sum, ok := sums[r.FullName]; ok && sum != "" {
 				out = append(out, digest.RepoDigest{RepoSnapshot: r, SummaryZh: sum, SummarySource: "model"})
@@ -94,7 +111,20 @@ func (s *Summarizer) Summarize(ctx context.Context, repos []digest.RepoSnapshot)
 	return out
 }
 
-func (s *Summarizer) summarizeBatch(ctx context.Context, batch []digest.RepoSnapshot) map[string]string {
+// Pending returns the repos whose summaries are not in the cache. The enrich
+// stage only needs to fetch external context for these repos.
+func (s *Summarizer) Pending(repos []digest.RepoSnapshot) []digest.RepoSnapshot {
+	out := make([]digest.RepoSnapshot, 0, len(repos))
+	for _, r := range repos {
+		if _, ok := s.cache.Get(r.FullName, digest.Str(r.Description)); ok {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func (s *Summarizer) summarizeBatch(ctx context.Context, batch []digest.RepoSnapshot, byRepo map[string]Context) map[string]string {
 	out := make(map[string]string, len(batch))
 	var pending []digest.RepoSnapshot
 	for _, r := range batch {
@@ -108,12 +138,20 @@ func (s *Summarizer) summarizeBatch(ctx context.Context, batch []digest.RepoSnap
 	if len(pending) == 0 {
 		return out
 	}
+	s.requestPending(ctx, pending, byRepo, out)
+	return out
+}
 
-	system, user := SystemPrompt, buildUserPrompt(pending)
-	for attempt := 0; attempt <= s.maxRetries; attempt++ {
-		if err := ctx.Err(); err != nil {
-			break
+// requestPending asks the model for the pending repos. On the first attempt it
+// sends the whole pending set; if the response is valid JSON but misses or
+// invalidates some repos, the next attempt sends only those, so a single bad
+// item never forces the whole batch to be re-billed.
+func (s *Summarizer) requestPending(ctx context.Context, pending []digest.RepoSnapshot, byRepo map[string]Context, out map[string]string) {
+	for attempt := 0; attempt <= s.maxRetries && len(pending) > 0; attempt++ {
+		if ctx.Err() != nil {
+			return
 		}
+		system, user := SystemPrompt, buildUserPrompt(pending, byRepo)
 		res, err := s.chat.Complete(ctx, system, user)
 		// Count the attempt even when it errors or later fails to parse: a real
 		// request was made and billed.
@@ -121,17 +159,34 @@ func (s *Summarizer) summarizeBatch(ctx context.Context, batch []digest.RepoSnap
 		if err != nil {
 			continue
 		}
-		sums, perr := parseResponse(res.Text, pending)
+		sums, invalid, perr := parseAndValidate(res.Text, pending)
 		if perr != nil {
+			// Whole response was undecodable: retry the same set (attempt+1).
 			continue
 		}
-		for _, r := range pending {
-			if v, ok := sums[r.FullName]; ok {
-				out[r.FullName] = v
-				s.cache.Put(r.FullName, digest.Str(r.Description), v)
+		for name, v := range sums {
+			out[name] = v
+			for _, r := range pending {
+				if r.FullName == name {
+					s.cache.Put(r.FullName, digest.Str(r.Description), v)
+					break
+				}
 			}
 		}
-		return out
+		pending = filterByName(pending, invalid)
+	}
+}
+
+func filterByName(repos []digest.RepoSnapshot, names []string) []digest.RepoSnapshot {
+	want := make(map[string]bool, len(names))
+	for _, n := range names {
+		want[n] = true
+	}
+	out := make([]digest.RepoSnapshot, 0, len(names))
+	for _, r := range repos {
+		if want[r.FullName] {
+			out = append(out, r)
+		}
 	}
 	return out
 }
