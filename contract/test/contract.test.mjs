@@ -55,3 +55,17 @@ test('RunResult carries optional branch/commit/prUrl/contentHash', () => {
   }
   assert.ok(validators.runResult(rr))
 })
+
+test('RunResult accepts an optional usage block', () => {
+  const usage = {
+    promptTokens: 10, completionTokens: 5, totalTokens: 15, cachedTokens: 0,
+    usageKnown: true, calls: 1, retries: 0, batches: 1, cacheHits: 0,
+  }
+  const rr = {
+    ipcSchema: 2, ok: true, command: 'run',
+    startedAt: '2026-10-30T00:00:00Z', finishedAt: '2026-10-30T00:05:00Z',
+    skipped: false, files: [], usage,
+  }
+  assert.ok(validators.runResult(rr))
+  assert.equal(validators.runResult({ ...rr, usage: { ...usage, promptTokens: 'x' } }), false)
+})

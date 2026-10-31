@@ -574,6 +574,61 @@ const ipc = {
           "items": {
             "type": "string"
           }
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        }
+      }
+    },
+    "Usage": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "promptTokens",
+        "completionTokens",
+        "totalTokens",
+        "cachedTokens",
+        "usageKnown",
+        "calls",
+        "retries",
+        "batches",
+        "cacheHits"
+      ],
+      "properties": {
+        "promptTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completionTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cachedTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "usageKnown": {
+          "type": "boolean"
+        },
+        "calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "batches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheHits": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

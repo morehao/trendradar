@@ -152,6 +152,36 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		fmt.Fprintf(os.Stderr, "warn: %s\n", w)
 	}
 
+	// Persist per-run token usage for later aggregation. Dry runs and non-git
+	// targets are skipped; a logging failure never fails the run.
+	if !*dryRun && result.Report.Usage != nil {
+		repoPath := ""
+		providerName, modelName := "", ""
+		if cfg != nil {
+			repoPath = cfg.Repo.Path
+			providerName, modelName = cfg.Model.Provider, cfg.Model.Name
+		}
+		u := result.Report.Usage
+		rec := app.UsageRecord{
+			Time:             time.Now().UTC(),
+			Provider:         providerName,
+			Model:            modelName,
+			ContentHash:      result.Digest.ContentHash,
+			PromptTokens:     u.PromptTokens,
+			CompletionTokens: u.CompletionTokens,
+			TotalTokens:      u.TotalTokens,
+			CachedTokens:     u.CachedTokens,
+			UsageKnown:       u.UsageKnown,
+			Calls:            u.Calls,
+			Retries:          u.Retries,
+			Batches:          u.Batches,
+			CacheHits:        u.CacheHits,
+		}
+		if err := app.AppendUsageLog(repoPath, rec); err != nil {
+			fmt.Fprintf(os.Stderr, "warn: usage log: %v\n", err)
+		}
+	}
+
 	if *asJSON {
 		out := runEnvelope{
 			RunResult: ipc.RunResult{
@@ -165,6 +195,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 				Commit:     strPtr(result.Commit),
 				PRUrl:      strPtr(result.PRURL),
 				Warnings:   result.Report.Warnings,
+				Usage:      result.Report.Usage,
 			},
 			SkipReason: result.SkipReason,
 		}
@@ -183,6 +214,10 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 
 	if result.Skipped {
 		fmt.Printf("skipped (%s): %s\n", result.SkipReason, result.Digest.ContentHash)
+		if u := result.Report.Usage; u != nil && u.UsageKnown {
+			fmt.Printf("  tokens: prompt=%d completion=%d total=%d (calls=%d retries=%d cacheHits=%d)\n",
+				u.PromptTokens, u.CompletionTokens, u.TotalTokens, u.Calls, u.Retries, u.CacheHits)
+		}
 		return nil
 	}
 	fmt.Printf("digest %s (%s): %d repos, %d files, contentHash=%s\n",
@@ -195,6 +230,10 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	}
 	for _, s := range result.Report.Stages {
 		fmt.Printf("  %-10s %dms\n", s.Name, s.DurationMs)
+	}
+	if u := result.Report.Usage; u != nil && u.UsageKnown {
+		fmt.Printf("  tokens: prompt=%d completion=%d total=%d (calls=%d retries=%d cacheHits=%d)\n",
+			u.PromptTokens, u.CompletionTokens, u.TotalTokens, u.Calls, u.Retries, u.CacheHits)
 	}
 	return nil
 }

@@ -64,5 +64,18 @@ func (p *gllmProvider) Complete(ctx context.Context, system, user string) (Resul
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Text: out.Content, Degraded: p.m.Degraded}, nil
+	res := Result{Text: out.Content, Degraded: p.m.Degraded}
+	// eino's OpenAI-compatible component reports usage on ResponseMeta. A
+	// degraded fallback (no real request) leaves it nil, which stays "unknown".
+	if out.ResponseMeta != nil && out.ResponseMeta.Usage != nil {
+		u := out.ResponseMeta.Usage
+		res.Usage = Usage{
+			PromptTokens:     u.PromptTokens,
+			CompletionTokens: u.CompletionTokens,
+			TotalTokens:      u.TotalTokens,
+			CachedTokens:     u.PromptTokenDetails.CachedTokens,
+			Known:            true,
+		}
+	}
+	return res, nil
 }

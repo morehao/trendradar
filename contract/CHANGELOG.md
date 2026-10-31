@@ -3,6 +3,15 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
+## Unreleased
+
+### Added
+- `RunResult` gains an optional `usage` block (`Usage`): token counts
+  (`promptTokens` / `completionTokens` / `totalTokens` / `cachedTokens`),
+  `usageKnown`, and work counters (`calls` / `retries` / `batches` /
+  `cacheHits`). Additive and backward compatible (`RunResult` already allows
+  extra properties).
+
 ## 0.2.0
 
 Initial v2 contract (breaking re-baseline; no v1 wire compatibility).

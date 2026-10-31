@@ -525,3 +525,42 @@ func TestIndexAccumulatesTwoDates(t *testing.T) {
 		t.Fatalf("expected exactly two daily rows, got %d:\n%s", rows, idx)
 	}
 }
+
+// usageProv wraps another provider and reports a fixed token usage, so the
+// app-level usage wiring can be asserted without a real model.
+type usageProv struct {
+	inner model.Provider
+	u     model.Usage
+}
+
+func (p usageProv) Name() string { return "usage" }
+func (p usageProv) Complete(ctx context.Context, s, u string) (model.Result, error) {
+	r, err := p.inner.Complete(ctx, s, u)
+	r.Usage = p.u
+	return r, err
+}
+
+func TestRunRecordsUsage(t *testing.T) {
+	cfg := &config.Config{
+		Output:   config.OutputConfig{Dir: t.TempDir()},
+		Trending: config.TrendingConfig{Since: "daily"},
+	}
+	prov := usageProv{
+		inner: model.NewFake(),
+		u:     model.Usage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150, Known: true},
+	}
+	res, err := Run(context.Background(), cfg, fixtureInputs(), Options{DryRun: true, Provider: prov})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	u := res.Report.Usage
+	if u == nil {
+		t.Fatal("usage is nil")
+	}
+	if !u.UsageKnown || u.PromptTokens != 100 || u.CompletionTokens != 50 || u.TotalTokens != 150 {
+		t.Fatalf("usage = %+v", u)
+	}
+	if u.Calls != 1 || u.Batches != 1 {
+		t.Fatalf("calls/batches = %d/%d, want 1/1", u.Calls, u.Batches)
+	}
+}

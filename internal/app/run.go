@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	contract "github.com/morehao/trendradar/contract"
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/digest"
 	"github.com/morehao/trendradar/internal/gitx"
@@ -87,10 +88,27 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	if cfg != nil {
 		summaryCache.SetNamespace(summarize.NamespaceFor(cfg.Model.Provider, cfg.Model.Name))
 	}
-	repoDigests := summarize.New(provider, summarize.WithCache(summaryCache)).Summarize(ctx, in.Repos)
+	summarizer := summarize.New(provider, summarize.WithCache(summaryCache))
+	repoDigests := summarizer.Summarize(ctx, in.Repos)
 	if cachePath != "" {
 		if err := summaryCache.Save(cachePath); err != nil {
 			rep.Warnings = append(rep.Warnings, "cache: "+err.Error())
+		}
+	}
+	// Snapshot token spend before the pipeline can early-return (skipped/merged),
+	// so every run that reached summarization reports its usage.
+	{
+		st := summarizer.Stats()
+		rep.Usage = &contract.Usage{
+			PromptTokens:     st.Usage.PromptTokens,
+			CompletionTokens: st.Usage.CompletionTokens,
+			TotalTokens:      st.Usage.TotalTokens,
+			CachedTokens:     st.Usage.CachedTokens,
+			UsageKnown:       st.Usage.Known,
+			Calls:            st.Calls,
+			Retries:          st.Retries,
+			Batches:          st.Batches,
+			CacheHits:        st.CacheHits,
 		}
 	}
 	degradedCount := 0

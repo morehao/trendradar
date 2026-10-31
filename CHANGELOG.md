@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Per-run token accounting: summaries record prompt/completion/total (and cached)
+  tokens by reading the model response's usage. `run --json` now carries a
+  `usage` block (contract `Usage`), and non-dry runs append one line to
+  `<repo>/.git/trendradar-usage.jsonl` for later aggregation.
+- `usage` also reports `calls` / `retries` / `batches` / `cacheHits`, so retries
+  and cache hits are visible rather than silently folded into a single number.
+- Contract: `RunResult` gains the optional `usage` block (`Usage` def) with
+  matching Go and TypeScript types.
+
 ## 0.4.0
 
 Per-period output layout: daily / weekly / monthly trending digests can now
