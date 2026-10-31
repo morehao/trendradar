@@ -63,6 +63,13 @@ summarize:
 
 `run --json` 会新增可选 `stages` 与 `enrich` 字段，`<repo>/.git/trendradar-usage.jsonl`
 每行也记录 `durationMs`、`summaryDegraded` 与 `enrich` 计数，便于观测与回退。
+完整可复制配置见 [`config.example.yaml`](config.example.yaml)。
+
+- 代码默认 `enrich: none`；生产是否开启由部署侧 `config.yaml` 决定，建议先开 `repo`。
+- `readme` 在个别仓库可能出现长度/中文率校验降级（`summarySource=original`）；上线前用
+  `TRENDRADAR_EVAL_ENRICH=readme make test-eval` 复测，降级率 > 2% 先回退 `repo`。
+- 回退判据：`enrich.failed/requested > 5%`、`usage.totalTokens` 超过基线约 4 倍、或
+  `summaryDegraded` 明显上升时，把 `enrich` 调回 `none`/`repo`。
 
 ## 本地密钥与测试
 

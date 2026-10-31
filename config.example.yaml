@@ -1,0 +1,51 @@
+# trendradar 配置示例：复制为 config.yaml 后按需修改。
+# 密钥不要写进本文件；用 ${VAR} 引用 .env / 环境变量（见 .env.example）。
+model:
+  provider: deepseek
+  name: deepseek-flash             # = DeepSeek-V4.1-Flash；也可写 ${DEEPSEEK_MODEL}
+  baseURL: https://api.deepseek.com/v1  # 也可写 ${DEEPSEEK_BASE_URL}
+  apiKey: ${DEEPSEEK_API_KEY}
+  # 本地离线自测可把 provider 设为 fake（无需密钥）。
+
+repo:
+  path: /path/to/data-repo          # 写入 digest 的目标仓库工作区
+  remote: origin
+  baseBranch: main
+  authorName: trendradar
+  authorEmail: trendradar@example.com
+
+pr:
+  enabled: true
+  autoMerge: false
+
+trending:
+  languages: [all, go, python, rust, typescript]
+  since: daily
+  perLanguage: 20
+
+output:
+  dir: digests
+  branchPrefix: trending/
+  retentionDays: 90
+
+schedule:
+  cron: "0 8 * * *"                 # 仅供 serve 模式参考
+
+# 摘要与可选外部上下文（Track B）
+summarize:
+  batchSize: 10
+  maxRetries: 1
+
+  # none（默认，仅元数据）| repo（+GitHub topics）| readme（+800 字 README 摘录）
+  # 建议：有 GITHUB_READ_TOKEN 的定时任务先开 repo；readme 需先 eval 复测再开。
+  enrich: repo
+
+  readmeChars: 800
+  enrichCacheTTLHours: 168
+  enrichConcurrency: 4
+  enrichTimeoutSeconds: 5
+  enrichBudgetSeconds: 8            # readme 模式建议 12
+
+# 开启 enrich=repo/readme 时，建议在 .env 配一个独立只读 token：
+#   GITHUB_READ_TOKEN=ghp_xxx
+# 未配则按未认证访问；readme 模式在慢网络下可能因预算耗尽而跳过部分仓库（自动降级，不影响 run）。
