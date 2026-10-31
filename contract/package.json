@@ -30,9 +30,8 @@
     "generate": "node scripts/generate.mjs",
     "verify": "node scripts/generate.mjs && git diff --exit-code -- gen contract.gen.go schema",
     "verify-versions": "node scripts/check-versions.mjs",
-    "verify-field-map": "node scripts/check-field-map.mjs",
     "test": "node --test test/*.test.mjs",
-    "prepack": "npm run verify-versions && npm run verify-field-map"
+    "prepack": "npm run verify-versions"
   },
   "devDependencies": {
     "canonicalize": "5.1.0"

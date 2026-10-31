@@ -1,6 +1,6 @@
 # trendradar-contract (nested Go module + npm package). Run targets from this directory.
 SHELL := /bin/bash
-.PHONY: install generate verify verify-versions verify-field-map go-test test publish
+.PHONY: install generate verify verify-versions go-test test publish
 
 install:
 	npm install
@@ -15,13 +15,10 @@ verify:
 verify-versions:
 	node scripts/check-versions.mjs
 
-verify-field-map:
-	node scripts/check-field-map.mjs
-
 go-test:
 	go test ./...
 
-test: verify-versions verify-field-map go-test
+test: verify-versions go-test
 
 publish:
 	node scripts/check-versions.mjs

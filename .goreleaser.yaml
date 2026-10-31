@@ -40,5 +40,3 @@ changelog:
 
 release:
   draft: false
-  extra_files:
-    - glob: contract/legacy-v1/CONTRACT.sha256

@@ -82,7 +82,6 @@ excluded; optional repo fields omitted when absent). New files use
 npm ci
 npm run generate        # regenerate contract.gen.go + gen/ts (deterministic, gofmt'd)
 npm run verify-versions # carriers consistent (+ breaking gate when BASE_REF set)
-npm run verify-field-map# every v1 field covered by v2
 npm test                # ajv fixture validation + JCS cross-checks
 go test ./...           # jsonschema fixture validation + JCS hash + error catalog
 ```

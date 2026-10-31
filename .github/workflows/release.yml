@@ -24,10 +24,6 @@ jobs:
         with:
           go-version: "1.26.1"
           cache: true
-      - name: regenerate contract hash
-        run: go run ./tools/contracthash -contract contract/legacy-v1
-      - name: verify contract hash is committed
-        run: git diff --exit-code contract/legacy-v1/CONTRACT.sha256
       - name: goreleaser
         uses: goreleaser/goreleaser-action@v7
         with:

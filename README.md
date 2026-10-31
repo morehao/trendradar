@@ -23,7 +23,6 @@ trendradar serve --addr 127.0.0.1:8787         # 以 HTTP 提供 digest
 ```bash
 make build          # -> bin/trendradar
 make test           # go vet + go test
-make contract-hash  # 重算 contract/CONTRACT.sha256
 ```
 
 ## 目录
