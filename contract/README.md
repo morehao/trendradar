@@ -1,4 +1,4 @@
-# @morehao/trendradar-contract (0.3.0)
+# @morehao/trendradar-contract (0.4.0)
 
 The single source of truth for the data shapes shared by the **trendradar Go
 core** (`github.com/morehao/trendradar`) and the **DSH plugin**
@@ -12,7 +12,7 @@ artifacts from one tag:
 
 Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 
-> Version model: the **package** is `0.3.0`, while the
+> Version model: the **package** is `0.4.0`, while the
 > **wire format** it carries is the second generation — `ipcSchema=2`,
 > `digestSchema=2`. The integers 2 distinguish this contract from the legacy
 > in-repo v1; they are intentionally decoupled from the package semver.
@@ -20,8 +20,8 @@ Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 ## Install
 
 ```bash
-npm i @morehao/trendradar-contract@0.3.0
-go get github.com/morehao/trendradar/contract@v0.3.0   # resolves tag contract/v0.3.0
+npm i @morehao/trendradar-contract@0.4.0
+go get github.com/morehao/trendradar/contract@v0.4.0   # resolves tag contract/v0.4.0
 ```
 
 ## Layout
@@ -62,18 +62,42 @@ contract.SchemaFS // embedded schema/* files
 ## Versioning & compatibility
 
 - `ipcSchema` (const 2) and `digestSchema` (const 2) are the wire integers;
-  `contractVersion` (`"0.3.0"`) is the package handshake.
+  `contractVersion` (`"0.4.0"`) is the package handshake.
 - Adding an **optional** field is a minor change. Removing/renaming a field,
   changing a type, or tightening validation is **breaking**: bump the affected
   wire integer and/or the package version, declared in `version-map.json`.
   `make verify-versions` enforces this against the PR base.
 - `RunRequest` is the only strict object (`additionalProperties: false`). It
   carries conditional rules for `command: "subscribe"`: `action` is required,
-  `list` takes no `repo`, `add`/`remove` require one, and other commands must
-  not carry either field.
+  `list` takes no `repo`/`volume`, `add`/`remove` require a `repo` and no
+  `volume`, `releases` requires a `repo` and may name a `volume`; other commands
+  must not carry any of them. `stages` is run-only.
+- `ReleaseDigest.schema` is `2`: the summary moved from per-tag
+  (`ReleaseItem.summaryZh`, now optional and no longer written) to one per repo
+  per week (`RepoReleases.summaryZh` + `periodStart`/`periodEnd`). Old documents
+  still parse; new writers leave the per-item field empty.
+- `ReleasesReport.checked` / `changed` are **required** so `0` ("checked nothing")
+  is distinguishable from "not reported".
 - Token cost for releases lives in `ReleasesReport.usage` (always present) and
   **not** in the stored `ReleaseDigest`, because cost describes one run and
   cannot be reproduced from a document.
+
+### IPC ↔ HTTP mirrors
+
+Every read-only IPC capability has an HTTP mirror that returns the *same*
+contract type (only the transport envelope differs). Writes are never exposed
+over HTTP; the surface is read-only, `no-store`, and unauthenticated by design
+(bind to `127.0.0.1`).
+
+| IPC | HTTP | Status |
+|---|---|---|
+| `subscribe list` (`SubscriptionList`, incl. `items[]`) | `GET /api/v2/subscriptions` | added in 0.4.0 |
+| `subscribe releases --repo` (`SubscriptionDoc`) | `GET /api/v2/repos/{owner}/{repo}/releases?volume=N` | added in 0.4.0 |
+| `run` weekly digest (`ReleaseDigest`) | `GET /api/v2/releases`, `GET /api/v2/releases/{date}` | unchanged since 0.3.0 |
+| `subscribe add/remove` | — | writes stay IPC-only |
+
+When adding a read-only IPC command, add its route in the same PR (and a row
+here); when adding a write command, state in the PR why it is not mirrored.
 
 ## contentHash
 

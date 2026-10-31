@@ -2,7 +2,7 @@
 import Ajv from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 
-export const contractVersion = "0.3.0"
+export const contractVersion = "0.4.0"
 
 export const errorCatalog = {
   "INTERNAL": {
@@ -301,10 +301,10 @@ export const fixtures = {
     ]
   },
   "releaseNormal": {
-    "schema": 1,
+    "schema": 2,
     "date": "2026-10-31",
-    "period": "daily",
-    "contentHash": "sha256:6ffddcbca4448be9db6dcdfcc407183516c35ed78001b32c3d567ad8a4b4ff42",
+    "period": "weekly",
+    "contentHash": "sha256:87fe3cf94463a7011dbebfbeae9d77544a613751fdd0ba194a6e4534c1bb02ba",
     "contentHashAlgo": "jcs-sha256-v1",
     "coreVersion": "0.5.0",
     "generatedAt": "2026-10-31T13:04:00Z",
@@ -330,7 +330,10 @@ export const fixtures = {
             "summaryZh": "新增证据充分性决策模型与 Categorize 组件，兼容 rc2 schema，可直接升级。",
             "summarySource": "model"
           }
-        ]
+        ],
+        "periodStart": "2026-10-26",
+        "periodEnd": "2026-11-01",
+        "summaryZh": "本周 1 个版本：v1.0.0-rc3。"
       },
       {
         "fullName": "deepseek-ai/deepseek-harness",
@@ -349,15 +352,18 @@ export const fixtures = {
             "summaryZh": "发布说明缺失，已回退到 commit 信息。",
             "summarySource": "model"
           }
-        ]
+        ],
+        "periodStart": "2026-10-26",
+        "periodEnd": "2026-11-01",
+        "summaryZh": "本周 1 个版本：dsh-v0.2.2-alpha.2。"
       }
     ]
   },
   "releaseDegraded": {
-    "schema": 1,
+    "schema": 2,
     "date": "2026-10-31",
-    "period": "daily",
-    "contentHash": "sha256:f952f1607ff1708120c35e7a9551f0691ae747edf2ee959445edcd53bc0edf25",
+    "period": "weekly",
+    "contentHash": "sha256:5f34a40370d022ed06a995e32917a0299a121973ef13eee0e2f1a747a0a6aecb",
     "contentHashAlgo": "jcs-sha256-v1",
     "count": 1,
     "degraded": true,
@@ -379,19 +385,506 @@ export const fixtures = {
             "summaryZh": "版本 v2.0.0（未获取到变更说明）",
             "summarySource": "original"
           }
-        ]
+        ],
+        "periodStart": "2026-10-26",
+        "periodEnd": "2026-11-01",
+        "summaryZh": "本周 1 个版本：v2.0.0。"
       }
     ]
   },
   "releaseEmpty": {
-    "schema": 1,
+    "schema": 2,
     "date": "2026-10-31",
-    "period": "daily",
-    "contentHash": "sha256:501d8c4be30af9d1dacdf15b2e48ccd3134cbe439695f7685deea11e00c24de8",
+    "period": "weekly",
+    "contentHash": "sha256:e9cd2c19bcaf079d832114be1dff9ce81351d1643c5c6e8efd5da781ef18d5e4",
     "contentHashAlgo": "jcs-sha256-v1",
     "count": 0,
     "degraded": false,
     "repos": []
+  },
+  "releaseWeekly": {
+    "schema": 2,
+    "date": "2026-11-01",
+    "period": "weekly",
+    "contentHash": "sha256:0e93b38ea1e36f475161528332375d6e48a7fef1bad6125f96b27358d79b838e",
+    "contentHashAlgo": "jcs-sha256-v1",
+    "coreVersion": "0.7.0",
+    "generatedAt": "2026-11-01T00:30:00Z",
+    "count": 2,
+    "degraded": false,
+    "repos": [
+      {
+        "fullName": "vercel/next.js",
+        "url": "https://github.com/vercel/next.js",
+        "latestTag": "v15.2.0",
+        "newCount": 2,
+        "periodStart": "2026-10-26",
+        "periodEnd": "2026-11-01",
+        "summaryZh": "本周发布 v15.2.0 与 v15.1.9：构建缓存命中率提升，修复 App Router 下动态段预渲染的回归。",
+        "releases": [
+          {
+            "id": 428974490,
+            "tag": "v15.2.0",
+            "name": "v15.2.0",
+            "kind": "release",
+            "publishedAt": "2026-10-29T10:00:00Z",
+            "url": "https://github.com/vercel/next.js/releases/tag/v15.2.0",
+            "prerelease": false,
+            "draft": false,
+            "bodyExcerpt": "Faster builds and a fix for dynamic segment prerendering.",
+            "summarySource": "model"
+          },
+          {
+            "id": 428974480,
+            "tag": "v15.1.9",
+            "name": "v15.1.9",
+            "kind": "release",
+            "publishedAt": "2026-10-27T09:00:00Z",
+            "url": "https://github.com/vercel/next.js/releases/tag/v15.1.9",
+            "prerelease": false,
+            "draft": false,
+            "summarySource": "model"
+          }
+        ]
+      }
+    ]
+  },
+  "subscriptionsNormal": {
+    "repos": [
+      "vercel/next.js",
+      "infiniflow/ragflow",
+      "deepseek-ai/deepseek-harness",
+      "charmbracelet/bubbletea",
+      "golang/go"
+    ],
+    "items": [
+      {
+        "fullName": "vercel/next.js",
+        "url": "https://github.com/vercel/next.js",
+        "status": "ok",
+        "latestTag": "v15.2.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z"
+      },
+      {
+        "fullName": "infiniflow/ragflow",
+        "url": "https://github.com/infiniflow/ragflow",
+        "status": "no_change",
+        "latestTag": "v1.0.0-rc3",
+        "latestSummaryAt": "2026-10-25",
+        "lastCheckedAt": "2026-11-01T00:30:00Z"
+      },
+      {
+        "fullName": "deepseek-ai/deepseek-harness",
+        "url": "https://github.com/deepseek-ai/deepseek-harness",
+        "status": "baseline",
+        "lastCheckedAt": "2026-11-01T00:30:00Z"
+      },
+      {
+        "fullName": "charmbracelet/bubbletea",
+        "url": "https://github.com/charmbracelet/bubbletea",
+        "status": "rate_limited",
+        "latestTag": "v0.2.2",
+        "latestSummaryAt": "2026-10-25",
+        "lastCheckedAt": "2026-11-01T00:30:00Z"
+      },
+      {
+        "fullName": "golang/go",
+        "url": "https://github.com/golang/go",
+        "status": "failed",
+        "latestTag": "v0.2.2",
+        "latestSummaryAt": "2026-10-25",
+        "lastCheckedAt": "2026-11-01T00:30:00Z"
+      }
+    ]
+  },
+  "subscriptions40": {
+    "repos": [
+      "vercel/repo-01",
+      "infiniflow/repo-02",
+      "deepseek-ai/repo-03",
+      "charmbracelet/repo-04",
+      "golang/repo-05",
+      "rust-lang/repo-06",
+      "microsoft/repo-07",
+      "google/repo-08",
+      "facebook/repo-09",
+      "kubernetes/repo-10",
+      "docker/repo-11",
+      "hashicorp/repo-12",
+      "grafana/repo-13",
+      "prometheus/repo-14",
+      "istio/repo-15",
+      "envoyproxy/repo-16",
+      "containerd/repo-17",
+      "etcd-io/repo-18",
+      "cilium/repo-19",
+      "helm/repo-20",
+      "argoproj/repo-21",
+      "fluxcd/repo-22",
+      "open-telemetry/repo-23",
+      "grpc/repo-24",
+      "protocolbuffers/repo-25",
+      "nats-io/repo-26",
+      "redis/repo-27",
+      "valkey-io/repo-28",
+      "apache/repo-29",
+      "elastic/repo-30",
+      "mozilla/repo-31",
+      "nodejs/repo-32",
+      "denoland/repo-33",
+      "oven-sh/repo-34",
+      "pytorch/repo-35",
+      "huggingface/repo-36",
+      "langchain-ai/repo-37",
+      "ollama/repo-38",
+      "ggerganov/repo-39",
+      "mudler/repo-40"
+    ],
+    "items": [
+      {
+        "fullName": "vercel/repo-01",
+        "url": "https://github.com/vercel/repo-01",
+        "latestTag": "v0.0.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "infiniflow/repo-02",
+        "url": "https://github.com/infiniflow/repo-02",
+        "latestTag": "v1.1.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "deepseek-ai/repo-03",
+        "url": "https://github.com/deepseek-ai/repo-03",
+        "latestTag": "v2.2.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "charmbracelet/repo-04",
+        "url": "https://github.com/charmbracelet/repo-04",
+        "latestTag": "v3.3.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "golang/repo-05",
+        "url": "https://github.com/golang/repo-05",
+        "latestTag": "v4.4.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      },
+      {
+        "fullName": "rust-lang/repo-06",
+        "url": "https://github.com/rust-lang/repo-06",
+        "latestTag": "v5.0.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "microsoft/repo-07",
+        "url": "https://github.com/microsoft/repo-07",
+        "latestTag": "v6.1.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "google/repo-08",
+        "url": "https://github.com/google/repo-08",
+        "latestTag": "v7.2.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "facebook/repo-09",
+        "url": "https://github.com/facebook/repo-09",
+        "latestTag": "v8.3.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "kubernetes/repo-10",
+        "url": "https://github.com/kubernetes/repo-10",
+        "latestTag": "v0.4.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      },
+      {
+        "fullName": "docker/repo-11",
+        "url": "https://github.com/docker/repo-11",
+        "latestTag": "v1.0.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "hashicorp/repo-12",
+        "url": "https://github.com/hashicorp/repo-12",
+        "latestTag": "v2.1.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "grafana/repo-13",
+        "url": "https://github.com/grafana/repo-13",
+        "latestTag": "v3.2.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "prometheus/repo-14",
+        "url": "https://github.com/prometheus/repo-14",
+        "latestTag": "v4.3.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "istio/repo-15",
+        "url": "https://github.com/istio/repo-15",
+        "latestTag": "v5.4.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      },
+      {
+        "fullName": "envoyproxy/repo-16",
+        "url": "https://github.com/envoyproxy/repo-16",
+        "latestTag": "v6.0.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "containerd/repo-17",
+        "url": "https://github.com/containerd/repo-17",
+        "latestTag": "v7.1.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "etcd-io/repo-18",
+        "url": "https://github.com/etcd-io/repo-18",
+        "latestTag": "v8.2.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "cilium/repo-19",
+        "url": "https://github.com/cilium/repo-19",
+        "latestTag": "v0.3.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "helm/repo-20",
+        "url": "https://github.com/helm/repo-20",
+        "latestTag": "v1.4.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      },
+      {
+        "fullName": "argoproj/repo-21",
+        "url": "https://github.com/argoproj/repo-21",
+        "latestTag": "v2.0.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "fluxcd/repo-22",
+        "url": "https://github.com/fluxcd/repo-22",
+        "latestTag": "v3.1.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "open-telemetry/repo-23",
+        "url": "https://github.com/open-telemetry/repo-23",
+        "latestTag": "v4.2.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "grpc/repo-24",
+        "url": "https://github.com/grpc/repo-24",
+        "latestTag": "v5.3.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "protocolbuffers/repo-25",
+        "url": "https://github.com/protocolbuffers/repo-25",
+        "latestTag": "v6.4.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      },
+      {
+        "fullName": "nats-io/repo-26",
+        "url": "https://github.com/nats-io/repo-26",
+        "latestTag": "v7.0.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "redis/repo-27",
+        "url": "https://github.com/redis/repo-27",
+        "latestTag": "v8.1.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "valkey-io/repo-28",
+        "url": "https://github.com/valkey-io/repo-28",
+        "latestTag": "v0.2.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "apache/repo-29",
+        "url": "https://github.com/apache/repo-29",
+        "latestTag": "v1.3.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "elastic/repo-30",
+        "url": "https://github.com/elastic/repo-30",
+        "latestTag": "v2.4.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      },
+      {
+        "fullName": "mozilla/repo-31",
+        "url": "https://github.com/mozilla/repo-31",
+        "latestTag": "v3.0.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "nodejs/repo-32",
+        "url": "https://github.com/nodejs/repo-32",
+        "latestTag": "v4.1.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "denoland/repo-33",
+        "url": "https://github.com/denoland/repo-33",
+        "latestTag": "v5.2.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "oven-sh/repo-34",
+        "url": "https://github.com/oven-sh/repo-34",
+        "latestTag": "v6.3.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "pytorch/repo-35",
+        "url": "https://github.com/pytorch/repo-35",
+        "latestTag": "v7.4.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      },
+      {
+        "fullName": "huggingface/repo-36",
+        "url": "https://github.com/huggingface/repo-36",
+        "latestTag": "v8.0.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "ok"
+      },
+      {
+        "fullName": "langchain-ai/repo-37",
+        "url": "https://github.com/langchain-ai/repo-37",
+        "latestTag": "v0.1.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "no_change"
+      },
+      {
+        "fullName": "ollama/repo-38",
+        "url": "https://github.com/ollama/repo-38",
+        "latestTag": "v1.2.1",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "baseline"
+      },
+      {
+        "fullName": "ggerganov/repo-39",
+        "url": "https://github.com/ggerganov/repo-39",
+        "latestTag": "v2.3.2",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "rate_limited"
+      },
+      {
+        "fullName": "mudler/repo-40",
+        "url": "https://github.com/mudler/repo-40",
+        "latestTag": "v3.4.0",
+        "latestSummaryAt": "2026-11-01",
+        "lastCheckedAt": "2026-11-01T00:30:00Z",
+        "status": "failed"
+      }
+    ]
+  },
+  "subscriptionDocNormal": {
+    "fullName": "vercel/next.js",
+    "volume": 1,
+    "volumes": [
+      {
+        "index": 1,
+        "file": "vercel/next.js.md",
+        "from": "2026-10-19",
+        "to": "2026-11-01",
+        "lines": 18
+      },
+      {
+        "index": 2,
+        "file": "vercel/next.js.02.md",
+        "from": "2026-09-28",
+        "to": "2026-10-18",
+        "lines": 412
+      }
+    ],
+    "updatedAt": "2026-11-01",
+    "markdown": "# vercel/next.js\n\n> 发版记录 · 每周一次 · 最近更新 2026-11-01\n\n## 2026-10-26 ~ 2026-11-01\n\n- [v15.2.0](https://github.com/vercel/next.js/releases/tag/v15.2.0) · 10-29\n- [v15.1.9](https://github.com/vercel/next.js/releases/tag/v15.1.9) · 10-27\n\n本周发布 v15.2.0 与 v15.1.9：构建缓存命中率提升，修复 App Router 下动态段预渲染的回归。\n"
   }
 }
 
@@ -604,15 +1097,33 @@ const ipc = {
           "enum": [
             "list",
             "add",
-            "remove"
+            "remove",
+            "releases"
           ]
         },
         "repo": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "volume": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "subscribe action=releases only: which volume of the repo's release document to read. Defaults to the newest volume."
+        },
+        "stages": {
+          "type": "array",
+          "description": "command=run only: which stages to execute. Absent means every enabled stage (backwards compatible); an explicit list narrows the run, e.g. ['releases'] for a release-only run.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "trending",
+              "digest",
+              "releases"
+            ]
+          }
         }
       },
-      "description": "Strict request envelope. command=subscribe manages the repo subscription list: action=list needs no repo; action=add/remove require exactly one repo.",
+      "description": "Strict request envelope. command=subscribe manages the repo subscription list: action=list needs no repo; action=add/remove require exactly one repo; action=releases requires a repo and may name a volume. command=run may narrow its work with stages.",
       "allOf": [
         {
           "if": {
@@ -634,7 +1145,8 @@ const ipc = {
                 "enum": [
                   "list",
                   "add",
-                  "remove"
+                  "remove",
+                  "releases"
                 ]
               }
             },
@@ -652,8 +1164,17 @@ const ipc = {
                 },
                 "then": {
                   "not": {
-                    "required": [
-                      "repo"
+                    "anyOf": [
+                      {
+                        "required": [
+                          "repo"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "volume"
+                        ]
+                      }
                     ]
                   }
                 }
@@ -666,6 +1187,28 @@ const ipc = {
                         "add",
                         "remove"
                       ]
+                    }
+                  },
+                  "required": [
+                    "action"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "repo"
+                  ],
+                  "not": {
+                    "required": [
+                      "volume"
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "action": {
+                      "const": "releases"
                     }
                   },
                   "required": [
@@ -709,7 +1252,36 @@ const ipc = {
                   "required": [
                     "repo"
                   ]
+                },
+                {
+                  "required": [
+                    "volume"
+                  ]
                 }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "enum": [
+                  "subscribe",
+                  "serve",
+                  "config",
+                  "version"
+                ]
+              }
+            },
+            "required": [
+              "command"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "stages"
               ]
             }
           }
@@ -741,7 +1313,8 @@ const ipc = {
             "run",
             "serve",
             "config",
-            "version"
+            "version",
+            "subscribe"
           ]
         },
         "startedAt": {
@@ -789,6 +1362,12 @@ const ipc = {
         },
         "releases": {
           "$ref": "releases.v2.json#/$defs/ReleasesReport"
+        },
+        "subscriptions": {
+          "$ref": "releases.v2.json#/$defs/SubscriptionList"
+        },
+        "subscriptionDoc": {
+          "$ref": "releases.v2.json#/$defs/SubscriptionDoc"
         }
       }
     },
@@ -968,7 +1547,7 @@ const releases = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v2.json",
   "title": "trendradar releases v2",
-  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document.",
+  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. schema=2 adds the per-repo weekly batch summary (repos[].summaryZh + periodStart/periodEnd); the per-item summaryZh stays readable for old documents but is no longer written.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -983,7 +1562,7 @@ const releases = {
   ],
   "properties": {
     "schema": {
-      "const": 1
+      "const": 2
     },
     "date": {
       "type": "string",
@@ -1032,7 +1611,7 @@ const releases = {
     "ReleaseItem": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis).",
+      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summaryZh is optional and no longer written by schema 2: the summary now lives once per repo per week in RepoReleases.summaryZh.",
       "required": [
         "id",
         "tag",
@@ -1041,7 +1620,6 @@ const releases = {
         "url",
         "prerelease",
         "draft",
-        "summaryZh",
         "summarySource"
       ],
       "properties": {
@@ -1082,7 +1660,8 @@ const releases = {
           "description": "Truncated raw release notes. Untrusted text: display only, never execute."
         },
         "summaryZh": {
-          "type": "string"
+          "type": "string",
+          "description": "Legacy per-item summary. Still accepted so documents written before schema 2 stay readable; schema 2 writers leave it empty."
         },
         "summarySource": {
           "type": "string",
@@ -1096,6 +1675,7 @@ const releases = {
     "RepoReleases": {
       "type": "object",
       "additionalProperties": true,
+      "description": "One repo's release batch for one summary period. summaryZh covers the whole week in a single model call; periodStart/periodEnd bound that week so a consumer can label it without parsing dates.",
       "required": [
         "fullName",
         "url",
@@ -1119,6 +1699,18 @@ const releases = {
           "type": "integer",
           "minimum": 0
         },
+        "periodStart": {
+          "type": "string",
+          "format": "date"
+        },
+        "periodEnd": {
+          "type": "string",
+          "format": "date"
+        },
+        "summaryZh": {
+          "type": "string",
+          "description": "One Chinese summary for every version in this period. Empty when no summary was produced."
+        },
         "releases": {
           "type": "array",
           "items": {
@@ -1130,10 +1722,12 @@ const releases = {
     "ReleasesReport": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Per-run diagnostic for the releases stage. usage is required and always serialized so a consumer can tell 'nothing spent' (calls=0) from 'spent but not reported' (calls>0 with usageKnown=false).",
+      "description": "Per-run diagnostic for the releases stage. usage, checked and changed are required and always serialized so a consumer can tell 'nothing spent / checked / changed' (0) from 'not reported' (missing). checked counts repos the stage examined; changed counts repos that produced a document write.",
       "required": [
         "enabled",
         "repos",
+        "checked",
+        "changed",
         "newReleases",
         "durationMs",
         "usage"
@@ -1143,6 +1737,14 @@ const releases = {
           "type": "boolean"
         },
         "repos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changed": {
           "type": "integer",
           "minimum": 0
         },
@@ -1223,10 +1825,55 @@ const releases = {
         }
       }
     },
+    "SubscriptionStatus": {
+      "type": "string",
+      "description": "Per-repo check state of the most recent weekly release run: baseline (first sighting, no section written), ok (a week section was written), no_change (checked, nothing new), rate_limited / failed (check failed, cursor kept so the next run retries).",
+      "enum": [
+        "baseline",
+        "ok",
+        "no_change",
+        "rate_limited",
+        "failed"
+      ]
+    },
+    "SubscriptionItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One row of the subscriptions table. Deliberately small: the full markdown lives behind SubscriptionDoc so the list stays under the first-paint payload budget.",
+      "required": [
+        "fullName",
+        "status"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "latestTag": {
+          "type": "string"
+        },
+        "latestSummaryAt": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of the newest week section (its period end), used as the 'last summary' column."
+        },
+        "lastCheckedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "$ref": "#/$defs/SubscriptionStatus"
+        }
+      }
+    },
     "SubscriptionList": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Response of GET /api/v2/subscriptions.",
+      "description": "Response of GET /api/v2/subscriptions and of the IPC subscribe list command. repos stays the only field old consumers read; items is the additive per-repo detail.",
       "required": [
         "repos"
       ],
@@ -1237,6 +1884,76 @@ const releases = {
             "type": "string",
             "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
           }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubscriptionItem"
+          }
+        }
+      }
+    },
+    "SubscriptionVolume": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One volume file of a repo's release document. index 1 is <repo>.md; index >= 2 is <repo>.0N.md (zero padded). from/to are the oldest/newest week bounds present in that file.",
+      "required": [
+        "index",
+        "file"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "file": {
+          "type": "string",
+          "description": "Path relative to the releases document root (e.g. vercel/next.js.md)."
+        },
+        "from": {
+          "type": "string",
+          "format": "date"
+        },
+        "to": {
+          "type": "string",
+          "format": "date"
+        },
+        "lines": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "SubscriptionDoc": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Response of the IPC subscribe releases command and of GET /api/v2/repos/{owner}/{repo}/releases. markdown is the exact file content: the panel renders it verbatim (single source of truth, no re-summarizing).",
+      "required": [
+        "fullName",
+        "volume",
+        "markdown"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "volume": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubscriptionVolume"
+          }
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date"
+        },
+        "markdown": {
+          "type": "string"
         }
       }
     }
@@ -1622,7 +2339,7 @@ const errors = {
     }
   }
 }
-const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.3.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    contract schemas, so the plugin and any web UI consume the same shapes\n    whether data comes from the filesystem or over HTTP. Historical v1 digests\n    read from disk are normalized to the v2 shape with\n    contentHashAlgo=legacy-struct-marshal-v1.\n\n    Release endpoints are read-only. Token cost for a releases run is NOT part of\n    a stored document (it describes one run and cannot be reproduced); it is\n    reported in `releases.usage` of `trendradar run --json` and appended to\n    `<repo>/.git/trendradar-usage.jsonl` with stage=\"releases\".\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /api/v2/releases:\n    get:\n      operationId: listReleases\n      summary: List available release digests (newest first)\n      description: |\n        Returns an empty array (not 404) when no release digest exists yet.\n        Entries carry no token cost because stored documents do not record it.\n      parameters:\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: Manifest of release digests\n          content:\n            application/json:\n              schema:\n                type: array\n                items:\n                  $ref: \"./releases.v2.json#/$defs/ReleaseManifestEntry\"\n  /api/v2/releases/{date}:\n    get:\n      operationId: getReleases\n      summary: Fetch one period's release digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: The release digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json\"\n        \"404\":\n          description: No release digest for that date\n  /api/v2/subscriptions:\n    get:\n      operationId: listSubscriptions\n      summary: List the repo subscriptions the core will poll\n      description: |\n        Read-only. Returns an empty array when the subscription file is missing\n        or empty. Writing subscriptions stays on the CLI / IPC subscribe command.\n      responses:\n        \"200\":\n          description: Current subscription list\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionList\"\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
+const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.4.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    contract schemas, so the plugin and any web UI consume the same shapes\n    whether data comes from the filesystem or over HTTP. Historical v1 digests\n    read from disk are normalized to the v2 shape with\n    contentHashAlgo=legacy-struct-marshal-v1.\n\n    Release endpoints are read-only. Token cost for a releases run is NOT part of\n    a stored document (it describes one run and cannot be reproduced); it is\n    reported in `releases.usage` of `trendradar run --json` and appended to\n    `<repo>/.git/trendradar-usage.jsonl` with stage=\"releases\".\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /api/v2/releases:\n    get:\n      operationId: listReleases\n      summary: List available release digests (newest first)\n      description: |\n        Returns an empty array (not 404) when no release digest exists yet.\n        Entries carry no token cost because stored documents do not record it.\n      parameters:\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: Manifest of release digests\n          content:\n            application/json:\n              schema:\n                type: array\n                items:\n                  $ref: \"./releases.v2.json#/$defs/ReleaseManifestEntry\"\n  /api/v2/releases/{date}:\n    get:\n      operationId: getReleases\n      summary: Fetch one period's release digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: The release digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json\"\n        \"404\":\n          description: No release digest for that date\n  /api/v2/subscriptions:\n    get:\n      operationId: listSubscriptions\n      summary: List the repo subscriptions the core will poll\n      description: |\n        Read-only mirror of the IPC `subscribe list` command: both return the\n        same SubscriptionList. `repos` is the legacy field; `items` adds the\n        per-repo row detail (latest tag, last summary date, check status) and is\n        optional, so an older core still satisfies this schema. Writing\n        subscriptions stays on the CLI / IPC subscribe command and is never\n        exposed over HTTP.\n      responses:\n        \"200\":\n          description: Current subscription list\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionList\"\n  /api/v2/repos/{owner}/{repo}/releases:\n    get:\n      operationId: getSubscriptionDoc\n      summary: Read one repo's release document\n      description: |\n        Read-only mirror of the IPC `subscribe releases` command. Returns the\n        exact markdown file content (plus the volume index) so a client renders\n        what the data repo stores instead of re-summarizing it. `volume`\n        defaults to the newest volume. Only repos matching\n        ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ are served: the path is resolved\n        inside the releases document root and never escapes it.\n      parameters:\n        - name: owner\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: repo\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: volume\n          in: query\n          required: false\n          schema:\n            type: integer\n            minimum: 1\n      responses:\n        \"200\":\n          description: The repo's release document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionDoc\"\n        \"400\":\n          description: Malformed owner/repo or non-positive volume\n        \"404\":\n          description: The repo has no release document, or that volume is absent\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
 
 export const rawSchema = { model, ipc, digest, releases, errors, versionInfo, api }
 
@@ -1640,5 +2357,7 @@ export const validators = {
   digest: ajv.getSchema(digest.$id),
   releases: ajv.getSchema(releases.$id),
   releasesReport: ajv.compile({ $ref: releases.$id + '#/$defs/ReleasesReport' }),
+  subscriptionList: ajv.compile({ $ref: releases.$id + '#/$defs/SubscriptionList' }),
+  subscriptionDoc: ajv.compile({ $ref: releases.$id + '#/$defs/SubscriptionDoc' }),
   versionInfo: ajv.getSchema(versionInfo.$id),
 }

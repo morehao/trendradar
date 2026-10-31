@@ -7,20 +7,43 @@ import (
 	"time"
 )
 
-// stateSchema is the on-disk cursor schema version.
-const stateSchema = 1
+// stateSchema is the on-disk cursor schema version. Version 2 adds the weekly
+// gate (weekKey) and the subscription-row fields; older files still load because
+// every new field is additive.
+const stateSchema = 2
 
 // maxSeenTags caps the per-repo tag memory so the state file cannot grow forever.
 const maxSeenTags = 200
 
-// RepoState is the per-repository cursor: the newest processed release plus a
-// bounded memory of tags (used when a repo has no releases and we fall back to
-// tags).
+// Per-repo status values. They mirror contract SubscriptionStatus exactly; the
+// generated type cannot be used here because the state file is machine-local and
+// must stay loadable even if a future contract drops a value.
+const (
+	StatusBaseline    = "baseline"
+	StatusOK          = "ok"
+	StatusNoChange    = "no_change"
+	StatusRateLimited = "rate_limited"
+	StatusFailed      = "failed"
+)
+
+// RepoState is the per-repository cursor: the newest processed release plus the
+// bounded tag memory used when a repo has no releases and we fall back to tags.
+//
+// WeekKey is the ISO week whose check completed successfully (including
+// "nothing new"). It is the weekly gate: a second run in the same week skips the
+// repo without touching GitHub, the model or the document. A failed check does
+// NOT set it, so an explicit retry in the same week is still possible; the
+// cursor never advanced, so the next week's batch simply contains both weeks.
 type RepoState struct {
 	LastID          int64      `json:"lastId"`
 	LastTag         string     `json:"lastTag,omitempty"`
 	LastPublishedAt *time.Time `json:"lastPublishedAt,omitempty"`
 	SeenTags        []string   `json:"seenTags,omitempty"`
+
+	WeekKey         string     `json:"weekKey,omitempty"`
+	Status          string     `json:"status,omitempty"`
+	LatestSummaryAt string     `json:"latestSummaryAt,omitempty"`
+	LastCheckedAt   *time.Time `json:"lastCheckedAt,omitempty"`
 }
 
 // State is the persisted cursor for every subscribed repo. It is machine-local

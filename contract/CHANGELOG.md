@@ -7,6 +7,39 @@ This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule)
 
 _Nothing yet._
 
+## 0.4.0
+
+Weekly release records. The wire integers stay at `ipcSchema = 2` /
+`digestSchema = 2`; `ReleaseDigest.schema` moves 1 → 2. Every field change below
+is additive at the envelope level, so a plugin built against 0.3.0 keeps working.
+
+### Added
+- `SubscriptionList.items[]` (`SubscriptionItem`: `fullName`, `url`,
+  `latestTag`, `latestSummaryAt`, `lastCheckedAt`, `status`). `repos` stays the
+  only required field, so an older core still satisfies the schema.
+- `SubscriptionDoc` + `SubscriptionVolume`: the exact markdown of one volume of a
+  repo's release document plus its volume index (`index`, `file`, `from`, `to`,
+  `lines`). Shared by the IPC `subscribe releases` command and
+  `GET /api/v2/repos/{owner}/{repo}/releases`.
+- `RunRequest.stages` (`trending|digest|releases`) and `RunRequest.volume`;
+  `action` gains `releases` (requires `repo`, optional `volume`).
+- `RunResult.subscriptions` / `RunResult.subscriptionDoc`: the subscribe
+  command's payload now rides inside the result envelope instead of stdout.
+  `RunResult.command` accepts `subscribe`.
+- `ReleasesReport.checked` / `changed` (both required).
+- Fixtures: `release-weekly.json` (schema-2 weekly shape without per-item
+  summaries), `subscriptions-normal.json`, `subscriptions-40.json` (the 10 KB
+  first-paint budget), `subscription-doc-normal.json`.
+- `api.v2.yaml`: `GET /api/v2/repos/{owner}/{repo}/releases`.
+
+### Changed
+- `ReleaseDigest.schema` = 2: `RepoReleases` gains `summaryZh`,
+  `periodStart`, `periodEnd`; `ReleaseItem.summaryZh` becomes optional (still
+  readable for documents written before this version, no longer written).
+- Release fixtures regenerated with `schema: 2` (their `contentHash` changes
+  accordingly; the JCS basis is unchanged).
+- The contract test now asserts the 40-repo subscription fixture stays ≤ 10 KB.
+
 ## 0.3.0
 
 Repo release subscriptions become a first-class contract capability. The wire

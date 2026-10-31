@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/morehao/trendradar/internal/fetch"
@@ -27,16 +28,22 @@ type Fetcher interface {
 // Options configures one release-watch build.
 type Options struct {
 	Repos              []string
-	Date               string
-	Period             string
+	Date               string // run date; the digest is dated by its week end
+	Period             string // summary period; weekly is the only supported value
+	Timezone           string // IANA name; empty means Asia/Shanghai
+	WeekStart          string // only "monday" (ISO 8601) is supported
 	IncludePrerelease  bool
 	IncludeDrafts      bool
 	FallbackToTags     bool
 	BaselineOnFirstRun bool
 	BackfillLatest     int
-	PerRepoLimit       int
 	MaxNotesChars      int
+	SummaryMaxChars    int
 	MaxPages           int
+	Concurrency        int
+	// BudgetSeconds caps the whole stage. 0 disables the budget. The caller
+	// resolves "auto" to a number so the core never has to guess the scale.
+	BudgetSeconds int
 
 	Provider     model.Provider
 	ProviderName string
@@ -46,10 +53,15 @@ type Options struct {
 	ReadOnly     bool
 }
 
-// Report is the per-run diagnostic for the releases stage.
+// Report is the per-run diagnostic for the releases stage. Checked and Changed
+// are always serialized (a plugin shows "checked N, changed M"); Skipped counts
+// repos that were not checked at all this run (already summarized this week, or
+// dropped after a rate limit), which is different from "checked, nothing new".
 type Report struct {
 	Enabled          bool  `json:"enabled"`
 	Repos            int   `json:"repos"`
+	Checked          int   `json:"checked"`
+	Changed          int   `json:"changed"`
 	NewReleases      int   `json:"newReleases"`
 	Summarized       int   `json:"summarized"`
 	Degraded         int   `json:"degraded"`
@@ -67,32 +79,64 @@ type Report struct {
 	Calls            int  `json:"calls,omitempty"`
 }
 
+// statusAlreadyDone is an outcome-only status: the repo's week was already
+// summarized, so this run neither touched GitHub nor counted it as "checked".
+const statusAlreadyDone = "already_done"
+
+// repoOutcome is one repo's contribution to the report. Returning counters
+// instead of mutating the report keeps the concurrent workers race-free.
+type repoOutcome struct {
+	group            *releasedigest.RepoReleases
+	status           string
+	newReleases      int
+	summarized       int
+	degraded         int
+	truncated        int
+	historyTruncated int
+}
+
 type builder struct {
 	opts  Options
 	fet   Fetcher
 	state *State
 	cache *summarize.Cache
 	sum   *Summarizer
-	rep   *Report
+	week  Week
 
+	mu      sync.Mutex
 	commits map[string]*fetch.Commit
 }
 
-// Build fetches new releases for every subscribed repo, summarizes them, and
-// returns a ReleaseDigest plus the updated cursor. It never saves the cursor:
-// the caller must persist it only after the digest is published, so a failed
-// publish does not advance the cursor past unseen releases.
+// Build fetches new releases for every subscribed repo, summarizes each repo's
+// week in one model call, and returns a ReleaseDigest plus the updated cursor.
+// It never saves the cursor: the caller must persist it only after the document
+// is published, so a failed publish does not advance the cursor past unseen
+// releases.
 func Build(ctx context.Context, f Fetcher, opts Options) (releasedigest.ReleaseDigest, *State, Report, error) {
 	start := time.Now()
+	if opts.BudgetSeconds > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(opts.BudgetSeconds)*time.Second)
+		defer cancel()
+	}
 	period := opts.Period
 	if period == "" {
-		period = "daily"
+		period = "weekly"
 	}
 	rep := Report{Enabled: true, Repos: len(opts.Repos)}
 	state, err := LoadState(opts.StatePath)
 	if err != nil {
 		return releasedigest.ReleaseDigest{}, nil, rep, fmt.Errorf("releasewatch: load state: %w", err)
 	}
+	loc, err := Location(opts.Timezone)
+	if err != nil {
+		return releasedigest.ReleaseDigest{}, nil, rep, err
+	}
+	week, err := WeekOf(opts.Date, loc)
+	if err != nil {
+		return releasedigest.ReleaseDigest{}, nil, rep, err
+	}
+
 	var cache *summarize.Cache
 	if opts.CachePath != "" {
 		cache, _ = summarize.LoadCache(opts.CachePath)
@@ -107,36 +151,52 @@ func Build(ctx context.Context, f Fetcher, opts Options) (releasedigest.ReleaseD
 		fet:   f,
 		state: state,
 		cache: cache,
-		sum:   NewSummarizer(opts.Provider, cache, opts.MaxNotesChars),
-		rep:   &rep,
+		sum:   NewSummarizer(opts.Provider, cache, opts.MaxNotesChars, opts.SummaryMaxChars),
+		week:  week,
 	}
 
-	d := releasedigest.ReleaseDigest{Schema: releasedigest.Schema, Date: opts.Date, Period: period}
-	for i, repo := range opts.Repos {
-		group, class := b.processRepo(ctx, repo)
-		if group != nil {
-			d.Repos = append(d.Repos, *group)
+	d := releasedigest.ReleaseDigest{Schema: releasedigest.Schema, Date: week.End, Period: period}
+	outcomes := b.run(ctx, opts.Repos)
+	for _, repo := range opts.Repos {
+		o, ok := outcomes[repo]
+		if !ok {
+			// The worker pool stopped before reaching this repo (rate limit).
+			rep.Skipped++
+			continue
 		}
-		if class == "ratelimited" {
+		switch o.status {
+		case statusAlreadyDone:
+			rep.Skipped++
+			continue
+		case StatusRateLimited:
 			rep.RateLimited++
-			// Stop hitting the API once quota is exhausted; count the rest as skipped.
-			rep.Skipped += len(opts.Repos) - i - 1
-			break
-		}
-		if class == "failed" {
+		case StatusFailed:
 			rep.Failed++
 		}
+		rep.Checked++
+		rep.NewReleases += o.newReleases
+		rep.Summarized += o.summarized
+		rep.Degraded += o.degraded
+		// Truncated is counted once by the summarizer (it knows how many of its
+		// own outputs were cut), so the per-repo flag is not added again here.
+		rep.HistoryTruncated += o.historyTruncated
+		if o.group != nil {
+			rep.Changed++
+			d.Repos = append(d.Repos, *o.group)
+		}
 	}
+
 	d.Count = releasedigest.CountOf(d)
 	d.Degraded = releasedigest.DegradedOf(d)
 	d.ContentHashAlgo = releasedigest.ContentHashAlgo
 	d.ContentHash = releasedigest.ContentHash(d)
-	usage, calls := b.sum.Stats()
+	usage, calls, truncated := b.sum.Stats()
 	rep.PromptTokens = usage.PromptTokens
 	rep.CompletionTokens = usage.CompletionTokens
 	rep.TotalTokens = usage.TotalTokens
 	rep.UsageKnown = usage.Known
 	rep.Calls = calls
+	rep.Truncated += truncated
 	rep.DurationMs = time.Since(start).Milliseconds()
 
 	if !opts.ReadOnly && opts.CachePath != "" {
@@ -145,25 +205,90 @@ func Build(ctx context.Context, f Fetcher, opts Options) (releasedigest.ReleaseD
 	return d, state, rep, nil
 }
 
-func (b *builder) processRepo(ctx context.Context, repo string) (*releasedigest.RepoReleases, string) {
+// run processes repos with a bounded worker pool. On a rate limit it cancels the
+// pool instead of burning the remaining budget on requests that will fail; the
+// repos that never ran are reported as skipped and keep their old cursor.
+func (b *builder) run(ctx context.Context, repos []string) map[string]repoOutcome {
+	out := make(map[string]repoOutcome, len(repos))
+	if len(repos) == 0 {
+		return out
+	}
+	workers := b.opts.Concurrency
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > len(repos) {
+		workers = len(repos)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	jobs := make(chan string)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for repo := range jobs {
+				if ctx.Err() != nil {
+					// Cancelled by a rate limit: leave the repo unprocessed so it is
+					// reported as skipped and keeps its old cursor.
+					continue
+				}
+				o := b.processRepo(ctx, repo)
+				mu.Lock()
+				out[repo] = o
+				mu.Unlock()
+				if o.status == StatusRateLimited {
+					cancel()
+				}
+			}
+		}()
+	}
+
+dispatch:
+	for _, repo := range repos {
+		select {
+		case jobs <- repo:
+		case <-ctx.Done():
+			break dispatch
+		}
+	}
+	close(jobs)
+	wg.Wait()
+	return out
+}
+
+func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 	owner, name, ok := splitRepo(repo)
 	if !ok {
-		return nil, "failed"
+		b.stamp(repo, StatusFailed, false)
+		return repoOutcome{status: StatusFailed}
 	}
-	st, hasState := b.state.Get(repo)
+	st, hasState := b.getState(repo)
+
+	// Weekly gate: a completed check for this ISO week means "do not ask again".
+	// Nothing is fetched, summarized or written, so a duplicate run (schedule +
+	// manual) costs nothing and cannot append the week twice (A4).
+	if hasState && st.WeekKey == b.week.Key {
+		return repoOutcome{status: statusAlreadyDone}
+	}
 
 	if !hasState && b.opts.BaselineOnFirstRun {
 		return b.baseline(ctx, repo, owner, name)
 	}
 
-	// Regular path: page newest -> oldest until we cross the cursor.
+	// Regular path: page newest -> oldest until we cross the cursor. There is no
+	// per-repo cap here: the whole week's versions feed one summary, and only the
+	// document's bullet list is capped (see releasedoc.MaxListedTags).
 	var all []fetch.Release
 	hitCap := false
 	sawReleases := false
 	for page := 1; page <= b.opts.MaxPages; page++ {
 		pg, err := b.fet.ListReleasesPage(ctx, owner, name, page, defaultPageSize)
 		if err != nil {
-			return nil, classify(err)
+			return b.fail(repo, classify(err))
 		}
 		if len(pg.Releases) > 0 {
 			sawReleases = true
@@ -183,9 +308,6 @@ func (b *builder) processRepo(ctx context.Context, repo string) (*releasedigest.
 			hitCap = true
 		}
 	}
-	if hitCap {
-		b.rep.HistoryTruncated++
-	}
 
 	cands := make([]candidate, 0, len(all))
 	for _, r := range all {
@@ -199,26 +321,26 @@ func (b *builder) processRepo(ctx context.Context, repo string) (*releasedigest.
 	if len(cands) == 0 && b.opts.FallbackToTags && tagMode {
 		tags, capHit := b.fetchNewTags(ctx, owner, name, st.SeenTags)
 		if capHit {
-			b.rep.HistoryTruncated++
+			hitCap = true
 		}
 		for _, t := range tags {
 			cands = append(cands, b.tagCandidate(ctx, repo, owner, name, t))
 		}
 	}
 	if len(cands) == 0 {
-		return nil, ""
+		b.stamp(repo, StatusNoChange, true)
+		o := repoOutcome{status: StatusNoChange}
+		if hitCap {
+			o.historyTruncated = 1
+		}
+		return o
 	}
 
-	// cands are newest-first. Process the oldest `perRepoLimit` first so the
-	// cursor never jumps over unprocessed versions.
-	reverse(cands)
-	if len(cands) > b.opts.PerRepoLimit {
-		b.rep.Truncated++
-		cands = cands[:b.opts.PerRepoLimit]
-	}
-	// Advance cursor to the newest item in this batch (last after oldest-first sort).
+	// cands are newest-first. Render newest-first too, but advance the cursor
+	// from the oldest item so a future run can never skip an unprocessed version.
 	next := st
-	for _, c := range cands {
+	for i := len(cands) - 1; i >= 0; i-- {
+		c := cands[i]
 		if c.rel.ID > 0 {
 			next.LastID = c.rel.ID
 		}
@@ -228,17 +350,30 @@ func (b *builder) processRepo(ctx context.Context, repo string) (*releasedigest.
 		next.LastTag = c.tagName()
 		AddSeenTag(&next, c.tagName())
 	}
-	b.state.Set(repo, next)
+	next.WeekKey = b.week.Key
+	next.Status = StatusOK
+	next.LatestSummaryAt = b.week.End
+	b.putState(repo, next)
 
-	// Render newest-first.
-	reverse(cands)
-	return b.summarizeGroup(ctx, repo, cands), ""
+	group, summarized, degraded, truncated := b.summarizeRepo(ctx, repo, cands)
+	o := repoOutcome{
+		group:       group,
+		status:      StatusOK,
+		newReleases: len(cands),
+		summarized:  summarized,
+		degraded:    degraded,
+		truncated:   truncated,
+	}
+	if hitCap {
+		o.historyTruncated = 1
+	}
+	return o
 }
 
-func (b *builder) baseline(ctx context.Context, repo, owner, name string) (*releasedigest.RepoReleases, string) {
+func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOutcome {
 	page, err := b.fet.ListReleasesPage(ctx, owner, name, 1, defaultPageSize)
 	if err != nil {
-		return nil, classify(err)
+		return b.fail(repo, classify(err))
 	}
 	rels := filterReleases(page.Releases, b.opts)
 	st := RepoState{}
@@ -255,7 +390,10 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) (*rele
 	} else if b.opts.FallbackToTags {
 		tags, _ := b.fetchAllTags(ctx, owner, name)
 		if len(tags) == 0 {
-			return nil, ""
+			st.Status = StatusBaseline
+			st.WeekKey = b.week.Key
+			b.putState(repo, st)
+			return repoOutcome{status: StatusBaseline}
 		}
 		st.LastTag = tags[0].Name
 		for _, t := range tags {
@@ -263,24 +401,83 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) (*rele
 			pool = append(pool, b.tagCandidate(ctx, repo, owner, name, t))
 		}
 	} else {
-		return nil, ""
+		st.Status = StatusBaseline
+		st.WeekKey = b.week.Key
+		b.putState(repo, st)
+		return repoOutcome{status: StatusBaseline}
 	}
-	b.state.Set(repo, st)
+	// The baseline itself writes no document: it records where "new" starts so
+	// the first real week summarizes only what happened after subscribing.
+	st.Status = StatusBaseline
+	st.WeekKey = b.week.Key
+	b.putState(repo, st)
+
 	if b.opts.BackfillLatest <= 0 || len(pool) == 0 {
-		return nil, ""
+		return repoOutcome{status: StatusBaseline}
 	}
 	n := b.opts.BackfillLatest
 	if n > len(pool) {
 		n = len(pool)
 	}
-	return b.summarizeGroup(ctx, repo, pool[:n]), ""
+	group, summarized, degraded, truncated := b.summarizeRepo(ctx, repo, pool[:n])
+	return repoOutcome{
+		group:       group,
+		status:      StatusOK,
+		newReleases: n,
+		summarized:  summarized,
+		degraded:    degraded,
+		truncated:   truncated,
+	}
 }
 
-func (b *builder) summarizeGroup(ctx context.Context, repo string, cands []candidate) *releasedigest.RepoReleases {
-	results := b.sum.Summarize(ctx, cands)
+func (b *builder) fail(repo, class string) repoOutcome {
+	status := StatusFailed
+	if class == "ratelimited" {
+		status = StatusRateLimited
+	}
+	// A failed check must not set WeekKey: the cursor did not move, so a retry
+	// (explicit or the next scheduled run) has to be allowed to try again. The
+	// status is still recorded so the panel can show 限流/失败 immediately.
+	b.stamp(repo, status, false)
+	return repoOutcome{status: status}
+}
+
+// stamp records the outcome of a check that advanced no cursor.
+func (b *builder) stamp(repo, status string, done bool) {
+	st, _ := b.getState(repo)
+	st.Status = status
+	now := time.Now().UTC()
+	st.LastCheckedAt = &now
+	if done {
+		st.WeekKey = b.week.Key
+	}
+	b.putState(repo, st)
+}
+
+// getState is the lock-protected read that pairs with putState: workers run
+// concurrently, and the cursor map is shared.
+func (b *builder) getState(repo string) (RepoState, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.state.Get(repo)
+}
+
+func (b *builder) putState(repo string, st RepoState) {
+	if st.LastCheckedAt == nil {
+		now := time.Now().UTC()
+		st.LastCheckedAt = &now
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.state.Set(repo, st)
+}
+
+// summarizeRepo makes exactly one model call for the whole week and renders the
+// digest group from its single summary.
+func (b *builder) summarizeRepo(ctx context.Context, repo string, cands []candidate) (*releasedigest.RepoReleases, int, int, int) {
+	res := b.sum.SummarizeRepo(ctx, repo, b.week.Key, cands)
 	items := make([]releasedigest.ReleaseItem, 0, len(cands))
 	for _, c := range cands {
-		r := results[c.repoFull+"\x00"+c.tagName()]
 		item := releasedigest.ReleaseItem{
 			ID:            c.rel.ID,
 			Tag:           c.tagName(),
@@ -290,8 +487,7 @@ func (b *builder) summarizeGroup(ctx context.Context, repo string, cands []candi
 			URL:           c.rel.HTMLURL,
 			Prerelease:    c.rel.Prerelease,
 			Draft:         c.rel.Draft,
-			SummaryZh:     r.SummaryZh,
-			SummarySource: r.Source,
+			SummarySource: res.Source,
 		}
 		if item.Name == "" {
 			item.Name = item.Tag
@@ -303,21 +499,30 @@ func (b *builder) summarizeGroup(ctx context.Context, repo string, cands []candi
 			excerpt := truncateRunes(c.rel.Body, b.opts.MaxNotesChars)
 			item.BodyExcerpt = &excerpt
 		}
-		b.rep.NewReleases++
-		if r.Source == "model" {
-			b.rep.Summarized++
-		} else {
-			b.rep.Degraded++
-		}
 		items = append(items, item)
 	}
-	return &releasedigest.RepoReleases{
-		FullName:  repo,
-		URL:       repoURL(repo),
-		LatestTag: items[0].Tag,
-		NewCount:  len(items),
-		Releases:  items,
+	summary := res.SummaryZh
+	start, end := b.week.Start, b.week.End
+	group := &releasedigest.RepoReleases{
+		FullName:    repo,
+		URL:         repoURL(repo),
+		LatestTag:   items[0].Tag,
+		NewCount:    len(items),
+		PeriodStart: &start,
+		PeriodEnd:   &end,
+		SummaryZh:   &summary,
+		Releases:    items,
 	}
+	summarized, degraded, truncated := 0, 0, 0
+	if res.Source == "model" {
+		summarized = 1
+	} else {
+		degraded = 1
+	}
+	if res.Truncated {
+		truncated = 1
+	}
+	return group, summarized, degraded, truncated
 }
 
 // tagCandidate builds a tag entry and, when the repo has no release notes, uses
@@ -342,20 +547,27 @@ func (b *builder) getCommitOnce(owner, name, sha string, rel *fetch.Release) {
 		return
 	}
 	key := owner + "/" + name + "@" + sha
+	b.mu.Lock()
 	if b.commits == nil {
 		b.commits = map[string]*fetch.Commit{}
 	}
-	if cm, ok := b.commits[key]; ok {
+	cm, ok := b.commits[key]
+	b.mu.Unlock()
+	if ok {
 		applyCommit(rel, sha, cm)
 		return
 	}
-	cm, err := b.fet.GetCommit(context.Background(), owner, name, sha)
+	fetched, err := b.fet.GetCommit(context.Background(), owner, name, sha)
 	if err != nil {
+		b.mu.Lock()
 		b.commits[key] = nil
+		b.mu.Unlock()
 		return
 	}
-	b.commits[key] = &cm
-	applyCommit(rel, sha, &cm)
+	b.mu.Lock()
+	b.commits[key] = &fetched
+	b.mu.Unlock()
+	applyCommit(rel, sha, &fetched)
 }
 
 func applyCommit(rel *fetch.Release, sha string, cm *fetch.Commit) {
@@ -448,12 +660,6 @@ func splitRepo(repo string) (owner, name string, ok bool) {
 }
 
 func repoURL(repo string) string { return "https://github.com/" + repo }
-
-func reverse[T any](s []T) {
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
-	}
-}
 
 func contains(list []string, s string) bool {
 	for _, v := range list {

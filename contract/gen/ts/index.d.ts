@@ -43,14 +43,16 @@ export interface RunRequest {
   "date"?: string;
   "dryRun"?: boolean;
   "outputDir"?: string;
-  "action"?: "list" | "add" | "remove";
+  "action"?: "list" | "add" | "remove" | "releases";
   "repo"?: string;
+  "volume"?: number;
+  "stages"?: Array<"trending" | "digest" | "releases">;
 }
 
 export interface RunResult {
   "ipcSchema": 2;
   "ok": boolean;
-  "command": "run" | "serve" | "config" | "version";
+  "command": "run" | "serve" | "config" | "version" | "subscribe";
   "startedAt": string;
   "finishedAt": string;
   "skipped": boolean;
@@ -63,6 +65,8 @@ export interface RunResult {
   "warnings"?: Array<string>;
   "usage"?: Usage;
   "releases"?: ReleasesReport;
+  "subscriptions"?: SubscriptionList;
+  "subscriptionDoc"?: SubscriptionDoc;
   [k: string]: unknown;
 }
 
@@ -104,7 +108,7 @@ export interface ReleaseItem {
   "prerelease": boolean;
   "draft": boolean;
   "bodyExcerpt"?: string;
-  "summaryZh": string;
+  "summaryZh"?: string;
   "summarySource": "model" | "original";
   [k: string]: unknown;
 }
@@ -114,6 +118,9 @@ export interface RepoReleases {
   "url": string;
   "latestTag": string;
   "newCount": number;
+  "periodStart"?: string;
+  "periodEnd"?: string;
+  "summaryZh"?: string;
   "releases": Array<ReleaseItem>;
   [k: string]: unknown;
 }
@@ -121,6 +128,8 @@ export interface RepoReleases {
 export interface ReleasesReport {
   "enabled": boolean;
   "repos": number;
+  "checked": number;
+  "changed": number;
   "newReleases": number;
   "summarized"?: number;
   "degraded"?: number;
@@ -143,8 +152,39 @@ export interface ReleaseManifestEntry {
   [k: string]: unknown;
 }
 
+export type SubscriptionStatus = "baseline" | "ok" | "no_change" | "rate_limited" | "failed";
+
+export interface SubscriptionItem {
+  "fullName": string;
+  "url"?: string;
+  "latestTag"?: string;
+  "latestSummaryAt"?: string;
+  "lastCheckedAt"?: string;
+  "status": SubscriptionStatus;
+  [k: string]: unknown;
+}
+
 export interface SubscriptionList {
   "repos": Array<string>;
+  "items"?: Array<SubscriptionItem>;
+  [k: string]: unknown;
+}
+
+export interface SubscriptionVolume {
+  "index": number;
+  "file": string;
+  "from"?: string;
+  "to"?: string;
+  "lines"?: number;
+  [k: string]: unknown;
+}
+
+export interface SubscriptionDoc {
+  "fullName": string;
+  "volume": number;
+  "volumes"?: Array<SubscriptionVolume>;
+  "updatedAt"?: string;
+  "markdown": string;
   [k: string]: unknown;
 }
 
@@ -169,7 +209,7 @@ export interface Digest {
 }
 
 export interface ReleaseDigest {
-  "schema": 1;
+  "schema": 2;
   "date": string;
   "period": "daily" | "weekly" | "monthly";
   "contentHash": string;
@@ -202,6 +242,10 @@ export declare const fixtures: {
   releaseNormal: ReleaseDigest;
   releaseDegraded: ReleaseDigest;
   releaseEmpty: ReleaseDigest;
+  releaseWeekly: ReleaseDigest;
+  subscriptionsNormal: SubscriptionList;
+  subscriptions40: SubscriptionList;
+  subscriptionDocNormal: SubscriptionDoc;
 };
 export declare const validators: {
   runRequest: (value: unknown) => boolean;
@@ -209,6 +253,8 @@ export declare const validators: {
   digest: (value: unknown) => boolean;
   releases: (value: unknown) => boolean;
   releasesReport: (value: unknown) => boolean;
+  subscriptionList: (value: unknown) => boolean;
+  subscriptionDoc: (value: unknown) => boolean;
   versionInfo: (value: unknown) => boolean;
 };
 export declare const rawSchema: {

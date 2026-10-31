@@ -13,6 +13,7 @@
 | [仓库发版订阅（releases 阶段）](specs/2026-10-31-repo-release-watch-design.md) | 已实施（v0.5.0） | 新增 `releasewatch` 阶段与 `releases/` 产物（§2、§4） |
 | [订阅能力纳入契约（contract v0.3.0）](specs/2026-10-31-contract-releases-v3-design.md) | 已实施 | `releases.v2.json` 与 serve 发版接口（§6） |
 | [订阅数据版本化（方案 A）](specs/2026-10-31-subscription-repo-versioned-design.md) | 已实施 | 订阅从本机文件迁至数据仓 `<output.dir>/subscriptions.yaml`（§5、§7、§9） |
+| [订阅页与每周发版记录](specs/2026-11-01-subscriptions-weekly-releases-design.md) | 已实施（核心 0.7.0 / 契约 0.4.0） | 发版阶段改周粒度（一仓一周一次批量总结）、新增每仓文档与卷切分、`subscribe releases`、`run --stages releases`、HTTP 只读镜像（§2、§4、§6、§7） |
 
 ---
 
@@ -63,6 +64,7 @@
 | `internal/enrich` | 可选外部上下文：topics / README 摘录 | best-effort，失败逐仓降级 |
 | `internal/releasewatch` | 发版订阅：增量判定、摘要、游标状态 | 按仓库粒度推进游标 |
 | `internal/releasedigest` | 发版文档类型（contract 别名）+ 内容哈希 | 类型不重复定义 |
+| `internal/releasedoc` | 每仓发版文档：周章节 prepend、卷切分、幂等、首行校验、按册读取 | 切卷只看写入前；一次写入必完整；面板逐字渲染同一份内容 |
 | `internal/digest` | 榜单领域类型（contract 别名） | 同上 |
 | `internal/render` | 产物渲染（md/json/index）、路径规则、稳定哈希 | `output.dir` 是路径唯一真源 |
 | `internal/gitx` | 包 `git` 二进制：fetch/切分支/add/commit/push/rebase | **不经 shell、token 不进 argv** |
@@ -172,7 +174,11 @@ daily=90 / weekly=12 / monthly=12。配置文件里的 `output.retentionDays` �
 | `serve` HTTP | 插件、Web | 见下 |
 | 数据仓产物 | 人、脚本 | Markdown 供阅读，JSON 供解析 |
 
-**serve 只读接口**：`/api/v2/digests/{date}`、`/api/v2/digests/{period}/{date}`、`/api/v2/manifest`、`/api/v2/releases`、`/api/v2/releases/{date}`、`/api/v2/subscriptions`、`/feed.xml`。
+**serve 只读接口**：`/api/v2/digests/{date}`、`/api/v2/digests/{period}/{date}`、`/api/v2/manifest`、`/api/v2/releases`、`/api/v2/releases/{date}`、`/api/v2/subscriptions`（含 `items[]`）、`/api/v2/repos/{owner}/{repo}/releases?volume=N`、`/feed.xml`。
+
+**IPC 与 HTTP 的镜像关系**：每个只读 IPC 能力都有 HTTP 路由，两者共用同一契约类型（只差传输信封）；
+写操作（`subscribe add/remove`）只走 IPC，不暴露到 HTTP。映射表维护在 `contract/README.md`，
+新增只读命令必须在同一个 PR 里补路由与表行。
 
 ---
 

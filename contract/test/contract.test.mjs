@@ -15,7 +15,7 @@ const jcsHash = (d) => {
   return 'sha256:' + crypto.createHash('sha256').update(canonicalize(basis), 'utf8').digest('hex')
 }
 
-test('contractVersion is 0.3.0', () => assert.equal(contractVersion, '0.3.0'))
+test('contractVersion is 0.4.0', () => assert.equal(contractVersion, '0.4.0'))
 
 test('error catalog has 17 retriable entries', () => {
   assert.equal(Object.keys(errorCatalog).length, 17)
@@ -51,7 +51,7 @@ test('jcs contentHash matches every trending fixture', () => {
 })
 
 test('jcs contentHash matches every release fixture', () => {
-  for (const name of ['releaseNormal', 'releaseDegraded', 'releaseEmpty']) {
+  for (const name of ['releaseNormal', 'releaseDegraded', 'releaseEmpty', 'releaseWeekly']) {
     assert.equal(releaseHash(fixtures[name]), fixtures[name].contentHash, `${name} jcs hash mismatch`)
   }
 })
@@ -102,14 +102,17 @@ test('release fixtures validate against the releases schema', () => {
     ['releaseNormal', fixtures.releaseNormal],
     ['releaseDegraded', fixtures.releaseDegraded],
     ['releaseEmpty', fixtures.releaseEmpty],
+    ['releaseWeekly', fixtures.releaseWeekly],
   ]) {
     assert.ok(validators.releases(doc), `${name} should be valid`)
   }
-  assert.equal(validators.releases({ ...fixtures.releaseNormal, schema: 2 }), false)
+  // schema=2 is the only accepted document version; v1 files still render
+  // through serve (which does not validate) but do not satisfy the schema.
+  assert.equal(validators.releases({ ...fixtures.releaseNormal, schema: 1 }), false)
 })
 
 test('ReleasesReport requires usage so zero cost is distinguishable', () => {
-  const base = { enabled: true, repos: 0, newReleases: 0, durationMs: 0 }
+  const base = { enabled: true, repos: 0, checked: 0, changed: 0, newReleases: 0, durationMs: 0 }
   assert.equal(validators.releasesReport(base), false, 'usage is required')
   const zeroUsage = {
     promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0,
@@ -129,7 +132,7 @@ test('RunResult carries an optional releases report', () => {
     startedAt: '2026-10-30T00:00:00Z', finishedAt: '2026-10-30T00:05:00Z',
     skipped: false, files: [],
     releases: {
-      enabled: true, repos: 2, newReleases: 4, summarized: 4, degraded: 0,
+      enabled: true, repos: 2, checked: 2, changed: 2, newReleases: 4, summarized: 4, degraded: 0,
       failed: 0, rateLimited: 0, skipped: 0, truncated: 0, historyTruncated: 0,
       durationMs: 16851,
       usage: {
@@ -154,4 +157,75 @@ test('RunResult accepts an optional usage block', () => {
   }
   assert.ok(validators.runResult(rr))
   assert.equal(validators.runResult({ ...rr, usage: { ...usage, promptTokens: 'x' } }), false)
+})
+
+test('SubscriptionList keeps repos for old consumers and adds items', () => {
+  const list = fixtures.subscriptionsNormal
+  assert.ok(validators.subscriptionList(list))
+  assert.ok(validators.subscriptionList({ repos: [] }), 'items is optional')
+  assert.ok(validators.subscriptionList(list), 'items accepted')
+  assert.equal(
+    validators.subscriptionList({ ...list, items: [{ fullName: 'o/r', status: 'bogus' }] }),
+    false,
+    'status is a closed enum',
+  )
+  assert.equal(
+    validators.subscriptionList({ ...list, repos: ['not-a-repo'] }),
+    false,
+    'repos keeps the owner/repo pattern',
+  )
+  const statuses = new Set(list.items.map((i) => i.status))
+  for (const s of ['ok', 'no_change', 'baseline', 'rate_limited', 'failed']) {
+    assert.ok(statuses.has(s), `fixture covers status ${s}`)
+  }
+})
+
+test('the 40-repo subscription fixture stays inside the first-paint budget', () => {
+  const list = fixtures.subscriptions40
+  assert.equal(list.items.length, 40)
+  const bytes = Buffer.byteLength(JSON.stringify(list), 'utf8')
+  assert.ok(bytes <= 10 * 1024, `payload ${bytes} B exceeds 10 KB`)
+})
+
+test('SubscriptionDoc is the markdown file plus its volume index', () => {
+  const doc = fixtures.subscriptionDocNormal
+  assert.ok(validators.subscriptionDoc(doc))
+  assert.equal(validators.subscriptionDoc({ ...doc, volume: 0 }), false, 'volume is 1-based')
+  assert.equal(validators.subscriptionDoc({ ...doc, fullName: 'not a repo' }), false)
+  const { markdown, ...rest } = doc
+  assert.equal(validators.subscriptionDoc(rest), false, 'markdown is required')
+})
+
+test('RunRequest carries optional stages for a release-only run', () => {
+  const base = { ipcSchema: 2, command: 'run' }
+  assert.ok(validators.runRequest(base), 'absent stages means every stage')
+  assert.ok(validators.runRequest({ ...base, stages: ['releases'] }))
+  assert.ok(validators.runRequest({ ...base, stages: ['trending', 'digest'] }))
+  assert.equal(validators.runRequest({ ...base, stages: ['bogus'] }), false)
+  assert.equal(validators.runRequest({ ...base, stages: 'releases' }), false)
+  // stages is a run-only knob.
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'version', stages: ['releases'] }), false)
+  assert.equal(
+    validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'list', stages: ['releases'] }),
+    false,
+  )
+})
+
+test('RunRequest accepts subscribe releases with an optional volume', () => {
+  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases', repo: 'o/r' }))
+  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases', repo: 'o/r', volume: 2 }))
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'list', volume: 2 }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'remove', repo: 'o/r', volume: 1 }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases', repo: 'o/r', volume: 0 }), false)
+})
+
+test('RunResult can carry a subscription list or document envelope', () => {
+  const base = {
+    ipcSchema: 2, ok: true, command: 'subscribe',
+    startedAt: '2026-11-01T00:00:00Z', finishedAt: '2026-11-01T00:00:01Z',
+    skipped: false, files: [],
+  }
+  assert.ok(validators.runResult({ ...base, subscriptions: fixtures.subscriptionsNormal }))
+  assert.ok(validators.runResult({ ...base, subscriptionDoc: fixtures.subscriptionDocNormal }))
 })

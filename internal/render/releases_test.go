@@ -9,10 +9,10 @@ import (
 
 func sampleRelease(tag string) releasedigest.ReleaseDigest {
 	return releasedigest.ReleaseDigest{
-		Schema: 1, Date: "2026-10-31", Period: "daily", Count: 1,
+		Schema: 2, Date: "2026-10-31", Period: "daily", Count: 1,
 		Repos: []releasedigest.RepoReleases{{
 			FullName: "o/r", URL: "https://github.com/o/r", LatestTag: tag, NewCount: 1,
-			Releases: []releasedigest.ReleaseItem{{Tag: tag, Name: tag, Kind: "release", SummaryZh: "摘要", SummarySource: "model"}},
+			Releases: []releasedigest.ReleaseItem{{Tag: tag, Name: tag, Kind: "release", SummarySource: "model"}},
 		}},
 	}
 }

@@ -27,6 +27,16 @@ const (
 	ErrorCodeNOT_MERGEABLE        ErrorCode = "NOT_MERGEABLE"
 )
 
+type SubscriptionStatus string
+
+const (
+	SubscriptionStatusBaseline    SubscriptionStatus = "baseline"
+	SubscriptionStatusOk          SubscriptionStatus = "ok"
+	SubscriptionStatusNoChange    SubscriptionStatus = "no_change"
+	SubscriptionStatusRateLimited SubscriptionStatus = "rate_limited"
+	SubscriptionStatusFailed      SubscriptionStatus = "failed"
+)
+
 type RepoSnapshot struct {
 	FullName      string  `json:"fullName"`
 	URL           string  `json:"url"`
@@ -60,32 +70,36 @@ type FileArtifact struct {
 }
 
 type RunRequest struct {
-	IPCSchema  int     `json:"ipcSchema"`
-	Command    string  `json:"command"`
-	ConfigPath *string `json:"configPath,omitempty"`
-	Date       *string `json:"date,omitempty"`
-	DryRun     *bool   `json:"dryRun,omitempty"`
-	OutputDir  *string `json:"outputDir,omitempty"`
-	Action     *string `json:"action,omitempty"`
-	Repo       *string `json:"repo,omitempty"`
+	IPCSchema  int      `json:"ipcSchema"`
+	Command    string   `json:"command"`
+	ConfigPath *string  `json:"configPath,omitempty"`
+	Date       *string  `json:"date,omitempty"`
+	DryRun     *bool    `json:"dryRun,omitempty"`
+	OutputDir  *string  `json:"outputDir,omitempty"`
+	Action     *string  `json:"action,omitempty"`
+	Repo       *string  `json:"repo,omitempty"`
+	Volume     *int     `json:"volume,omitempty"`
+	Stages     []string `json:"stages,omitempty"`
 }
 
 type RunResult struct {
-	IPCSchema   int             `json:"ipcSchema"`
-	OK          bool            `json:"ok"`
-	Command     string          `json:"command"`
-	StartedAt   time.Time       `json:"startedAt"`
-	FinishedAt  time.Time       `json:"finishedAt"`
-	Skipped     bool            `json:"skipped"`
-	Files       []FileArtifact  `json:"files"`
-	Branch      *string         `json:"branch,omitempty"`
-	Commit      *string         `json:"commit,omitempty"`
-	PRUrl       *string         `json:"prUrl,omitempty"`
-	ContentHash *string         `json:"contentHash,omitempty"`
-	Error       *ErrorInfo      `json:"error,omitempty"`
-	Warnings    []string        `json:"warnings,omitempty"`
-	Usage       *Usage          `json:"usage,omitempty"`
-	Releases    *ReleasesReport `json:"releases,omitempty"`
+	IPCSchema       int               `json:"ipcSchema"`
+	OK              bool              `json:"ok"`
+	Command         string            `json:"command"`
+	StartedAt       time.Time         `json:"startedAt"`
+	FinishedAt      time.Time         `json:"finishedAt"`
+	Skipped         bool              `json:"skipped"`
+	Files           []FileArtifact    `json:"files"`
+	Branch          *string           `json:"branch,omitempty"`
+	Commit          *string           `json:"commit,omitempty"`
+	PRUrl           *string           `json:"prUrl,omitempty"`
+	ContentHash     *string           `json:"contentHash,omitempty"`
+	Error           *ErrorInfo        `json:"error,omitempty"`
+	Warnings        []string          `json:"warnings,omitempty"`
+	Usage           *Usage            `json:"usage,omitempty"`
+	Releases        *ReleasesReport   `json:"releases,omitempty"`
+	Subscriptions   *SubscriptionList `json:"subscriptions,omitempty"`
+	SubscriptionDoc *SubscriptionDoc  `json:"subscriptionDoc,omitempty"`
 }
 
 type Usage struct {
@@ -123,21 +137,26 @@ type ReleaseItem struct {
 	Prerelease    bool       `json:"prerelease"`
 	Draft         bool       `json:"draft"`
 	BodyExcerpt   *string    `json:"bodyExcerpt,omitempty"`
-	SummaryZh     string     `json:"summaryZh"`
+	SummaryZh     *string    `json:"summaryZh,omitempty"`
 	SummarySource string     `json:"summarySource"`
 }
 
 type RepoReleases struct {
-	FullName  string        `json:"fullName"`
-	URL       string        `json:"url"`
-	LatestTag string        `json:"latestTag"`
-	NewCount  int           `json:"newCount"`
-	Releases  []ReleaseItem `json:"releases"`
+	FullName    string        `json:"fullName"`
+	URL         string        `json:"url"`
+	LatestTag   string        `json:"latestTag"`
+	NewCount    int           `json:"newCount"`
+	PeriodStart *string       `json:"periodStart,omitempty"`
+	PeriodEnd   *string       `json:"periodEnd,omitempty"`
+	SummaryZh   *string       `json:"summaryZh,omitempty"`
+	Releases    []ReleaseItem `json:"releases"`
 }
 
 type ReleasesReport struct {
 	Enabled          bool  `json:"enabled"`
 	Repos            int   `json:"repos"`
+	Checked          int   `json:"checked"`
+	Changed          int   `json:"changed"`
 	NewReleases      int   `json:"newReleases"`
 	Summarized       *int  `json:"summarized,omitempty"`
 	Degraded         *int  `json:"degraded,omitempty"`
@@ -158,8 +177,34 @@ type ReleaseManifestEntry struct {
 	ContentHash string `json:"contentHash"`
 }
 
+type SubscriptionItem struct {
+	FullName        string             `json:"fullName"`
+	URL             *string            `json:"url,omitempty"`
+	LatestTag       *string            `json:"latestTag,omitempty"`
+	LatestSummaryAt *string            `json:"latestSummaryAt,omitempty"`
+	LastCheckedAt   *time.Time         `json:"lastCheckedAt,omitempty"`
+	Status          SubscriptionStatus `json:"status"`
+}
+
 type SubscriptionList struct {
-	Repos []string `json:"repos"`
+	Repos []string           `json:"repos"`
+	Items []SubscriptionItem `json:"items,omitempty"`
+}
+
+type SubscriptionVolume struct {
+	Index int     `json:"index"`
+	File  string  `json:"file"`
+	From  *string `json:"from,omitempty"`
+	To    *string `json:"to,omitempty"`
+	Lines *int    `json:"lines,omitempty"`
+}
+
+type SubscriptionDoc struct {
+	FullName  string               `json:"fullName"`
+	Volume    int                  `json:"volume"`
+	Volumes   []SubscriptionVolume `json:"volumes,omitempty"`
+	UpdatedAt *string              `json:"updatedAt,omitempty"`
+	Markdown  string               `json:"markdown"`
 }
 
 type ErrorMeta struct {

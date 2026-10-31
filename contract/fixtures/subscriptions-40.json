@@ -1,0 +1,366 @@
+{
+  "repos": [
+    "vercel/repo-01",
+    "infiniflow/repo-02",
+    "deepseek-ai/repo-03",
+    "charmbracelet/repo-04",
+    "golang/repo-05",
+    "rust-lang/repo-06",
+    "microsoft/repo-07",
+    "google/repo-08",
+    "facebook/repo-09",
+    "kubernetes/repo-10",
+    "docker/repo-11",
+    "hashicorp/repo-12",
+    "grafana/repo-13",
+    "prometheus/repo-14",
+    "istio/repo-15",
+    "envoyproxy/repo-16",
+    "containerd/repo-17",
+    "etcd-io/repo-18",
+    "cilium/repo-19",
+    "helm/repo-20",
+    "argoproj/repo-21",
+    "fluxcd/repo-22",
+    "open-telemetry/repo-23",
+    "grpc/repo-24",
+    "protocolbuffers/repo-25",
+    "nats-io/repo-26",
+    "redis/repo-27",
+    "valkey-io/repo-28",
+    "apache/repo-29",
+    "elastic/repo-30",
+    "mozilla/repo-31",
+    "nodejs/repo-32",
+    "denoland/repo-33",
+    "oven-sh/repo-34",
+    "pytorch/repo-35",
+    "huggingface/repo-36",
+    "langchain-ai/repo-37",
+    "ollama/repo-38",
+    "ggerganov/repo-39",
+    "mudler/repo-40"
+  ],
+  "items": [
+    {
+      "fullName": "vercel/repo-01",
+      "url": "https://github.com/vercel/repo-01",
+      "latestTag": "v0.0.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "infiniflow/repo-02",
+      "url": "https://github.com/infiniflow/repo-02",
+      "latestTag": "v1.1.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "deepseek-ai/repo-03",
+      "url": "https://github.com/deepseek-ai/repo-03",
+      "latestTag": "v2.2.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "charmbracelet/repo-04",
+      "url": "https://github.com/charmbracelet/repo-04",
+      "latestTag": "v3.3.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "golang/repo-05",
+      "url": "https://github.com/golang/repo-05",
+      "latestTag": "v4.4.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    },
+    {
+      "fullName": "rust-lang/repo-06",
+      "url": "https://github.com/rust-lang/repo-06",
+      "latestTag": "v5.0.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "microsoft/repo-07",
+      "url": "https://github.com/microsoft/repo-07",
+      "latestTag": "v6.1.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "google/repo-08",
+      "url": "https://github.com/google/repo-08",
+      "latestTag": "v7.2.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "facebook/repo-09",
+      "url": "https://github.com/facebook/repo-09",
+      "latestTag": "v8.3.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "kubernetes/repo-10",
+      "url": "https://github.com/kubernetes/repo-10",
+      "latestTag": "v0.4.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    },
+    {
+      "fullName": "docker/repo-11",
+      "url": "https://github.com/docker/repo-11",
+      "latestTag": "v1.0.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "hashicorp/repo-12",
+      "url": "https://github.com/hashicorp/repo-12",
+      "latestTag": "v2.1.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "grafana/repo-13",
+      "url": "https://github.com/grafana/repo-13",
+      "latestTag": "v3.2.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "prometheus/repo-14",
+      "url": "https://github.com/prometheus/repo-14",
+      "latestTag": "v4.3.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "istio/repo-15",
+      "url": "https://github.com/istio/repo-15",
+      "latestTag": "v5.4.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    },
+    {
+      "fullName": "envoyproxy/repo-16",
+      "url": "https://github.com/envoyproxy/repo-16",
+      "latestTag": "v6.0.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "containerd/repo-17",
+      "url": "https://github.com/containerd/repo-17",
+      "latestTag": "v7.1.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "etcd-io/repo-18",
+      "url": "https://github.com/etcd-io/repo-18",
+      "latestTag": "v8.2.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "cilium/repo-19",
+      "url": "https://github.com/cilium/repo-19",
+      "latestTag": "v0.3.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "helm/repo-20",
+      "url": "https://github.com/helm/repo-20",
+      "latestTag": "v1.4.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    },
+    {
+      "fullName": "argoproj/repo-21",
+      "url": "https://github.com/argoproj/repo-21",
+      "latestTag": "v2.0.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "fluxcd/repo-22",
+      "url": "https://github.com/fluxcd/repo-22",
+      "latestTag": "v3.1.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "open-telemetry/repo-23",
+      "url": "https://github.com/open-telemetry/repo-23",
+      "latestTag": "v4.2.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "grpc/repo-24",
+      "url": "https://github.com/grpc/repo-24",
+      "latestTag": "v5.3.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "protocolbuffers/repo-25",
+      "url": "https://github.com/protocolbuffers/repo-25",
+      "latestTag": "v6.4.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    },
+    {
+      "fullName": "nats-io/repo-26",
+      "url": "https://github.com/nats-io/repo-26",
+      "latestTag": "v7.0.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "redis/repo-27",
+      "url": "https://github.com/redis/repo-27",
+      "latestTag": "v8.1.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "valkey-io/repo-28",
+      "url": "https://github.com/valkey-io/repo-28",
+      "latestTag": "v0.2.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "apache/repo-29",
+      "url": "https://github.com/apache/repo-29",
+      "latestTag": "v1.3.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "elastic/repo-30",
+      "url": "https://github.com/elastic/repo-30",
+      "latestTag": "v2.4.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    },
+    {
+      "fullName": "mozilla/repo-31",
+      "url": "https://github.com/mozilla/repo-31",
+      "latestTag": "v3.0.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "nodejs/repo-32",
+      "url": "https://github.com/nodejs/repo-32",
+      "latestTag": "v4.1.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "denoland/repo-33",
+      "url": "https://github.com/denoland/repo-33",
+      "latestTag": "v5.2.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "oven-sh/repo-34",
+      "url": "https://github.com/oven-sh/repo-34",
+      "latestTag": "v6.3.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "pytorch/repo-35",
+      "url": "https://github.com/pytorch/repo-35",
+      "latestTag": "v7.4.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    },
+    {
+      "fullName": "huggingface/repo-36",
+      "url": "https://github.com/huggingface/repo-36",
+      "latestTag": "v8.0.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "ok"
+    },
+    {
+      "fullName": "langchain-ai/repo-37",
+      "url": "https://github.com/langchain-ai/repo-37",
+      "latestTag": "v0.1.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "no_change"
+    },
+    {
+      "fullName": "ollama/repo-38",
+      "url": "https://github.com/ollama/repo-38",
+      "latestTag": "v1.2.1",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "baseline"
+    },
+    {
+      "fullName": "ggerganov/repo-39",
+      "url": "https://github.com/ggerganov/repo-39",
+      "latestTag": "v2.3.2",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "rate_limited"
+    },
+    {
+      "fullName": "mudler/repo-40",
+      "url": "https://github.com/mudler/repo-40",
+      "latestTag": "v3.4.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z",
+      "status": "failed"
+    }
+  ]
+}

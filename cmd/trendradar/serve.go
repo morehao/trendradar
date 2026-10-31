@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/morehao/trendradar/internal/config"
+	"github.com/morehao/trendradar/internal/releasewatch"
 	"github.com/morehao/trendradar/internal/render"
 	"github.com/morehao/trendradar/internal/serve"
 	"github.com/morehao/trendradar/internal/subscription"
@@ -25,7 +26,7 @@ func runServe(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	relSubdir, subsPath := "", ""
+	relSubdir, subsPath, statePath := "", "", ""
 	if *cfgPath != "" {
 		if cfg, err := config.Load(*cfgPath); err == nil {
 			// The digests root must be normalised through render.OutputRoot — the
@@ -43,11 +44,16 @@ func runServe(args []string) error {
 				if p, err := subscription.RepoSubscriptionsPath(cfg.Repo.Path, cfg.Output.Dir, cfg.Releases.SubscriptionsFile); err == nil {
 					subsPath = p
 				}
+				// The per-repo table needs the local cursor: last tag, last check
+				// time and the check status all live there, not in the document.
+				if cfg.Repo.Path != "" {
+					statePath = releasewatch.StatePath(cfg.Repo.Path)
+				}
 			}
 		}
 	}
 
-	server := serve.New(serve.NewStore(*root)).WithReleases(relSubdir, subsPath)
+	server := serve.New(serve.NewStore(*root)).WithReleases(relSubdir, subsPath).WithReleaseState(statePath)
 	httpSrv := &http.Server{Addr: *addr, Handler: server.Handler()}
 
 	go func() {

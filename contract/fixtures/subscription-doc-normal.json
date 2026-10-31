@@ -1,0 +1,22 @@
+{
+  "fullName": "vercel/next.js",
+  "volume": 1,
+  "volumes": [
+    {
+      "index": 1,
+      "file": "vercel/next.js.md",
+      "from": "2026-10-19",
+      "to": "2026-11-01",
+      "lines": 18
+    },
+    {
+      "index": 2,
+      "file": "vercel/next.js.02.md",
+      "from": "2026-09-28",
+      "to": "2026-10-18",
+      "lines": 412
+    }
+  ],
+  "updatedAt": "2026-11-01",
+  "markdown": "# vercel/next.js\n\n> 发版记录 · 每周一次 · 最近更新 2026-11-01\n\n## 2026-10-26 ~ 2026-11-01\n\n- [v15.2.0](https://github.com/vercel/next.js/releases/tag/v15.2.0) · 10-29\n- [v15.1.9](https://github.com/vercel/next.js/releases/tag/v15.1.9) · 10-27\n\n本周发布 v15.2.0 与 v15.1.9：构建缓存命中率提升，修复 App Router 下动态段预渲染的回归。\n"
+}

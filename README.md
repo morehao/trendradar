@@ -76,8 +76,13 @@ summarize:
 
 ## 仓库发版订阅（可选）
 
-把一批自有仓库加入订阅后，`run` 会每日检查它们的新 Release（没有 Release 时回退 Tag），
-生成中文变更摘要，写入数据仓 `<output.dir>/releases/` 并与 trending 走同一次提交/PR。
+把一批自有仓库加入订阅后，`run` 会**每周一次**检查它们的新 Release（没有 Release 时回退 Tag），
+每个仓库把这一周的全部新版本合成**一段**中文总结，写入两类产物，并与 trending 走同一次提交/PR：
+
+| 产物 | 路径 | 用途 |
+|---|---|---|
+| 周文档（外部 API 的数据面） | `<output.dir>/releases/weekly/<年>/<ISO周>.{md,json}` | `GET /api/v2/releases*` |
+| 每仓文档（人读、面板渲染） | `<output.dir>/releases/<owner>/<repo>.md` | 最新一周在最上面；超过 `docMaxLines` 后下一次写入开 `.02.md` |
 
 订阅列表是一份**数据仓内受版本控制的文件** `<output.dir>/subscriptions.yaml`
 （默认 `digests/subscriptions.yaml`，示例见 [`subscriptions.example.yaml`](subscriptions.example.yaml)），
@@ -85,7 +90,9 @@ summarize:
 
 ```bash
 trendradar subscribe add morehao/trendradar morehao/golib --config config.yaml
-trendradar subscribe list --config config.yaml
+trendradar subscribe list --config config.yaml        # 逐行仓库名；--json 额外带 items[]
+trendradar subscribe releases morehao/trendradar --config config.yaml   # 读该仓的发版记录
+trendradar subscribe releases morehao/trendradar --volume 2 --config config.yaml
 trendradar subscribe remove morehao/golib --config config.yaml
 ```
 
@@ -98,32 +105,45 @@ trendradar subscribe remove morehao/golib --config config.yaml
 releases:
   enabled: true
   subscriptionsFile: subscriptions.yaml
-  period: daily            # daily | weekly | monthly
+  period: weekly           # 总结周期；本版只支持 weekly
+  timezone: Asia/Shanghai  # ISO 周边界按该时区计算
+  weekStart: monday        # 仅支持 monday（ISO 8601）
   fallbackToTags: true
   baselineOnFirstRun: true # 首次只记基线，不补发历史
-  perRepoLimit: 5
+  perRepoLimit: 10         # 文档每仓每周最多列出的版本数，其余写「其余 N 个」
+  summaryMaxChars: 1200    # 每仓每周一段总结的字符上限（500-2000）
+  docMaxLines: 600         # 每仓文档行数阈值
+  concurrency: auto        # auto = clamp(4, ceil(N/10), 8)
+  budgetSeconds: auto      # auto = min(300, 30 + 3N)
 ```
 
 要点：
 
 - 默认 `enabled: false`，对现有 trending 零影响；`enabled: true` 时才加载订阅。
 - 空订阅/文件缺失时 `run` 跳过该阶段并 warning，不报错；订阅文件 YAML 损坏才 fail-fast。
-- 订阅数量不限（配置上限 500）；releases 阶段耗时约 `4s × 订阅数 + 5s`，建议配置 `GITHUB_READ_TOKEN`。
-- 迁移：目标分支还没有 `subscriptions.yaml` 时，首次 `run` 会用 pending / 旧本机文件导入；
-  两边都有且不同则取并集并 warning（不覆盖）。
-- `--file` 仅用于只读排查：`list --file x` 读该文件，`add`/`remove --file` 返回 `CONFIG_INVALID`。
+- **周闸门**：每个仓库记最近一次总结的 ISO 周键，同一周再跑直接跳过（不请求 GitHub、不调模型、
+  不改文档）。插件侧的周定时决定「什么时候跑」，核心闸门保证「同一周只写一次」。
+- **一周一次模型调用**：这一个仓库这一周的全部新版本合成一段总结；失败降级为原文摘录并标记
+  `degraded`，游标不前进、下一周重试。
+- **切卷只看写入前**：写入前当前册行数 `> docMaxLines` 才新开一册；本次章节永远整节写入，
+  不会被拆到两册，也不会因为「这次会超」而丢记录。
+- `run --stages releases` 只跑发版阶段：不抓 trending、不渲染榜单、**不合并 pending 订阅**，
+  只读 `subscriptions.yaml`，适合独立的周定时。
 - 发版摘要的 token 消耗在 `run --json` 的 `releases.usage` 里（恒存在）：
   `calls=0` 表示没发生模型调用（如全部命中缓存），`calls>0 && usageKnown=false`
   表示调用了但供应商没回用量——两者不要混为一谈。
+- `releases.checked` / `releases.changed` 恒存在：分别表示本次检查了多少仓、多少仓产出了文档。
 - 仓库没有 Release 时回退 Tag，并用该 tag 的 commit message 作为摘要依据。
 - 状态与摘要缓存放在 `<repo>/.git/trendradar-release-*.json`，天然不入库。
-- `run --json` 会带 `releases` 报告块（契约类型 `ReleasesReport`，见 contract v0.3.0）；
-  `trendradar-usage.jsonl` 额外记录一行 `stage="releases"`。
+- `trendradar-usage.jsonl` 额外记录一行 `stage="releases"`。
 - 插件可经 IPC 管理订阅：`trendradar subscribe --json` 从 stdin 读一个
-  `RunRequest`（`{"command":"subscribe","action":"add","repo":"o/r","configPath":"..."}`），
-  回写 `RunResult`。`configPath` 必填，保证 `subscribe` 与 `run` 解析到同一个订阅文件。
-- `serve` 提供只读接口：`GET /api/v2/releases`、`GET /api/v2/releases/{date}`、
-  `GET /api/v2/subscriptions`。
+  `RunRequest`（`{"command":"subscribe","action":"add","repo":"o/r","configPath":"..."}`，
+  读文档用 `action:"releases"` + `volume`），回写 `RunResult`（列表/文档在
+  `subscriptions` / `subscriptionDoc` 两个字段里）。`configPath` 必填，保证 `subscribe` 与
+  `run` 解析到同一个订阅文件。
+- `serve` 提供只读接口，与 IPC 一一对应：`GET /api/v2/releases`、`GET /api/v2/releases/{date}`、
+  `GET /api/v2/subscriptions`（含 `items[]`）、`GET /api/v2/repos/{owner}/{repo}/releases?volume=N`。
+  HTTP 只读、无鉴权，默认绑 `127.0.0.1`；写操作只走 IPC。
 
 ## 本地密钥与测试
 

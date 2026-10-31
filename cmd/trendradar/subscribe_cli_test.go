@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/morehao/trendradar/internal/releasedoc"
+	"github.com/morehao/trendradar/internal/releasewatch"
+	"github.com/morehao/trendradar/internal/subscription"
 )
 
 // cliGit runs git in dir and fails the test on error.
@@ -38,7 +42,7 @@ func setupSubscribeRepo(t *testing.T) (cfgPath, work string) {
 		"repo:\n  path: " + work + "\n  remote: origin\n  baseBranch: main\n" +
 		"trending:\n  languages: [all]\n  since: daily\n" +
 		"output:\n  dir: digests\n  branchPrefix: trending/\n" +
-		"releases:\n  enabled: true\n  subscriptionsFile: subscriptions.yaml\n  period: daily\n"
+		"releases:\n  enabled: true\n  subscriptionsFile: subscriptions.yaml\n  period: weekly\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -116,5 +120,88 @@ func TestSubscribeRequiresConfig(t *testing.T) {
 		t.Fatal("expected error without --config")
 	} else if classifySubscribeError(err) != "CONFIG_INVALID" {
 		t.Fatalf("code = %s, want CONFIG_INVALID", classifySubscribeError(err))
+	}
+}
+
+// A10: subscribe list returns the contract SubscriptionList (repos + items), so
+// the plugin reads one shape instead of scraping stdout lines.
+func TestSubscribeListReturnsItems(t *testing.T) {
+	cfgPath, work := setupSubscribeRepo(t)
+	if err := subscription.WritePending(work, []string{"o/r"}); err != nil {
+		t.Fatal(err)
+	}
+	// Give the repo a document and a cursor, so items carry real values.
+	docRoot := filepath.Join(work, "digests", "releases")
+	rel, data, need, err := releasedoc.Plan(work, docRoot, "o/r", releasedoc.Section{
+		Repo: "o/r", WeekStart: "2026-10-26", WeekEnd: "2026-11-01",
+		SummaryZh: "本周发布 v1。", Items: []releasedoc.Item{{Tag: "v1", URL: "https://github.com/o/r/releases/tag/v1", Date: "2026-10-29"}},
+	}, 600)
+	if err != nil || !need {
+		t.Fatalf("plan: need=%v err=%v", need, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rel, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := releasewatch.NewState()
+	st.Set("o/r", releasewatch.RepoState{LastTag: "v1", Status: releasewatch.StatusOK, LatestSummaryAt: "2026-11-01"})
+	if err := st.Save(releasewatch.StatePath(work)); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSubscribeOutput([]string{"list", "--config", cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.List == nil {
+		t.Fatal("list payload missing")
+	}
+	if len(out.List.Repos) != 1 || out.List.Repos[0] != "o/r" {
+		t.Fatalf("repos=%v", out.List.Repos)
+	}
+	if len(out.List.Items) != 1 {
+		t.Fatalf("items=%+v", out.List.Items)
+	}
+	item := out.List.Items[0]
+	if item.LatestTag == nil || *item.LatestTag != "v1" || item.LatestSummaryAt == nil || *item.LatestSummaryAt != "2026-11-01" {
+		t.Fatalf("item=%+v", item)
+	}
+	if item.Status != "ok" {
+		t.Fatalf("status=%q", item.Status)
+	}
+}
+
+func TestSubscribeReleasesReturnsDocument(t *testing.T) {
+	cfgPath, work := setupSubscribeRepo(t)
+	docRoot := filepath.Join(work, "digests", "releases")
+	rel, data, _, err := releasedoc.Plan(work, docRoot, "o/r", releasedoc.Section{
+		Repo: "o/r", WeekStart: "2026-10-26", WeekEnd: "2026-11-01", SummaryZh: "本周发布 v1。",
+		Items: []releasedoc.Item{{Tag: "v1", URL: "https://github.com/o/r/releases/tag/v1", Date: "2026-10-29"}},
+	}, 600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rel, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSubscribeOutput([]string{"releases", "o/r", "--config", cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Doc == nil || out.Doc.Volume != 1 || out.Doc.Markdown != string(data) {
+		t.Fatalf("doc=%+v", out.Doc)
+	}
+
+	if _, err := runSubscribeOutput([]string{"releases", "o/other", "--config", cfgPath}); err == nil {
+		t.Fatal("want an error for a repo without a document")
+	}
+	if _, err := runSubscribeOutput([]string{"releases", "o/r", "--config", cfgPath, "--volume", "9"}); err == nil {
+		t.Fatal("want an error for an out-of-range volume")
 	}
 }

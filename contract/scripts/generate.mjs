@@ -21,7 +21,7 @@ const ROOT = path.dirname(here)
 const SCHEMA = path.join(ROOT, 'schema')
 const load = (f) => JSON.parse(fs.readFileSync(path.join(SCHEMA, f), 'utf8'))
 
-const CONTRACT_VERSION = '0.3.0'
+const CONTRACT_VERSION = '0.4.0'
 
 // schema file -> optional name for a top-level (non-$defs) object root
 const FILES = [
@@ -117,6 +117,10 @@ function emitTs() {
   out.push('  releaseNormal: ReleaseDigest;')
   out.push('  releaseDegraded: ReleaseDigest;')
   out.push('  releaseEmpty: ReleaseDigest;')
+  out.push('  releaseWeekly: ReleaseDigest;')
+  out.push('  subscriptionsNormal: SubscriptionList;')
+  out.push('  subscriptions40: SubscriptionList;')
+  out.push('  subscriptionDocNormal: SubscriptionDoc;')
   out.push('};')
   out.push('export declare const validators: {')
   out.push('  runRequest: (value: unknown) => boolean;')
@@ -124,6 +128,8 @@ function emitTs() {
   out.push('  digest: (value: unknown) => boolean;')
   out.push('  releases: (value: unknown) => boolean;')
   out.push('  releasesReport: (value: unknown) => boolean;')
+  out.push('  subscriptionList: (value: unknown) => boolean;')
+  out.push('  subscriptionDoc: (value: unknown) => boolean;')
   out.push('  versionInfo: (value: unknown) => boolean;')
   out.push('};')
   out.push('export declare const rawSchema: {')
@@ -143,6 +149,10 @@ const GO_OVERRIDE = {
   id: 'ID',
 }
 const goName = (prop) => GO_OVERRIDE[prop] || prop.charAt(0).toUpperCase() + prop.slice(1)
+// goEnumName turns a wire value ("rate_limited") into a Go constant suffix
+// ("RateLimited") without inventing a translation table to keep in sync.
+const goEnumName = (v) => v.split(/[^A-Za-z0-9]+/).filter(Boolean)
+  .map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join('')
 // GitHub ids exceed int32 on 32-bit platforms; emit int64 for these.
 const GO_INT64 = new Set(['id', 'lastId'])
 
@@ -198,6 +208,17 @@ function emitGo() {
   for (const c of codeDef.enum) out.push(`\tErrorCode${c} ErrorCode = "${c}"`)
   out.push(')')
   out.push('')
+  // Named string enums (e.g. SubscriptionStatus). Emitted as real Go types so a
+  // contract type can reference them instead of falling back to a bare string.
+  for (const [name, sch] of defs) {
+    if (name === 'ErrorCode' || !sch.enum) continue
+    out.push(`type ${name} string`)
+    out.push('')
+    out.push('const (')
+    for (const c of sch.enum) out.push(`\t${name}${goEnumName(c)} ${name} = "${c}"`)
+    out.push(')')
+    out.push('')
+  }
   // structs
   for (const [name, sch] of defs) {
     if (name === 'ErrorCode') continue
@@ -257,6 +278,10 @@ function emitTsRuntime() {
     releaseNormal: readFixture('release-normal.json'),
     releaseDegraded: readFixture('release-degraded.json'),
     releaseEmpty: readFixture('release-empty.json'),
+    releaseWeekly: readFixture('release-weekly.json'),
+    subscriptionsNormal: readFixture('subscriptions-normal.json'),
+    subscriptions40: readFixture('subscriptions-40.json'),
+    subscriptionDocNormal: readFixture('subscription-doc-normal.json'),
   }
   const errorSchema = schemas['errors.v2.json']
   const errorCatalog = {}
@@ -313,6 +338,8 @@ export const validators = {
   digest: ajv.getSchema(digest.$id),
   releases: ajv.getSchema(releases.$id),
   releasesReport: ajv.compile({ $ref: releases.$id + '#/$defs/ReleasesReport' }),
+  subscriptionList: ajv.compile({ $ref: releases.$id + '#/$defs/SubscriptionList' }),
+  subscriptionDoc: ajv.compile({ $ref: releases.$id + '#/$defs/SubscriptionDoc' }),
   versionInfo: ajv.getSchema(versionInfo.$id),
 }
 `

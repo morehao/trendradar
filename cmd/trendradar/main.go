@@ -35,12 +35,12 @@ func main() {
 			started := time.Now()
 			req, rerr := subscribeFromStdin()
 			if rerr != nil {
-				emitSubscribeResult(req, started, rerr)
+				emitSubscribeResult(req, started, subscribeOutput{}, rerr)
 				err = rerr
 				break
 			}
-			rerr = runSubscribeIPC(req)
-			emitSubscribeResult(req, started, rerr)
+			out, rerr := runSubscribeIPC(req)
+			emitSubscribeResult(req, started, out, rerr)
 			err = rerr
 			break
 		}
@@ -64,8 +64,10 @@ func usage() {
 commands:
   run        fetch, parse, summarize, render (M2/M3)
   serve      serve digests over HTTP (M5)
-  subscribe  manage repo subscriptions (list|add|remove)
-             add --json to read a contract RunRequest from stdin
+  subscribe  manage repo subscriptions (list|add|remove|releases)
+             releases --repo owner/repo [--volume N] reads one volume of the
+             repo's release document; add --json to read a contract RunRequest
+             from stdin
   config     inspect/validate config
   version    print version info; add --json for machine-readable output`)
 }

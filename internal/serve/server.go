@@ -15,6 +15,7 @@ type Server struct {
 	handler           http.Handler
 	releasesSubdir    string // config releases.outputDir (default "releases")
 	subscriptionsPath string // absolute path to subscriptions.yaml ("" = none)
+	releaseStatePath  string // absolute path to the release cursor ("" = none)
 }
 
 // WithReleases enables the /api/v2/releases* and /api/v2/subscriptions routes.
@@ -27,6 +28,14 @@ func (s *Server) WithReleases(subDir, subsPath string) *Server {
 	}
 	s.releasesSubdir = subDir
 	s.subscriptionsPath = subsPath
+	return s
+}
+
+// WithReleaseState points the subscriptions endpoint at the machine-local release
+// cursor. Without it every row reports "baseline", which is honest but useless,
+// so cmd/serve always passes it when releases are enabled.
+func (s *Server) WithReleaseState(path string) *Server {
+	s.releaseStatePath = path
 	return s
 }
 
@@ -43,6 +52,8 @@ func New(store *Store) *Server {
 	mux.HandleFunc("GET /api/v2/releases", s.handleListReleases)
 	mux.HandleFunc("GET /api/v2/releases/{date}", s.handleGetReleases)
 	mux.HandleFunc("GET /api/v2/subscriptions", s.handleListSubscriptions)
+	// Read-only mirror of the IPC subscribe releases command.
+	mux.HandleFunc("GET /api/v2/repos/{owner}/{repo}/releases", s.handleSubscriptionDoc)
 	// v1 HTTP surface is retired: respond 410 Gone, point clients at v2.
 	mux.HandleFunc("GET /api/v1/digests/{date}", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "api v1 removed; use /api/v2/digests/{date}", http.StatusGone)

@@ -12,9 +12,9 @@ import (
 )
 
 // runSubscribeIPC executes a contract RunRequest with command="subscribe".
-// It shares the CLI implementation (runSubscribe) so both entry points behave
-// identically; only the argument shape differs.
-func runSubscribeIPC(req ipc.RunRequest) error {
+// It shares the CLI implementation (runSubscribeOutput) so both entry points
+// behave identically; only the argument shape differs.
+func runSubscribeIPC(req ipc.RunRequest) (subscribeOutput, error) {
 	action := ""
 	if req.Action != nil {
 		action = *req.Action
@@ -23,15 +23,21 @@ func runSubscribeIPC(req ipc.RunRequest) error {
 	if req.Repo != nil {
 		args = append(args, *req.Repo)
 	}
+	if req.Volume != nil {
+		args = append(args, "--volume", fmt.Sprint(*req.Volume))
+	}
 	if req.ConfigPath != nil {
 		args = append(args, "--config", *req.ConfigPath)
 	}
-	return runSubscribe(args)
+	return runSubscribeOutput(args)
 }
 
-// emitSubscribeResult writes a contract RunResult for a subscribe command.
-func emitSubscribeResult(req ipc.RunRequest, started time.Time, err error) {
-	out := ipc.RunResult{
+// emitSubscribeResult writes a contract RunResult for a subscribe command. The
+// list/document payload rides inside the envelope (RunResult.subscriptions /
+// RunResult.subscriptionDoc) so the plugin reads one JSON object instead of
+// scraping stdout, and the shape stays identical to the HTTP mirror (A10).
+func emitSubscribeResult(req ipc.RunRequest, started time.Time, out subscribeOutput, err error) {
+	res := ipc.RunResult{
 		IPCSchema:  ipc.SchemaVersion,
 		OK:         err == nil,
 		Command:    "subscribe",
@@ -40,10 +46,14 @@ func emitSubscribeResult(req ipc.RunRequest, started time.Time, err error) {
 		Skipped:    false,
 		Files:      []ipc.FileArtifact{},
 	}
-	if err != nil {
-		out.Error = ipc.NewError(classifySubscribeError(err), "%s", err.Error()).ToContract()
+	if err == nil {
+		res.Subscriptions = out.List
+		res.SubscriptionDoc = out.Doc
 	}
-	b, _ := json.Marshal(out)
+	if err != nil {
+		res.Error = ipc.NewError(classifySubscribeError(err), "%s", err.Error()).ToContract()
+	}
+	b, _ := json.Marshal(res)
 	fmt.Println(string(b))
 }
 
@@ -61,6 +71,7 @@ func classifySubscribeError(err error) ipc.Code {
 		"requires action", "requires repo", "requires configPath",
 		"invalid repo", "unknown subscribe action", "repo not subscribed",
 		"does not accept --file", "is not subscribed",
+		"has no release document", "volume", "does not exist",
 	} {
 		if strings.Contains(msg, s) {
 			return ipc.CodeConfigInvalid
@@ -90,19 +101,32 @@ func validateSubscribeRequest(req ipc.RunRequest) (ipc.RunRequest, error) {
 		return req, fmt.Errorf("command %q is not subscribe", req.Command)
 	}
 	if req.Action == nil || *req.Action == "" {
-		return req, fmt.Errorf("subscribe requires action (list|add|remove)")
+		return req, fmt.Errorf("subscribe requires action (list|add|remove|releases)")
 	}
 	switch *req.Action {
 	case "list":
 		if req.Repo != nil {
 			return req, fmt.Errorf("subscribe list does not take repo")
 		}
+		if req.Volume != nil {
+			return req, fmt.Errorf("subscribe list does not take volume")
+		}
 	case "add", "remove":
 		if req.Repo == nil || *req.Repo == "" {
 			return req, fmt.Errorf("subscribe %s requires repo", *req.Action)
 		}
+		if req.Volume != nil {
+			return req, fmt.Errorf("subscribe %s does not take volume", *req.Action)
+		}
+	case "releases":
+		if req.Repo == nil || *req.Repo == "" {
+			return req, fmt.Errorf("subscribe releases requires repo")
+		}
+		if req.Volume != nil && *req.Volume < 1 {
+			return req, fmt.Errorf("subscribe releases volume must be >= 1")
+		}
 	default:
-		return req, fmt.Errorf("unknown subscribe action %q (want list|add|remove)", *req.Action)
+		return req, fmt.Errorf("unknown subscribe action %q (want list|add|remove|releases)", *req.Action)
 	}
 	if req.ConfigPath == nil || *req.ConfigPath == "" {
 		return req, fmt.Errorf("subscribe over IPC requires configPath so run and subscribe resolve the same subscriptions file")

@@ -1,8 +1,8 @@
 {
-  "schema": 1,
+  "schema": 2,
   "date": "2026-10-31",
-  "period": "daily",
-  "contentHash": "sha256:f952f1607ff1708120c35e7a9551f0691ae747edf2ee959445edcd53bc0edf25",
+  "period": "weekly",
+  "contentHash": "sha256:5f34a40370d022ed06a995e32917a0299a121973ef13eee0e2f1a747a0a6aecb",
   "contentHashAlgo": "jcs-sha256-v1",
   "count": 1,
   "degraded": true,
@@ -24,7 +24,10 @@
           "summaryZh": "版本 v2.0.0（未获取到变更说明）",
           "summarySource": "original"
         }
-      ]
+      ],
+      "periodStart": "2026-10-26",
+      "periodEnd": "2026-11-01",
+      "summaryZh": "本周 1 个版本：v2.0.0。"
     }
   ]
 }

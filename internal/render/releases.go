@@ -82,13 +82,26 @@ func ReleaseMarkdown(d releasedigest.ReleaseDigest) []byte {
 		b.WriteString("_本次没有订阅仓库的新版本。_\n")
 	}
 	for _, r := range d.Repos {
-		fmt.Fprintf(&b, "## [%s](%s) · %s\n\n", r.FullName, r.URL, r.LatestTag)
+		period := ""
+		if r.PeriodStart != nil && r.PeriodEnd != nil {
+			period = " · " + *r.PeriodStart + " ~ " + *r.PeriodEnd
+		}
+		fmt.Fprintf(&b, "## [%s](%s) · %s%s\n\n", r.FullName, r.URL, r.LatestTag, period)
+		if r.SummaryZh != nil && *r.SummaryZh != "" {
+			fmt.Fprintf(&b, "%s\n\n", *r.SummaryZh)
+		}
 		for _, it := range r.Releases {
 			date := ""
 			if it.PublishedAt != nil {
 				date = it.PublishedAt.Format("2006-01-02")
 			}
-			fmt.Fprintf(&b, "- **%s**%s — %s\n", it.Tag, dateSuffix(date), it.SummaryZh)
+			fmt.Fprintf(&b, "- **%s**%s", it.Tag, dateSuffix(date))
+			// Schema 2 leaves per-item summaries empty (the summary is one per
+			// repo-week); old documents keep their per-item prose readable.
+			if it.SummaryZh != nil && *it.SummaryZh != "" {
+				fmt.Fprintf(&b, " — %s", *it.SummaryZh)
+			}
+			b.WriteString("\n")
 			if it.URL != "" {
 				fmt.Fprintf(&b, "  链接: %s\n", it.URL)
 			}

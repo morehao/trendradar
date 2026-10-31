@@ -34,21 +34,21 @@
   },
   "version-info.v2.json": {
     "wireKey": "contractVersion",
-    "current": "0.3.0",
+    "current": "0.4.0",
     "breakingBump": [
       "packageMajor"
     ]
   },
   "api.v2.yaml": {
     "wireKey": "info.version",
-    "current": "0.3.0",
+    "current": "0.4.0",
     "breakingBump": [
       "packageMajor"
     ]
   },
   "releases.v2.json": {
     "wireKey": null,
-    "current": 1,
+    "current": 2,
     "propagatesTo": [],
     "breakingBump": [
       "packageMajor"

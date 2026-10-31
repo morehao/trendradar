@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v2.json",
   "title": "trendradar releases v2",
-  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document.",
+  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. schema=2 adds the per-repo weekly batch summary (repos[].summaryZh + periodStart/periodEnd); the per-item summaryZh stays readable for old documents but is no longer written.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -17,7 +17,7 @@
   ],
   "properties": {
     "schema": {
-      "const": 1
+      "const": 2
     },
     "date": {
       "type": "string",
@@ -66,7 +66,7 @@
     "ReleaseItem": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis).",
+      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summaryZh is optional and no longer written by schema 2: the summary now lives once per repo per week in RepoReleases.summaryZh.",
       "required": [
         "id",
         "tag",
@@ -75,7 +75,6 @@
         "url",
         "prerelease",
         "draft",
-        "summaryZh",
         "summarySource"
       ],
       "properties": {
@@ -116,7 +115,8 @@
           "description": "Truncated raw release notes. Untrusted text: display only, never execute."
         },
         "summaryZh": {
-          "type": "string"
+          "type": "string",
+          "description": "Legacy per-item summary. Still accepted so documents written before schema 2 stay readable; schema 2 writers leave it empty."
         },
         "summarySource": {
           "type": "string",
@@ -130,6 +130,7 @@
     "RepoReleases": {
       "type": "object",
       "additionalProperties": true,
+      "description": "One repo's release batch for one summary period. summaryZh covers the whole week in a single model call; periodStart/periodEnd bound that week so a consumer can label it without parsing dates.",
       "required": [
         "fullName",
         "url",
@@ -153,6 +154,18 @@
           "type": "integer",
           "minimum": 0
         },
+        "periodStart": {
+          "type": "string",
+          "format": "date"
+        },
+        "periodEnd": {
+          "type": "string",
+          "format": "date"
+        },
+        "summaryZh": {
+          "type": "string",
+          "description": "One Chinese summary for every version in this period. Empty when no summary was produced."
+        },
         "releases": {
           "type": "array",
           "items": {
@@ -164,10 +177,12 @@
     "ReleasesReport": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Per-run diagnostic for the releases stage. usage is required and always serialized so a consumer can tell 'nothing spent' (calls=0) from 'spent but not reported' (calls>0 with usageKnown=false).",
+      "description": "Per-run diagnostic for the releases stage. usage, checked and changed are required and always serialized so a consumer can tell 'nothing spent / checked / changed' (0) from 'not reported' (missing). checked counts repos the stage examined; changed counts repos that produced a document write.",
       "required": [
         "enabled",
         "repos",
+        "checked",
+        "changed",
         "newReleases",
         "durationMs",
         "usage"
@@ -177,6 +192,14 @@
           "type": "boolean"
         },
         "repos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changed": {
           "type": "integer",
           "minimum": 0
         },
@@ -257,10 +280,55 @@
         }
       }
     },
+    "SubscriptionStatus": {
+      "type": "string",
+      "description": "Per-repo check state of the most recent weekly release run: baseline (first sighting, no section written), ok (a week section was written), no_change (checked, nothing new), rate_limited / failed (check failed, cursor kept so the next run retries).",
+      "enum": [
+        "baseline",
+        "ok",
+        "no_change",
+        "rate_limited",
+        "failed"
+      ]
+    },
+    "SubscriptionItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One row of the subscriptions table. Deliberately small: the full markdown lives behind SubscriptionDoc so the list stays under the first-paint payload budget.",
+      "required": [
+        "fullName",
+        "status"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "latestTag": {
+          "type": "string"
+        },
+        "latestSummaryAt": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of the newest week section (its period end), used as the 'last summary' column."
+        },
+        "lastCheckedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "$ref": "#/$defs/SubscriptionStatus"
+        }
+      }
+    },
     "SubscriptionList": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Response of GET /api/v2/subscriptions.",
+      "description": "Response of GET /api/v2/subscriptions and of the IPC subscribe list command. repos stays the only field old consumers read; items is the additive per-repo detail.",
       "required": [
         "repos"
       ],
@@ -271,6 +339,76 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
           }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubscriptionItem"
+          }
+        }
+      }
+    },
+    "SubscriptionVolume": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One volume file of a repo's release document. index 1 is <repo>.md; index >= 2 is <repo>.0N.md (zero padded). from/to are the oldest/newest week bounds present in that file.",
+      "required": [
+        "index",
+        "file"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "file": {
+          "type": "string",
+          "description": "Path relative to the releases document root (e.g. vercel/next.js.md)."
+        },
+        "from": {
+          "type": "string",
+          "format": "date"
+        },
+        "to": {
+          "type": "string",
+          "format": "date"
+        },
+        "lines": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "SubscriptionDoc": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Response of the IPC subscribe releases command and of GET /api/v2/repos/{owner}/{repo}/releases. markdown is the exact file content: the panel renders it verbatim (single source of truth, no re-summarizing).",
+      "required": [
+        "fullName",
+        "volume",
+        "markdown"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "volume": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubscriptionVolume"
+          }
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date"
+        },
+        "markdown": {
+          "type": "string"
         }
       }
     }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/morehao/trendradar/internal/app"
@@ -75,12 +76,25 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON")
 	outDir := fs.String("out", "", "output directory (overrides config.output.dir)")
 	period := fs.String("period", "", "daily|weekly|monthly (overrides config.trending.since)")
+	stagesFlag := fs.String("stages", "", "comma-separated stages to run: trending,digest,releases (default: all enabled)")
 	defaultTrigger := firstNonEmpty(os.Getenv("TRENDRADAR_TRIGGER"), string(app.TriggerManual))
 	trigger := fs.String("trigger", defaultTrigger, "manual|schedule; schedule respects a human-closed PR")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	*asJSON = *jsonFlag
+	stages, err := parseStages(*stagesFlag)
+	if err != nil {
+		return err
+	}
+	// A release-only run writes just the release artifacts: no trending fetch,
+	// no digest render, and it must not replay the pending subscription queue.
+	releasesOnly := len(stages) > 0
+	for _, s := range stages {
+		if s != app.StageReleases {
+			releasesOnly = false
+		}
+	}
 	tr := app.Trigger(*trigger)
 	if tr != app.TriggerManual && tr != app.TriggerSchedule {
 		return ipc.NewError(ipc.CodeConfigInvalid, "invalid --trigger %q (want manual|schedule)", *trigger)
@@ -116,7 +130,11 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	}
 
 	in := app.Inputs{Date: *date}
-	if *input != "" {
+	if releasesOnly {
+		// Nothing to fetch: the releases stage discovers its own work from the
+		// subscription list. This is what makes `run --stages releases` usable on
+		// its own schedule without a trending snapshot.
+	} else if *input != "" {
 		raw, err := os.ReadFile(*input)
 		if err != nil {
 			return fmt.Errorf("read input: %w", err)
@@ -135,7 +153,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		}
 		in.Repos, in.Degraded = res.Repos, res.Degraded
 	}
-	if len(in.Repos) == 0 {
+	if len(in.Repos) == 0 && !releasesOnly {
 		return fmt.Errorf("no repository snapshots to process")
 	}
 	if cfg != nil && cfg.Trending.Since != "" {
@@ -150,9 +168,12 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	if err != nil {
 		return err
 	}
-	relOpts, err := buildReleasesOptions(cfg, in.Date)
+	relOpts, err := buildReleasesOptions(cfg, in.Date, !releasesOnly)
 	if err != nil {
 		return err
+	}
+	if releasesOnly && relOpts == nil {
+		return ipc.NewError(ipc.CodeConfigInvalid, "run --stages releases needs releases.enabled and a subscription list")
 	}
 	result, err := app.Run(context.Background(), cfg, in, app.Options{
 		DryRun:   *dryRun,
@@ -161,6 +182,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		Trigger:  tr,
 		Enricher: enricher,
 		Releases: relOpts,
+		Stages:   stages,
 	})
 	if err != nil {
 		return err
@@ -274,8 +296,16 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		}
 		return nil
 	}
-	fmt.Printf("digest %s (%s): %d repos, %d files, contentHash=%s\n",
-		result.Digest.Date, result.Digest.Period, result.Digest.Count, len(result.Files), result.Digest.ContentHash)
+	if releasesOnly {
+		rel := result.Report.Releases
+		if rel != nil {
+			fmt.Printf("releases %s: checked %d, changed %d, new %d, degraded %d, failed %d, rateLimited %d, files %d\n",
+				result.Digest.Date, rel.Checked, rel.Changed, rel.NewReleases, derefInt(rel.Degraded), derefInt(rel.Failed), derefInt(rel.RateLimited), len(result.Files))
+		}
+	} else {
+		fmt.Printf("digest %s (%s): %d repos, %d files, contentHash=%s\n",
+			result.Digest.Date, result.Digest.Period, result.Digest.Count, len(result.Files), result.Digest.ContentHash)
+	}
 	if result.Branch != "" {
 		fmt.Printf("  branch: %s\n", result.Branch)
 	}
@@ -294,6 +324,34 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			u.PromptTokens, u.CompletionTokens, u.TotalTokens, u.Calls, u.Retries, u.CacheHits)
 	}
 	return nil
+}
+
+// parseStages splits and validates the --stages flag. Empty means "all".
+func parseStages(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	if err := app.ValidStages(out); err != nil {
+		return nil, ipc.NewError(ipc.CodeConfigInvalid, "%s", err.Error())
+	}
+	return out, nil
+}
+
+func derefInt(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
 }
 
 func strPtr(s string) *string {
@@ -350,7 +408,7 @@ func buildEnricher(cfg *config.Config, dryRun bool) (*enrich.Enricher, error) {
 // IsClean check; here we only read it to (a) know what to poll and (b) hand it
 // to app for the write/replay. Reading the *target branch* (not the current
 // checkout) avoids a stale baseline when the repo is sitting on main.
-func buildReleasesOptions(cfg *config.Config, date string) (*app.ReleasesOptions, error) {
+func buildReleasesOptions(cfg *config.Config, date string, includePending bool) (*app.ReleasesOptions, error) {
 	if cfg == nil || !cfg.Releases.Enabled {
 		return nil, nil
 	}
@@ -364,9 +422,15 @@ func buildReleasesOptions(cfg *config.Config, date string) (*app.ReleasesOptions
 		return nil, err
 	}
 	base := baseStore.List()
+	// A release-only run reads the committed list and ignores the pending queue:
+	// landing subscription changes belongs to the daily run (A14), otherwise a
+	// release run would rewrite subscriptions.yaml behind the trending PR.
 	pend, hasPending, err := subscription.ReadPending(cfg.Repo.Path)
 	if err != nil {
 		return nil, err
+	}
+	if !includePending {
+		pend, hasPending = nil, false
 	}
 	repos, added := subscription.MergeUnique(base, pend)
 	if hasPending && len(base) > 0 && added > 0 {
@@ -384,7 +448,7 @@ func buildReleasesOptions(cfg *config.Config, date string) (*app.ReleasesOptions
 		Timeout: time.Duration(cfg.Releases.TimeoutSeconds) * time.Second,
 		Token:   firstNonEmpty(os.Getenv("GITHUB_READ_TOKEN"), os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
 	})
-	return &app.ReleasesOptions{
+	opts := &app.ReleasesOptions{
 		Repos:             repos,
 		Fetcher:           client,
 		StatePath:         statePath,
@@ -392,7 +456,15 @@ func buildReleasesOptions(cfg *config.Config, date string) (*app.ReleasesOptions
 		SubscriptionsPath: subsPath,
 		PendingRepos:      pend,
 		HasPending:        hasPending,
-	}, nil
+	}
+	if !includePending {
+		// Leaving SubscriptionsPath empty is what stops app.Run from merging the
+		// queue and clearing pending; the list is still read for polling.
+		opts.SubscriptionsPath = ""
+		opts.PendingRepos = nil
+		opts.HasPending = false
+	}
+	return opts, nil
 }
 
 func selectProvider(cfg *config.Config) (model.Provider, error) {

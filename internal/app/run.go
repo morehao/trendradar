@@ -21,6 +21,7 @@ import (
 	"github.com/morehao/trendradar/internal/model"
 	"github.com/morehao/trendradar/internal/pr"
 	"github.com/morehao/trendradar/internal/releasedigest"
+	"github.com/morehao/trendradar/internal/releasedoc"
 	"github.com/morehao/trendradar/internal/releasewatch"
 	"github.com/morehao/trendradar/internal/render"
 	"github.com/morehao/trendradar/internal/subscription"
@@ -45,6 +46,13 @@ const (
 	TriggerSchedule Trigger = "schedule"
 )
 
+// Stage names accepted by RunRequest.stages.
+const (
+	StageTrending = "trending"
+	StageDigest   = "digest"
+	StageReleases = "releases"
+)
+
 // Options controls a run.
 type Options struct {
 	DryRun   bool
@@ -53,6 +61,41 @@ type Options struct {
 	Trigger  Trigger          // optional; defaults to TriggerManual
 	Enricher *enrich.Enricher // optional; nil means no external context
 	Releases *ReleasesOptions // optional; nil means no release subscription stage
+	// Stages narrows the run (RunRequest.stages). Empty means every enabled
+	// stage, which is the historical behaviour. A release-only run passes
+	// [releases]: no trending fetch, no digest render.
+	Stages []string
+}
+
+// stageEnabled reports whether name should run for this Options.
+func (o Options) stageEnabled(name string) bool {
+	if len(o.Stages) == 0 {
+		return true
+	}
+	for _, s := range o.Stages {
+		if s == name {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidStages validates a stages list and returns it unchanged. An empty list is
+// valid and means "all".
+func ValidStages(stages []string) error {
+	seen := map[string]bool{}
+	for _, s := range stages {
+		switch s {
+		case StageTrending, StageDigest, StageReleases:
+		default:
+			return fmt.Errorf("unknown stage %q (want trending|digest|releases)", s)
+		}
+		if seen[s] {
+			return fmt.Errorf("duplicate stage %q", s)
+		}
+		seen[s] = true
+	}
+	return nil
 }
 
 // ReleasesOptions carries the already-resolved subscription data for the
@@ -99,153 +142,173 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		provider = model.NewFake()
 	}
 
-	sumStart := time.Now()
-	// Persisted summary cache: without it every run re-asks the model, the
-	// rendered text drifts, and "same input" never yields the same digest.
-	// The cache is keyed by repo+description+prompt/model namespace, so a model
-	// or prompt change misses instead of silently reusing stale prose.
-	cachePath := ""
-	if cfg != nil && !opts.DryRun && cfg.Repo.Path != "" {
-		cachePath = summarize.CachePath(cfg.Repo.Path)
-	}
-	summaryCache, _ := summarize.LoadCache(cachePath)
-	if summaryCache == nil {
-		summaryCache = summarize.NewCache()
-	}
-	enrichMode := enrich.ModeNone
-	if opts.Enricher != nil {
-		enrichMode = opts.Enricher.Mode()
-	}
-	if cfg != nil {
-		summaryCache.SetNamespace(summarize.NamespaceForMode(cfg.Model.Provider, cfg.Model.Name, string(enrichMode)))
-	}
-	batchSize, maxRetries := 10, 1
-	if cfg != nil {
-		if cfg.Summarize.BatchSize > 0 {
-			batchSize = cfg.Summarize.BatchSize
-		}
-		if cfg.Summarize.MaxRetries > 0 {
-			maxRetries = cfg.Summarize.MaxRetries
-		}
-	}
-	summarizer := summarize.New(provider,
-		summarize.WithCache(summaryCache),
-		summarize.WithBatchSize(batchSize),
-		summarize.WithMaxRetries(maxRetries),
-	)
+	genAt := time.Now().UTC()
 
-	// Optional external context. Only repos whose summary is not cached are
-	// enriched, so a warm run spends no extra GitHub requests. All failures are
-	// best-effort: they surface as warnings and never fail the run.
-	var byRepo map[string]summarize.Context
-	if opts.Enricher != nil && enrichMode != enrich.ModeNone {
-		enrichStart := time.Now()
-		pending := summarizer.Pending(in.Repos)
-		ctxs, er := opts.Enricher.Enrich(ctx, pending)
-		if len(ctxs) > 0 {
-			byRepo = make(map[string]summarize.Context, len(ctxs))
-			for name, c := range ctxs {
-				byRepo[name] = summarize.Context{Topics: c.Topics, ReadmeExcerpt: c.ReadmeExcerpt}
-			}
-		}
-		if err := opts.Enricher.SaveCache(); err != nil {
-			rep.Warnings = append(rep.Warnings, "enrich-cache: "+err.Error())
-		}
-		rep.Enrich = &EnrichReport{
-			Mode:        er.Mode,
-			Requested:   er.Requested,
-			Hit:         er.Hit,
-			Fetched:     er.Fetched,
-			Failed:      er.Failed,
-			RateLimited: er.RateLimited,
-			Skipped:     er.Skipped,
-		}
-		rep.Stages = append(rep.Stages, Stage{Name: "enrich", DurationMs: since(enrichStart)})
-		if er.Failed > 0 || er.RateLimited > 0 {
-			rep.Warnings = append(rep.Warnings, fmt.Sprintf(
-				"enrich requested=%d hit=%d fetched=%d failed=%d rateLimited=%d", er.Requested, er.Hit, er.Fetched, er.Failed, er.RateLimited))
-		}
-	}
+	// Stage selection. An empty Stages list means "every enabled stage", which
+	// is what every caller before RunRequest.stages did. A release-only run
+	// (stages: ["releases"]) must not fetch trending, call the model or render a
+	// digest: it writes only release artifacts, so its commit cannot drift with
+	// the day's trending summary.
+	// trending and digest are one pipeline (digest cannot exist without the
+	// trending snapshots), so either name enables it.
+	wantsDigest := opts.stageEnabled(StageTrending) || opts.stageEnabled(StageDigest)
 
-	repoDigests := summarizer.SummarizeWithContext(ctx, in.Repos, byRepo)
-	if cachePath != "" {
-		if err := summaryCache.Save(cachePath); err != nil {
-			rep.Warnings = append(rep.Warnings, "cache: "+err.Error())
-		}
-	}
-	// Snapshot token spend before the pipeline can early-return (skipped/merged),
-	// so every run that reached summarization reports its usage.
-	{
-		st := summarizer.Stats()
-		rep.Usage = &contract.Usage{
-			PromptTokens:     st.Usage.PromptTokens,
-			CompletionTokens: st.Usage.CompletionTokens,
-			TotalTokens:      st.Usage.TotalTokens,
-			CachedTokens:     st.Usage.CachedTokens,
-			UsageKnown:       st.Usage.Known,
-			Calls:            st.Calls,
-			Retries:          st.Retries,
-			Batches:          st.Batches,
-			CacheHits:        st.CacheHits,
-		}
-	}
-	degradedCount := 0
-	for _, rd := range repoDigests {
-		if rd.SummarySource == "original" {
-			degradedCount++
-		}
-	}
-	summaryDegraded := degradedCount > 0
-	rep.SummaryDegraded = summaryDegraded
-	rep.Stages = append(rep.Stages, Stage{Name: "summarize", DurationMs: since(sumStart), Degraded: summaryDegraded})
-	if summaryDegraded {
-		rep.Warnings = append(rep.Warnings, fmt.Sprintf(
-			"%d/%d 仓库摘要降级为英文原文（模型不可用或返回无效结果）", degradedCount, len(repoDigests)))
-	}
-
-	// The digest root must be identical for rendering and `git add`; compute it
-	// once here so output.dir is honoured end-to-end (dry runs have no cfg).
+	// Output root and branch components are needed by both stage sets, so they
+	// are resolved before the digest branch. output.dir stays the single source
+	// of truth for rendering and `git add` (dry runs have no cfg).
 	outDir := render.OutputRoot("")
 	if cfg != nil {
 		outDir = render.OutputRoot(cfg.Output.Dir)
 	}
-
-	// Normalize the period here so both the digest and the branch/artifact paths
-	// agree (PeriodOf maps anything outside daily|weekly|monthly to daily).
+	// The period labels both the digest and the branch. A digest run uses the
+	// trending period; a release-only run uses the releases summary period so
+	// subscribe/serve resolve the same branch name (RunBranchName).
 	period := render.PeriodOf(digest.Digest{Period: in.Period})
-	coreV := ipc.Version
-	genAt := time.Now().UTC()
-	d := digest.Digest{
-		Schema:          2,
-		Date:            in.Date,
-		Period:          period,
-		Languages:       languagesOf(in.Repos),
-		Count:           len(repoDigests),
-		Degraded:        in.Degraded || summaryDegraded,
-		ContentHashAlgo: "jcs-sha256-v1",
-		CoreVersion:     &coreV,
-		GeneratedAt:     &genAt,
-		Repos:           repoDigests,
+	if !wantsDigest && cfg != nil {
+		period = render.PeriodOf(digest.Digest{Period: cfg.Releases.Period})
 	}
-	d.ContentHash = render.ContentHash(d)
-	name := render.NameOf(period, d.Date)
-
-	// Index history: scan the checked-out branch for prior digests so index.md
-	// accumulates instead of being rewritten to a single day. The repo is the
-	// source of truth, so read from cfg.Repo.Path (dry runs may have no cfg).
-	limits := map[string]int{"daily": 90, "weekly": 12, "monthly": 12}
+	name := render.NameOf(period, in.Date)
 	historyRoot := outDir
 	if cfg != nil && cfg.Repo.Path != "" {
 		historyRoot = filepath.Join(cfg.Repo.Path, outDir)
 	}
-	history, _ := render.ListDigests(historyRoot, limits)
-	merged := mergeDigests(history, d)
+	limits := map[string]int{"daily": 90, "weekly": 12, "monthly": 12}
+	var files []render.File
+	var d digest.Digest
 
-	files, err := render.Build(d, merged, limits, outDir)
-	if err != nil {
-		return res, err
-	}
-	res.Digest = d
+	if wantsDigest {
+		sumStart := time.Now()
+		// Persisted summary cache: without it every run re-asks the model, the
+		// rendered text drifts, and "same input" never yields the same digest.
+		// The cache is keyed by repo+description+prompt/model namespace, so a model
+		// or prompt change misses instead of silently reusing stale prose.
+		cachePath := ""
+		if cfg != nil && !opts.DryRun && cfg.Repo.Path != "" {
+			cachePath = summarize.CachePath(cfg.Repo.Path)
+		}
+		summaryCache, _ := summarize.LoadCache(cachePath)
+		if summaryCache == nil {
+			summaryCache = summarize.NewCache()
+		}
+		enrichMode := enrich.ModeNone
+		if opts.Enricher != nil {
+			enrichMode = opts.Enricher.Mode()
+		}
+		if cfg != nil {
+			summaryCache.SetNamespace(summarize.NamespaceForMode(cfg.Model.Provider, cfg.Model.Name, string(enrichMode)))
+		}
+		batchSize, maxRetries := 10, 1
+		if cfg != nil {
+			if cfg.Summarize.BatchSize > 0 {
+				batchSize = cfg.Summarize.BatchSize
+			}
+			if cfg.Summarize.MaxRetries > 0 {
+				maxRetries = cfg.Summarize.MaxRetries
+			}
+		}
+		summarizer := summarize.New(provider,
+			summarize.WithCache(summaryCache),
+			summarize.WithBatchSize(batchSize),
+			summarize.WithMaxRetries(maxRetries),
+		)
+
+		// Optional external context. Only repos whose summary is not cached are
+		// enriched, so a warm run spends no extra GitHub requests. All failures are
+		// best-effort: they surface as warnings and never fail the run.
+		var byRepo map[string]summarize.Context
+		if opts.Enricher != nil && enrichMode != enrich.ModeNone {
+			enrichStart := time.Now()
+			pending := summarizer.Pending(in.Repos)
+			ctxs, er := opts.Enricher.Enrich(ctx, pending)
+			if len(ctxs) > 0 {
+				byRepo = make(map[string]summarize.Context, len(ctxs))
+				for name, c := range ctxs {
+					byRepo[name] = summarize.Context{Topics: c.Topics, ReadmeExcerpt: c.ReadmeExcerpt}
+				}
+			}
+			if err := opts.Enricher.SaveCache(); err != nil {
+				rep.Warnings = append(rep.Warnings, "enrich-cache: "+err.Error())
+			}
+			rep.Enrich = &EnrichReport{
+				Mode:        er.Mode,
+				Requested:   er.Requested,
+				Hit:         er.Hit,
+				Fetched:     er.Fetched,
+				Failed:      er.Failed,
+				RateLimited: er.RateLimited,
+				Skipped:     er.Skipped,
+			}
+			rep.Stages = append(rep.Stages, Stage{Name: "enrich", DurationMs: since(enrichStart)})
+			if er.Failed > 0 || er.RateLimited > 0 {
+				rep.Warnings = append(rep.Warnings, fmt.Sprintf(
+					"enrich requested=%d hit=%d fetched=%d failed=%d rateLimited=%d", er.Requested, er.Hit, er.Fetched, er.Failed, er.RateLimited))
+			}
+		}
+
+		repoDigests := summarizer.SummarizeWithContext(ctx, in.Repos, byRepo)
+		if cachePath != "" {
+			if err := summaryCache.Save(cachePath); err != nil {
+				rep.Warnings = append(rep.Warnings, "cache: "+err.Error())
+			}
+		}
+		// Snapshot token spend before the pipeline can early-return (skipped/merged),
+		// so every run that reached summarization reports its usage.
+		{
+			st := summarizer.Stats()
+			rep.Usage = &contract.Usage{
+				PromptTokens:     st.Usage.PromptTokens,
+				CompletionTokens: st.Usage.CompletionTokens,
+				TotalTokens:      st.Usage.TotalTokens,
+				CachedTokens:     st.Usage.CachedTokens,
+				UsageKnown:       st.Usage.Known,
+				Calls:            st.Calls,
+				Retries:          st.Retries,
+				Batches:          st.Batches,
+				CacheHits:        st.CacheHits,
+			}
+		}
+		degradedCount := 0
+		for _, rd := range repoDigests {
+			if rd.SummarySource == "original" {
+				degradedCount++
+			}
+		}
+		summaryDegraded := degradedCount > 0
+		rep.SummaryDegraded = summaryDegraded
+		rep.Stages = append(rep.Stages, Stage{Name: "summarize", DurationMs: since(sumStart), Degraded: summaryDegraded})
+		if summaryDegraded {
+			rep.Warnings = append(rep.Warnings, fmt.Sprintf(
+				"%d/%d 仓库摘要降级为英文原文（模型不可用或返回无效结果）", degradedCount, len(repoDigests)))
+		}
+
+		coreV := ipc.Version
+		genAt := time.Now().UTC()
+		d = digest.Digest{
+			Schema:          2,
+			Date:            in.Date,
+			Period:          period,
+			Languages:       languagesOf(in.Repos),
+			Count:           len(repoDigests),
+			Degraded:        in.Degraded || summaryDegraded,
+			ContentHashAlgo: "jcs-sha256-v1",
+			CoreVersion:     &coreV,
+			GeneratedAt:     &genAt,
+			Repos:           repoDigests,
+		}
+		d.ContentHash = render.ContentHash(d)
+
+		// Index history: scan the checked-out branch for prior digests so index.md
+		// accumulates instead of being rewritten to a single day. The repo is the
+		// source of truth, so read from cfg.Repo.Path (dry runs may have no cfg).
+		history, _ := render.ListDigests(historyRoot, limits)
+		merged := mergeDigests(history, d)
+
+		built, berr := render.Build(d, merged, limits, outDir)
+		if berr != nil {
+			return res, berr
+		}
+		files = built
+	} // end wantsDigest
 
 	// Optional repo-release subscription stage. Its artifacts are appended to
 	// the same files list, so one commit/PR carries both trending and releases.
@@ -258,44 +321,65 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 			Repos:              opts.Releases.Repos,
 			Date:               in.Date,
 			Period:             rc.Period,
+			Timezone:           rc.Timezone,
+			WeekStart:          rc.WeekStart,
 			IncludePrerelease:  rc.IncludePrerelease,
 			IncludeDrafts:      rc.IncludeDrafts,
 			FallbackToTags:     rc.FallbackToTagsEnabled(),
 			BaselineOnFirstRun: rc.BaselineOnFirstRunEnabled(),
 			BackfillLatest:     rc.BackfillLatest,
-			PerRepoLimit:       rc.PerRepoLimit,
 			MaxNotesChars:      rc.MaxNotesChars,
+			SummaryMaxChars:    rc.SummaryMaxChars,
 			MaxPages:           rc.MaxPages,
-			Provider:           provider,
-			ProviderName:       cfg.Model.Provider,
-			ModelName:          cfg.Model.Name,
-			StatePath:          opts.Releases.StatePath,
-			CachePath:          opts.Releases.CachePath,
-			ReadOnly:           opts.DryRun,
+			// Auto resolves from the polled repo count, not from a cached number:
+			// the same config then adapts as the subscription list grows (A13).
+			Concurrency:   rc.Concurrency.Resolve(len(opts.Releases.Repos), 4, 8),
+			BudgetSeconds: rc.BudgetSeconds.ResolveBudget(len(opts.Releases.Repos), 300),
+			Provider:      provider,
+			ProviderName:  cfg.Model.Provider,
+			ModelName:     cfg.Model.Name,
+			StatePath:     opts.Releases.StatePath,
+			CachePath:     opts.Releases.CachePath,
+			ReadOnly:      opts.DryRun,
 		}
 		drel, st, rrep, rerr := releasewatch.Build(ctx, opts.Releases.Fetcher, ro)
 		relState, relStatePath = st, opts.Releases.StatePath
 		rep.Releases = fromReleaseWatch(rrep)
 		if rerr != nil {
 			rep.Warnings = append(rep.Warnings, "releases: "+rerr.Error())
-		} else if drel.Count > 0 {
-			coreV := ipc.Version
-			drel.CoreVersion = &coreV
-			drel.GeneratedAt = &genAt
-			drel.ContentHash = releasedigest.ContentHash(drel)
-			hist, _ := render.ListReleaseDigests(historyRoot, rc.OutputDir, limits)
-			mergedRel, todayRel := render.MergeReleaseDigests(hist, drel)
-			relFiles, berr := render.BuildReleases(todayRel, mergedRel, limits, outDir, rc.OutputDir)
-			if berr != nil {
-				rep.Warnings = append(rep.Warnings, "releases render: "+berr.Error())
-			} else {
-				files = append(files, relFiles...)
+		} else {
+			// The document date follows the summary period, so a mid-week run and
+			// the Sunday run land on the same weekly files.
+			d.Date = drel.Date
+			d.Period = drel.Period
+			if drel.Count > 0 {
+				coreV := ipc.Version
+				drel.CoreVersion = &coreV
+				drel.GeneratedAt = &genAt
+				drel.ContentHash = releasedigest.ContentHash(drel)
+				hist, _ := render.ListReleaseDigests(historyRoot, rc.OutputDir, limits)
+				mergedRel, todayRel := render.MergeReleaseDigests(hist, drel)
+				relFiles, berr := render.BuildReleases(todayRel, mergedRel, limits, outDir, rc.OutputDir)
+				if berr != nil {
+					rep.Warnings = append(rep.Warnings, "releases render: "+berr.Error())
+				} else {
+					files = append(files, relFiles...)
+				}
+				// One markdown document per repo, week prepended, volume-split. The
+				// content is the same summaryZh the weekly digest carries, so the
+				// panel can render the file verbatim (A7).
+				docFiles, derr := buildRepoDocs(cfg, outDir, rc, drel)
+				if derr != nil {
+					rep.Warnings = append(rep.Warnings, "releases docs: "+derr.Error())
+				}
+				files = append(files, docFiles...)
 			}
 		}
 		rep.Stages = append(rep.Stages, Stage{Name: "releases", DurationMs: since(relStart)})
 	} else if opts.Releases != nil {
 		rep.Releases = &ReleaseReport{Enabled: cfg != nil && cfg.Releases.Enabled, Repos: len(opts.Releases.Repos)}
 	}
+	res.Digest = d
 
 	res.Files = files
 
@@ -412,7 +496,10 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	// this point (subscribe writes .git/pending), so IsClean above saw a clean
 	// tree. Now we replay pending onto the date branch and let it ride the same
 	// commit as the artifacts.
-	subsEnabled := opts.Releases != nil && opts.Releases.SubscriptionsPath != ""
+	// A release-only run must not merge the pending subscription queue (A14): the
+	// daily run owns that transition, and replaying it here would make a release
+	// run rewrite subscriptions.yaml behind the trending PR.
+	subsEnabled := wantsDigest && opts.Releases != nil && opts.Releases.SubscriptionsPath != ""
 	var subsDirty bool
 	if subsEnabled {
 		// The checked-out branch == target branch here, so reading the working
@@ -684,4 +771,79 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// buildRepoDocs plans the per-repo markdown documents for the repos that changed
+// this week. It returns only files that need writing: a week already present in
+// the document yields nothing, so a second run in the same week is a no-op (A4).
+func buildRepoDocs(cfg *config.Config, outDir string, rc config.ReleasesConfig, d releasedigest.ReleaseDigest) ([]render.File, error) {
+	if d.Count == 0 {
+		return nil, nil
+	}
+	repoRoot := ""
+	if cfg != nil {
+		repoRoot = cfg.Repo.Path
+	}
+	docRoot := render.ReleaseRoot(outDir, rc.OutputDir)
+	maxLines := rc.DocMaxLines
+	if maxLines <= 0 {
+		maxLines = releasedoc.DefaultMaxLines
+	}
+	listed := rc.PerRepoLimit
+	if listed <= 0 {
+		listed = releasedoc.MaxListedTags
+	}
+	out := make([]render.File, 0, len(d.Repos))
+	for _, group := range d.Repos {
+		sec := releasedoc.Section{
+			Repo:      group.FullName,
+			WeekStart: stringOf(group.PeriodStart),
+			WeekEnd:   stringOf(group.PeriodEnd),
+			SummaryZh: stringOf(group.SummaryZh),
+			Degraded:  repoDegraded(group),
+			Items:     docItems(group),
+			MaxListed: listed,
+		}
+		file, data, need, err := releasedoc.Plan(repoRoot, docRoot, group.FullName, sec, maxLines)
+		if err != nil {
+			// One repo's document must never abort the week: a hand-edited file is
+			// skipped with a warning and the rest of the run proceeds.
+			return out, fmt.Errorf("%s: %w", group.FullName, err)
+		}
+		if !need {
+			continue
+		}
+		out = append(out, render.File{Path: file, Data: data})
+	}
+	return out, nil
+}
+
+// docItems renders the bullet list source for one repo's week, newest first.
+func docItems(g releasedigest.RepoReleases) []releasedoc.Item {
+	items := make([]releasedoc.Item, 0, len(g.Releases))
+	for _, it := range g.Releases {
+		date := ""
+		if it.PublishedAt != nil {
+			date = it.PublishedAt.UTC().Format("2006-01-02")
+		}
+		items = append(items, releasedoc.Item{Tag: it.Tag, URL: it.URL, Date: date})
+	}
+	return items
+}
+
+// repoDegraded reports whether this repo's week fell back to raw notes.
+func repoDegraded(g releasedigest.RepoReleases) bool {
+	for _, it := range g.Releases {
+		if it.SummarySource == "original" {
+			return true
+		}
+	}
+	return false
+}
+
+func stringOf(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

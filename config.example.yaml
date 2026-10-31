@@ -60,11 +60,15 @@ releases:
   fallbackToTags: true                   # 无 Release 时回退 Tag
   baselineOnFirstRun: true               # 首次只记基线，不补发历史
   backfillLatest: 0                      # 首次补发最近 N 个（0=不补）
-  perRepoLimit: 5                        # 单仓库单次最多处理，其余下次继续
-  maxNotesChars: 4000                    # notes 截断
-  concurrency: 3
+  perRepoLimit: 10                       # 文档里每仓每周最多列出的版本数，其余写「其余 N 个」
+  maxNotesChars: 4000                    # 一次总结可用的 notes 总预算（按版本均分）
+  summaryMaxChars: 1200                  # 每仓每周一段总结的字符上限（500-2000）
+  docMaxLines: 600                       # 每仓文档行数阈值，超过后下一次写入开 .02.md
+  concurrency: auto                      # auto=clamp(4, ceil(N/10), 8)；也可写 1-8
   timeoutSeconds: 20
-  budgetSeconds: 60
+  budgetSeconds: auto                    # auto=min(300, 30+3N)；也可写 1-300
   maxPages: 10                           # 单仓库翻页上限（兜底 300 条历史）
   outputDir: releases                    # 产物在 <output.dir>/releases/
-  period: daily
+  period: weekly                         # 总结周期，本版只支持 weekly
+  timezone: Asia/Shanghai                # ISO 周边界按该时区计算
+  weekStart: monday                      # 仅支持 monday（ISO 8601）

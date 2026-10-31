@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.7.0
+
+### Changed — 发版订阅改为「每周一次 + 一仓一份文档」
+- 发版阶段从「每 tag 一次模型调用、每期一份周文档」改为**每周一次批量总结**：同一仓库这一周
+  的全部新版本进入同一次模型调用，产出一段 `summaryZh`（默认上限 1200 字符，可配 500–2000，
+  超长截断并计入 `releases.truncated`）。抓取不再受 `perRepoLimit` 限制，该配置只限制文档里
+  列出的版本数（其余写「其余 N 个」）。
+- **周闸门**：游标新增 ISO 周键（`2026-W44`，按 `releases.timezone` 计算）。同一周重复运行对
+  该仓库不请求 GitHub、不调模型、不写文档；失败不写周键，因此同周重试仍可行、跨周不丢数据。
+- **一仓一份文档**：`<output.dir>/releases/<owner>/<repo>.md`，最新一周 prepend 到最上面，
+  同一周重复写入是幂等的（标题已存在则跳过）。当前册超过 `releases.docMaxLines`（默认 600）
+  时**下一次**写入才开 `.02.md`——切卷只看写入前，任何一节都不会被拆到两册。
+  首行不是 `# owner/repo`（被人工改过）时拒绝写入并告警，不覆盖用户内容。
+- 周文档（`ReleaseDigest`）保留并提供 `GET /api/v2/releases*`：`schema` 升到 2，
+  `repos[]` 新增 `summaryZh` / `periodStart` / `periodEnd`；`ReleaseItem.summaryZh` 变为可选
+  （旧文档仍可读，新文档不再写逐条摘要）。文件名仍是 `releases/weekly/<年>/<ISO周>.{md,json}`，
+  保持 `GET /api/v2/releases/{date}` 的既有语义。
+- `releases.period` 语义改为「总结周期」，本版只接受 `weekly`（其他值 `CONFIG_INVALID`）；
+  新增 `releases.timezone`、`releases.weekStart`、`releases.docMaxLines`、`releases.summaryMaxChars`。
+- `releases.concurrency` / `releases.budgetSeconds` 支持 `auto`：并发 `clamp(4, ceil(N/10), 8)`，
+  预算 `min(300, 30 + 3N)`；显式数字仍可覆盖。发版阶段按该并发抓取/总结（限流时取消剩余任务）。
+
+### Added
+- `subscribe list` 的 `SubscriptionList` 增加 `items[]`（`fullName`、`url`、`latestTag`、
+  `latestSummaryAt`、`lastCheckedAt`、`status`），由订阅 YAML + 本机游标 + 文档索引拼出，
+  不读文档正文；40 仓 fixture 约 8 KB。
+- 新命令 `subscribe releases --repo owner/repo [--volume N]`：读某一册的 markdown 与卷索引
+  （`SubscriptionDoc`）。IPC 结果放在 `RunResult.subscriptionDoc`，`subscribe list` 放在
+  `RunResult.subscriptions`。
+- `run --stages trending,digest,releases`（契约 `RunRequest.stages`）：`--stages releases`
+  只跑发版阶段——不抓 trending、不渲染榜单、**不合并 pending 订阅**，只读 `subscriptions.yaml`，
+  产物仍走现有 commit/PR 流程。
+- `serve` 新增只读 `GET /api/v2/repos/{owner}/{repo}/releases?volume=N`，与 IPC 共用
+  `releasedoc.Read`；`GET /api/v2/subscriptions` 追加 `items[]`。
+- 契约 0.4.0（`contract/CHANGELOG.md`）：`SubscriptionList.items`、`SubscriptionDoc`、
+  `ReleaseDigest.schema=2`、`RunRequest.stages`/`volume`、`ReleasesReport.checked/changed`（必填）。
+
+### Fixed
+- `ReleaseDigest.degraded` 与逐条 `summarySource` 的语义对齐：现在由「仓库这一周是否降级」
+  决定，`releases.degraded` 计的是降级仓库数（此前按版本条数计）。
+
 ## Unreleased
 
 ## 0.6.0

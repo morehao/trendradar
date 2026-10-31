@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	contract "github.com/morehao/trendradar/contract"
+	"github.com/morehao/trendradar/internal/releasedoc"
+	"github.com/morehao/trendradar/internal/releasewatch"
 	"github.com/morehao/trendradar/internal/render"
 	"github.com/morehao/trendradar/internal/subscription"
 )
@@ -16,6 +19,9 @@ import (
 // ErrReleasesNotFound is returned when a release digest for the requested date
 // is absent.
 var ErrReleasesNotFound = errors.New("releases not found")
+
+// ErrBadRepo is returned for an owner/repo that cannot name a release document.
+var ErrBadRepo = errors.New("invalid repo")
 
 // releaseRoot resolves the on-disk release directory. sub is the configured
 // releases sub-directory (config releases.outputDir, default "releases") and is
@@ -108,8 +114,12 @@ func (s *Store) ReleaseManifest(sub, period string) ([]releaseManifestEntry, err
 
 // Subscriptions reads the subscription list the core will poll. A missing or
 // empty file yields an empty list, never an error.
-func (s *Store) Subscriptions(path string) (subscriptionList, error) {
-	out := subscriptionList{Repos: []string{}}
+//
+// Only the repo names are read here; the per-repo items are added by the server
+// (see handleListSubscriptions) because they need the release cursor path, which
+// is a server-level concern (it lives under the data repo's .git).
+func (s *Store) Subscriptions(path string) (contract.SubscriptionList, error) {
+	out := contract.SubscriptionList{Repos: []string{}}
 	if path == "" {
 		return out, nil
 	}
@@ -123,16 +133,29 @@ func (s *Store) Subscriptions(path string) (subscriptionList, error) {
 	return out, nil
 }
 
+// SubscriptionDoc reads one volume of a repo's release document. The returned
+// markdown is the file content verbatim, which is what makes the HTTP mirror and
+// the IPC command byte-identical (A10).
+func (s *Store) SubscriptionDoc(sub, repo string, volume int) (contract.SubscriptionDoc, error) {
+	if !releasedoc.ValidRepo(repo) {
+		return contract.SubscriptionDoc{}, ErrBadRepo
+	}
+	return releasedoc.Read("", s.releaseRoot(sub), repo, volume)
+}
+
+// subscriptionItems builds the per-repo rows for the subscriptions endpoint from
+// the local cursor plus the committed document index. A cursor that cannot be
+// read degrades to baseline rows instead of failing the whole endpoint.
+func (s *Store) subscriptionItems(sub string, repos []string, statePath string) []contract.SubscriptionItem {
+	return releasewatch.Items(statePath, "", s.releaseRoot(sub), repos)
+}
+
 type releaseManifestEntry struct {
 	Date        string `json:"date"`
 	Period      string `json:"period"`
 	Count       int    `json:"count"`
 	Degraded    bool   `json:"degraded"`
 	ContentHash string `json:"contentHash"`
-}
-
-type subscriptionList struct {
-	Repos []string `json:"repos"`
 }
 
 // readReleaseFile decodes a release digest document into the contract type, so
@@ -187,12 +210,46 @@ func (s *Server) handleGetReleases(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, doc)
 }
 
-// handleListSubscriptions serves GET /api/v2/subscriptions (read-only).
+// handleListSubscriptions serves GET /api/v2/subscriptions (read-only). It is
+// the HTTP mirror of the IPC `subscribe list` command: same SubscriptionList,
+// same items[].
 func (s *Server) handleListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	out, err := s.store.Subscriptions(s.subscriptionsPath)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	out.Items = s.store.subscriptionItems(s.releasesSubdir, out.Repos, s.releaseStatePath)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// handleSubscriptionDoc serves GET /api/v2/repos/{owner}/{repo}/releases, the
+// HTTP mirror of the IPC `subscribe releases` command.
+func (s *Server) handleSubscriptionDoc(w http.ResponseWriter, r *http.Request) {
+	repo := r.PathValue("owner") + "/" + r.PathValue("repo")
+	if !releasedoc.ValidRepo(repo) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid owner/repo", "repo": repo})
+		return
+	}
+	volume, verr := releasedoc.ParseVolume(r.URL.Query().Get("volume"))
+	if verr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": verr.Error()})
+		return
+	}
+	doc, err := s.store.SubscriptionDoc(s.releasesSubdir, repo, volume)
+	switch {
+	case errors.Is(err, releasedoc.ErrNoDoc):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "release document not found", "repo": repo})
+		return
+	case errors.Is(err, releasedoc.ErrVolumeOutOfRange):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "volume not found", "repo": repo, "volume": strconv.Itoa(volume)})
+		return
+	case errors.Is(err, ErrBadRepo):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid owner/repo", "repo": repo})
+		return
+	case err != nil:
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
 }

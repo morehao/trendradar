@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -39,15 +41,87 @@ type ReleasesConfig struct {
 	FallbackToTags     *bool `yaml:"fallbackToTags"`
 	BaselineOnFirstRun *bool `yaml:"baselineOnFirstRun"`
 
-	BackfillLatest int    `yaml:"backfillLatest" validate:"omitempty,gte=0"`
-	PerRepoLimit   int    `yaml:"perRepoLimit" validate:"omitempty,gte=1,lte=20"`
-	MaxNotesChars  int    `yaml:"maxNotesChars" validate:"omitempty,gte=500,lte=20000"`
-	Concurrency    int    `yaml:"concurrency" validate:"omitempty,gte=1,lte=8"`
-	TimeoutSeconds int    `yaml:"timeoutSeconds" validate:"omitempty,gte=1,lte=60"`
-	BudgetSeconds  int    `yaml:"budgetSeconds" validate:"omitempty,gte=1,lte=300"`
-	MaxPages       int    `yaml:"maxPages" validate:"omitempty,gte=1,lte=50"`
-	OutputDir      string `yaml:"outputDir"`
-	Period         string `yaml:"period" validate:"omitempty,oneof=daily weekly monthly"`
+	BackfillLatest int `yaml:"backfillLatest" validate:"omitempty,gte=0"`
+	// PerRepoLimit caps how many versions a document *lists*; it no longer caps
+	// how many are fetched (the weekly summary covers every version).
+	PerRepoLimit  int `yaml:"perRepoLimit" validate:"omitempty,gte=1,lte=20"`
+	MaxNotesChars int `yaml:"maxNotesChars" validate:"omitempty,gte=500,lte=20000"`
+	// SummaryMaxChars bounds the one-per-repo weekly summary (design D17).
+	SummaryMaxChars int `yaml:"summaryMaxChars" validate:"omitempty,gte=500,lte=2000"`
+	// DocMaxLines is the per-repo document's line budget. A new volume starts
+	// only when the current one already exceeds it *before* a write.
+	DocMaxLines    int     `yaml:"docMaxLines" validate:"omitempty,gte=100,lte=2000"`
+	Timezone       string  `yaml:"timezone"`
+	WeekStart      string  `yaml:"weekStart" validate:"omitempty,oneof=monday"`
+	Concurrency    AutoInt `yaml:"concurrency"`
+	TimeoutSeconds int     `yaml:"timeoutSeconds" validate:"omitempty,gte=1,lte=60"`
+	BudgetSeconds  AutoInt `yaml:"budgetSeconds"`
+	MaxPages       int     `yaml:"maxPages" validate:"omitempty,gte=1,lte=50"`
+	OutputDir      string  `yaml:"outputDir"`
+	// Period is the summary period. Only "weekly" is implemented; the releases
+	// stage summarizes one ISO week per model call per repo.
+	Period string `yaml:"period" validate:"omitempty,oneof=weekly"`
+}
+
+// AutoInt accepts either "auto" or an explicit integer in YAML. "auto" resolves
+// per run from the subscription count (design D12); an explicit number wins.
+type AutoInt struct {
+	Auto  bool
+	Value int
+}
+
+// UnmarshalYAML accepts `auto`, an integer, or a quoted integer. A plain int
+// field could not express "auto" without breaking existing configs that spell
+// the value out.
+func (a *AutoInt) UnmarshalYAML(node *yaml.Node) error {
+	raw := strings.TrimSpace(node.Value)
+	if strings.EqualFold(raw, "auto") {
+		a.Auto = true
+		a.Value = 0
+		return nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return fmt.Errorf("want \"auto\" or an integer, got %q", node.Value)
+	}
+	a.Auto = false
+	a.Value = n
+	return nil
+}
+
+// MarshalYAML round-trips so `config` output and generated YAML stay readable.
+func (a AutoInt) MarshalYAML() (any, error) {
+	if a.Auto {
+		return "auto", nil
+	}
+	return a.Value, nil
+}
+
+// Resolve returns the effective value: clamp(min, ceil(n/10), max) when auto.
+func (a AutoInt) Resolve(n, min, max int) int {
+	if !a.Auto {
+		return a.Value
+	}
+	v := (n + 9) / 10
+	if v < min {
+		v = min
+	}
+	if v > max {
+		v = max
+	}
+	return v
+}
+
+// ResolveBudget returns min(max, 30+3n) when auto, else the explicit value.
+func (a AutoInt) ResolveBudget(n, max int) int {
+	if !a.Auto {
+		return a.Value
+	}
+	v := 30 + 3*n
+	if v > max {
+		v = max
+	}
+	return v
 }
 
 // FallbackToTagsEnabled reports the effective fallbackToTags (default true).
@@ -56,6 +130,24 @@ func (r ReleasesConfig) FallbackToTagsEnabled() bool {
 		return true
 	}
 	return *r.FallbackToTags
+}
+
+// IsZero reports whether the knob was left unset (so defaults can apply).
+func (a AutoInt) IsZero() bool { return !a.Auto && a.Value == 0 }
+
+// ValidateAuto reports range problems for the auto-or-number knobs, which the
+// struct-tag validator cannot express.
+func (r ReleasesConfig) ValidateAuto() error {
+	// A zero value means "unset": Load fills it with auto, and a struct built
+	// directly in tests is allowed to leave it alone. Only an out-of-range
+	// explicit number is a caller error.
+	if !r.Concurrency.Auto && r.Concurrency.Value != 0 && (r.Concurrency.Value < 1 || r.Concurrency.Value > 8) {
+		return fmt.Errorf("releases.concurrency: want auto or 1-8, got %d", r.Concurrency.Value)
+	}
+	if !r.BudgetSeconds.Auto && r.BudgetSeconds.Value != 0 && (r.BudgetSeconds.Value < 1 || r.BudgetSeconds.Value > 300) {
+		return fmt.Errorf("releases.budgetSeconds: want auto or 1-300, got %d", r.BudgetSeconds.Value)
+	}
+	return nil
 }
 
 // BaselineOnFirstRunEnabled reports the effective baselineOnFirstRun (default true).
@@ -159,6 +251,9 @@ func (c *Config) Validate() error {
 	if err := validateStruct(c); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
+	if err := c.Releases.ValidateAuto(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
 	return nil
 }
 
@@ -239,14 +334,16 @@ func (c *Config) withDefaults() {
 	if c.Releases.MaxNotesChars == 0 {
 		c.Releases.MaxNotesChars = 4000
 	}
-	if c.Releases.Concurrency == 0 {
-		c.Releases.Concurrency = 3
+	// Auto is the default for both knobs: the plugin and a bare CLI run then get
+	// the same self-tuning behaviour without spelling a number in config.
+	if c.Releases.Concurrency.IsZero() {
+		c.Releases.Concurrency = AutoInt{Auto: true}
 	}
 	if c.Releases.TimeoutSeconds == 0 {
 		c.Releases.TimeoutSeconds = 20
 	}
-	if c.Releases.BudgetSeconds == 0 {
-		c.Releases.BudgetSeconds = 60
+	if c.Releases.BudgetSeconds.IsZero() {
+		c.Releases.BudgetSeconds = AutoInt{Auto: true}
 	}
 	if c.Releases.MaxPages == 0 {
 		c.Releases.MaxPages = 10
@@ -255,6 +352,18 @@ func (c *Config) withDefaults() {
 		c.Releases.OutputDir = "releases"
 	}
 	if c.Releases.Period == "" {
-		c.Releases.Period = "daily"
+		c.Releases.Period = "weekly"
+	}
+	if c.Releases.WeekStart == "" {
+		c.Releases.WeekStart = "monday"
+	}
+	if c.Releases.Timezone == "" {
+		c.Releases.Timezone = "Asia/Shanghai"
+	}
+	if c.Releases.DocMaxLines == 0 {
+		c.Releases.DocMaxLines = 600
+	}
+	if c.Releases.SummaryMaxChars == 0 {
+		c.Releases.SummaryMaxChars = 1200
 	}
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: trendradar serve API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the
     contract schemas, so the plugin and any web UI consume the same shapes
@@ -123,8 +123,12 @@ paths:
       operationId: listSubscriptions
       summary: List the repo subscriptions the core will poll
       description: |
-        Read-only. Returns an empty array when the subscription file is missing
-        or empty. Writing subscriptions stays on the CLI / IPC subscribe command.
+        Read-only mirror of the IPC `subscribe list` command: both return the
+        same SubscriptionList. `repos` is the legacy field; `items` adds the
+        per-repo row detail (latest tag, last summary date, check status) and is
+        optional, so an older core still satisfies this schema. Writing
+        subscriptions stays on the CLI / IPC subscribe command and is never
+        exposed over HTTP.
       responses:
         "200":
           description: Current subscription list
@@ -132,6 +136,47 @@ paths:
             application/json:
               schema:
                 $ref: "./releases.v2.json#/$defs/SubscriptionList"
+  /api/v2/repos/{owner}/{repo}/releases:
+    get:
+      operationId: getSubscriptionDoc
+      summary: Read one repo's release document
+      description: |
+        Read-only mirror of the IPC `subscribe releases` command. Returns the
+        exact markdown file content (plus the volume index) so a client renders
+        what the data repo stores instead of re-summarizing it. `volume`
+        defaults to the newest volume. Only repos matching
+        ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ are served: the path is resolved
+        inside the releases document root and never escapes it.
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_.-]+$"
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_.-]+$"
+        - name: volume
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The repo's release document
+          content:
+            application/json:
+              schema:
+                $ref: "./releases.v2.json#/$defs/SubscriptionDoc"
+        "400":
+          description: Malformed owner/repo or non-positive volume
+        "404":
+          description: The repo has no release document, or that volume is absent
   /feed.xml:
     get:
       operationId: getFeed

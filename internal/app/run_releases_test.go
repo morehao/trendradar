@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,7 +57,7 @@ func TestE2EReleasesStage(t *testing.T) {
 	_, work, cfg := setupRepo(t)
 	cfg.Releases = config.ReleasesConfig{
 		Enabled:            true,
-		Period:             "daily",
+		Period:             "weekly",
 		OutputDir:          "releases",
 		PerRepoLimit:       5,
 		MaxNotesChars:      4000,
@@ -85,12 +86,30 @@ func TestE2EReleasesStage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	want := filepath.Join(work, "digests", "releases", "daily", "2026-10", "2026-10-30.json")
+	// Weekly digests keep the ISO-week file name so the existing
+	// /api/v2/releases/{date} route (which derives the name from the date) keeps
+	// serving stored documents.
+	want := filepath.Join(work, "digests", "releases", "weekly", "2026", "2026-W44.json")
 	if _, err := os.Stat(want); err != nil {
 		t.Fatalf("release digest missing: %v", err)
 	}
+	// The per-repo document is the panel's read path: one file, week prepended.
+	docPath := filepath.Join(work, "digests", "releases", "o", "r.md")
+	doc, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("repo document missing: %v", err)
+	}
+	if !strings.Contains(string(doc), "## 2026-10-26 ~ 2026-11-01") {
+		t.Fatalf("repo document missing the week section:\n%s", doc)
+	}
+	if !strings.HasPrefix(string(doc), "# o/r\n") {
+		t.Fatalf("repo document missing its title:\n%s", doc)
+	}
 	if r1.Report.Releases == nil || r1.Report.Releases.NewReleases != 2 {
 		t.Fatalf("release report = %+v", r1.Report.Releases)
+	}
+	if r1.Report.Releases.Checked != 1 || r1.Report.Releases.Changed != 1 {
+		t.Fatalf("release report = %+v, want checked=1 changed=1", r1.Report.Releases)
 	}
 	if _, err := os.Stat(releasewatch.StatePath(work)); err != nil {
 		t.Fatalf("release state not saved: %v", err)

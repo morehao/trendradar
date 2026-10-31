@@ -20,7 +20,8 @@ import (
 
 // Schema is the release-document version carried in the document itself. It is
 // independent of both the contract package version and ipcSchema/digestSchema.
-const Schema = 1
+// Version 2 moved the summary from per-tag to one per repo per week.
+const Schema = 2
 
 // ContentHashAlgo is recorded in the document so a future algorithm change is
 // distinguishable from the current one.

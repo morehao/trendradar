@@ -50,6 +50,8 @@ func fromReleaseWatch(r releasewatch.Report) *ReleaseReport {
 	return &ReleaseReport{
 		Enabled:          r.Enabled,
 		Repos:            r.Repos,
+		Checked:          r.Checked,
+		Changed:          r.Changed,
 		NewReleases:      r.NewReleases,
 		Summarized:       intPtrIfNonZero(r.Summarized),
 		Degraded:         intPtrIfNonZero(r.Degraded),

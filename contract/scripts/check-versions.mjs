@@ -20,6 +20,7 @@ const ipc = readJson(path.join(SCHEMA, 'ipc.v2.json'))
 const digest = readJson(path.join(SCHEMA, 'digest.v2.json'))
 const vinfo = readJson(path.join(SCHEMA, 'version-info.v2.json'))
 const errors = readJson(path.join(SCHEMA, 'errors.v2.json'))
+const releasesS = readJson(path.join(SCHEMA, 'releases.v2.json'))
 const api = fs.readFileSync(path.join(SCHEMA, 'api.v2.yaml'), 'utf8')
 
 const ipcConst = ipc.$defs.RunRequest.properties.ipcSchema.const
@@ -33,9 +34,10 @@ check(digestConst === 2, `digest schema const = ${digestConst}, want 2`)
 check(vinfoIpc === 2 && vinfoDigest === 2, `version-info ipcSchema/digestSchema = ${vinfoIpc}/${vinfoDigest}, want 2/2`)
 check(vm['ipc.v2.json'].current === ipcConst, 'version-map ipc current != ipcSchema const')
 check(vm['digest.v2.json'].current === digestConst, 'version-map digest current != schema const')
-check(vm['version-info.v2.json'].current === '0.3.0', 'version-map version-info current != 0.3.0')
+check(vm['releases.v2.json'].current === releasesS.properties.schema.const, 'version-map releases current != releases schema const')
+check(vm['version-info.v2.json'].current === '0.4.0', 'version-map version-info current != 0.4.0')
 check(vm['api.v2.yaml'].current === apiVer, `version-map api current != api.v2.yaml info.version (${apiVer})`)
-check(pkg.version === '0.3.0', `package.json version = ${pkg.version}, want 0.3.0`)
+check(pkg.version === '0.4.0', `package.json version = ${pkg.version}, want 0.4.0`)
 // Package semver major is decoupled from the wire integer on purpose:
 // package 0.2.0 carries the second-generation wire format (ipcSchema=2).
 check(pkg.version.split('.')[0] === '0', `expected 0.x package version, got ${pkg.version}`)
@@ -97,4 +99,4 @@ if (fail.length) {
   for (const f of fail) console.error('  - ' + f)
   process.exit(1)
 }
-console.log(`check-versions OK (contract ${pkg.version}, ipcSchema=${ipcConst}, digestSchema=${digestConst})`)
+console.log(`check-versions OK (contract ${pkg.version}, ipcSchema=${ipcConst}, digestSchema=${digestConst}, releaseSchema=${releasesS.properties.schema.const})`)

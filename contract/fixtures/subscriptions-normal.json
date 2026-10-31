@@ -1,0 +1,49 @@
+{
+  "repos": [
+    "vercel/next.js",
+    "infiniflow/ragflow",
+    "deepseek-ai/deepseek-harness",
+    "charmbracelet/bubbletea",
+    "golang/go"
+  ],
+  "items": [
+    {
+      "fullName": "vercel/next.js",
+      "url": "https://github.com/vercel/next.js",
+      "status": "ok",
+      "latestTag": "v15.2.0",
+      "latestSummaryAt": "2026-11-01",
+      "lastCheckedAt": "2026-11-01T00:30:00Z"
+    },
+    {
+      "fullName": "infiniflow/ragflow",
+      "url": "https://github.com/infiniflow/ragflow",
+      "status": "no_change",
+      "latestTag": "v1.0.0-rc3",
+      "latestSummaryAt": "2026-10-25",
+      "lastCheckedAt": "2026-11-01T00:30:00Z"
+    },
+    {
+      "fullName": "deepseek-ai/deepseek-harness",
+      "url": "https://github.com/deepseek-ai/deepseek-harness",
+      "status": "baseline",
+      "lastCheckedAt": "2026-11-01T00:30:00Z"
+    },
+    {
+      "fullName": "charmbracelet/bubbletea",
+      "url": "https://github.com/charmbracelet/bubbletea",
+      "status": "rate_limited",
+      "latestTag": "v0.2.2",
+      "latestSummaryAt": "2026-10-25",
+      "lastCheckedAt": "2026-11-01T00:30:00Z"
+    },
+    {
+      "fullName": "golang/go",
+      "url": "https://github.com/golang/go",
+      "status": "failed",
+      "latestTag": "v0.2.2",
+      "latestSummaryAt": "2026-10-25",
+      "lastCheckedAt": "2026-11-01T00:30:00Z"
+    }
+  ]
+}
