@@ -86,10 +86,23 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		summaryCache = summarize.NewCache()
 	}
 	if cfg != nil {
-		summaryCache.SetNamespace(summarize.NamespaceFor(cfg.Model.Provider, cfg.Model.Name))
+		summaryCache.SetNamespace(summarize.NamespaceForMode(cfg.Model.Provider, cfg.Model.Name, "none"))
 	}
-	summarizer := summarize.New(provider, summarize.WithCache(summaryCache))
-	repoDigests := summarizer.Summarize(ctx, in.Repos)
+	batchSize, maxRetries := 10, 1
+	if cfg != nil {
+		if cfg.Summarize.BatchSize > 0 {
+			batchSize = cfg.Summarize.BatchSize
+		}
+		if cfg.Summarize.MaxRetries > 0 {
+			maxRetries = cfg.Summarize.MaxRetries
+		}
+	}
+	summarizer := summarize.New(provider,
+		summarize.WithCache(summaryCache),
+		summarize.WithBatchSize(batchSize),
+		summarize.WithMaxRetries(maxRetries),
+	)
+	repoDigests := summarizer.SummarizeWithContext(ctx, in.Repos, nil)
 	if cachePath != "" {
 		if err := summaryCache.Save(cachePath); err != nil {
 			rep.Warnings = append(rep.Warnings, "cache: "+err.Error())

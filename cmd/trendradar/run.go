@@ -249,12 +249,18 @@ func selectProvider(cfg *config.Config) (model.Provider, error) {
 	if cfg == nil || cfg.Model.Provider == "" || cfg.Model.Provider == "fake" {
 		return model.NewFake(), nil
 	}
+	temperature := cfg.Model.Temperature
+	if temperature == nil {
+		// Stable wording matters more than creativity for one-line summaries.
+		t := float32(0.2)
+		temperature = &t
+	}
 	return model.NewGLLM(model.GLLMOptions{
 		Provider:      cfg.Model.Provider,
 		ModelName:     cfg.Model.Name,
 		BaseURL:       cfg.Model.BaseURL,
 		APIKey:        cfg.Model.APIKey,
-		Temperature:   cfg.Model.Temperature,
+		Temperature:   temperature,
 		MaxTokens:     cfg.Model.MaxTokens,
 		AllowDegraded: cfg.Model.AllowDegraded,
 	})

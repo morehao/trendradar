@@ -7,3 +7,8 @@
 *.test
 *.out
 .DS_Store
+
+# 本地密钥 / 测试环境（不提交）；示例见 .env.example
+.env
+.env.local
+.env.*.local

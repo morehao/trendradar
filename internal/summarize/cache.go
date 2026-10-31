@@ -12,7 +12,7 @@ import (
 
 // PromptVersion is bumped whenever SystemPrompt or the output contract changes,
 // so cached summaries from an older prompt are not silently reused.
-const PromptVersion = "v1"
+const PromptVersion = "v2"
 
 // Cache stores summaries keyed by (namespace, fullName, sha256(description))
 // with a TTL. It can be persisted under .git/ so a rerun reuses the same prose
@@ -45,7 +45,14 @@ func NewCache() *Cache {
 // NamespaceFor scopes entries to a provider/model/prompt combination. Switching
 // any of them misses the cache instead of reusing stale summaries.
 func NamespaceFor(provider, model string) string {
-	return provider + "|" + model + "|" + PromptVersion
+	return NamespaceForMode(provider, model, "")
+}
+
+// NamespaceForMode additionally scopes by enrich mode, so a digest produced
+// without external context is never reused when enrichment turns on (and A/B
+// modes never pollute each other).
+func NamespaceForMode(provider, model, enrichMode string) string {
+	return provider + "|" + model + "|" + PromptVersion + "|" + enrichMode
 }
 
 // SetNamespace sets the cache namespace.

@@ -3,9 +3,17 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/morehao/trendradar/internal/envfile"
 )
 
 func main() {
+	// Load local secrets (.env.local / .env) before parsing commands. Missing
+	// files are fine; real environment variables keep priority.
+	if path, err := envfile.ApplyDefault("."); err != nil {
+		fmt.Fprintf(os.Stderr, "warn: env file %s: %v\n", path, err)
+	}
+
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
