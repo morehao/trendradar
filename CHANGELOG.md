@@ -43,6 +43,13 @@
 
 ## Unreleased
 
+### Added — 发版单仓分析（contract 0.5.0）
+- `run --stages releases --repo <owner/repo>`：只分析指定的单个订阅仓库的 Release，
+  不抓榜单、不渲染 digest、不落地订阅 pending 队列（`buildReleasesOptions` 收敛轮询列表）。
+  `--repo` 仅在 `--stages releases` 下有效，非该场景或形态非法时回 `CONFIG_INVALID`。
+- `RunRequest.command=run` 允许携带 `repo`（需与 `stages` 含 `releases` 搭配）；
+  契约升至 0.5.0（wire 整数仍 `ipcSchema=2` / `digestSchema=2`，字段为增量，向后兼容）。
+
 ## 0.6.0
 
 ### Changed — 订阅数据版本化（方案 A）

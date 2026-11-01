@@ -7,6 +7,18 @@ This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule)
 
 _Nothing yet._
 
+## 0.5.0
+
+Single-repo release analysis. Wire integers unchanged (`ipcSchema = 2` /
+`digestSchema = 2`); additive at the envelope level, so a plugin/core built
+against 0.4.0 keeps working.
+
+### Added
+- `RunRequest.command=run` may now carry `repo`: with `stages` including
+  `releases`, the run analyzes only that one subscribed repository's releases.
+  `repo` requires `stages` to contain `releases`; `run` still must not carry
+  `action`/`volume`. `serve`/`config`/`version` still must not carry `repo`.
+
 ## 0.4.0
 
 Weekly release records. The wire integers stay at `ipcSchema = 2` /
