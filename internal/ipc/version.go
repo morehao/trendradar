@@ -6,14 +6,18 @@ import contract "github.com/morehao/trendradar/contract"
 const DigestSchemaVersion = 2
 
 // ContractVersion is the version of the shared contract package this core targets.
-const ContractVersion = "0.4.0"
+// It must track contract/package.json's version (the wire integers ipcSchema and
+// digestSchema are separate and only bump on breaking changes). A stale value
+// here misreports the handshake without failing any build, so keep it in sync
+// whenever the contract package releases.
+const ContractVersion = "0.5.0"
 
 // Build-time values. Override at release time with:
 //
 //	go build -ldflags "-X github.com/morehao/trendradar/internal/ipc.Version=$(git describe --tags) \
 //	                    -X github.com/morehao/trendradar/internal/ipc.Commit=$(git rev-parse --short HEAD)"
 var (
-	Version = "0.8.1"
+	Version = "0.8.2"
 	Commit  = "dev"
 )
 

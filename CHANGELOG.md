@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.2
+
+### Fixed — 握手 contractVersion 与契约包版本不一致
+- `internal/ipc/version.go` 的 `ContractVersion` 由 `0.4.0` 修正为 `0.5.0`，与
+  `contract/package.json`（`@morehao/trendradar-contract@0.5.0`）对齐。这是 v0.8.0/#30
+  升级契约包时遗漏的同步：`trendradar version --json` 之前自报一个旧契约版本。仅影响自报
+  字段，`ipcSchema`/`digestSchema` 仍为 `2`，wire 与消费方行为不变。
+- 新增 `internal/ipc` 单元测试 `TestContractVersionMatchesPackage`：断言 `ContractVersion`
+  恒等于 `contract/package.json` 的 `version`，避免今后再次静默漂移。
+
 ## 0.8.1
 
 ### Fixed — 发版订阅按周期分支读不到 subscriptions.yaml
