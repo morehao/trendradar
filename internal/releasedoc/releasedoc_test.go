@@ -41,7 +41,7 @@ func TestPlanStartsVolumeOne(t *testing.T) {
 	if !need {
 		t.Fatal("first write must be needed")
 	}
-	if file != "digests/releases/o/r.md" {
+	if file != "digests/releases/o/r-01.md" {
 		t.Fatalf("file=%q", file)
 	}
 	text := string(data)
@@ -106,17 +106,17 @@ func TestPlanPrependsNewestFirst(t *testing.T) {
 		t.Fatalf("freshness line not refreshed:\n%s", text)
 	}
 	// Both weeks live in the same volume: the budget was never exceeded.
-	if _, err := os.Stat(filepath.Join(root, "digests", "releases", "o", "r.02.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "digests", "releases", "o", "r-02.md")); !os.IsNotExist(err) {
 		t.Fatalf("unexpected volume 2: %v", err)
 	}
 }
 
 // A6: the roll-over decision looks only at the current volume *before* writing.
 // A 599-line volume absorbs a 20-line week whole (no split), and only the next
-// week starts .02.md.
+// week starts -02.md.
 func TestPlanRollsVolumeOnlyAfterExceedingBudget(t *testing.T) {
 	root := t.TempDir()
-	rel := "digests/releases/o/r.md"
+	rel := "digests/releases/o/r-01.md"
 	var b strings.Builder
 	b.WriteString("# o/r\n\n> 发版记录 · 每周一次 · 最近更新 2026-10-25\n\n")
 	for lineCount(b.String()) < 599 {
@@ -143,7 +143,7 @@ func TestPlanRollsVolumeOnlyAfterExceedingBudget(t *testing.T) {
 	if got := lineCount(string(data)); got <= 600 {
 		t.Fatalf("volume lines=%d, want > 600 so the next write rolls", got)
 	}
-	if _, err := os.Stat(filepath.Join(root, "digests", "releases", "o", "r.02.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "digests", "releases", "o", "r-02.md")); !os.IsNotExist(err) {
 		t.Fatalf("volume must not split mid-write: %v", err)
 	}
 
@@ -152,14 +152,14 @@ func TestPlanRollsVolumeOnlyAfterExceedingBudget(t *testing.T) {
 	if err != nil || !need2 {
 		t.Fatalf("second plan: need=%v err=%v", need2, err)
 	}
-	if file2 != "digests/releases/o/r.02.md" {
+	if file2 != "digests/releases/o/r-02.md" {
 		t.Fatalf("file=%q, want the new volume", file2)
 	}
 	text2 := string(data2)
 	if !strings.HasPrefix(text2, "# o/r\n") {
 		t.Fatalf("new volume must start with the title:\n%s", text2)
 	}
-	if !strings.Contains(text2, "[第 1 册](r.md)") {
+	if !strings.Contains(text2, "[第 1 册](r-01.md)") {
 		t.Fatalf("new volume must link the previous one:\n%s", text2)
 	}
 	if strings.Contains(text2, "2026-10-26 ~ 2026-11-01") {
@@ -171,7 +171,7 @@ func TestPlanRollsVolumeOnlyAfterExceedingBudget(t *testing.T) {
 // the integrity check.
 func TestPlanRefusesEditedTitle(t *testing.T) {
 	root := t.TempDir()
-	writeDoc(t, root, "digests/releases/o/r.md", "# something else\n\n## 2026-10-19 ~ 2026-10-25\n\nold\n")
+	writeDoc(t, root, "digests/releases/o/r-01.md", "# something else\n\n## 2026-10-19 ~ 2026-10-25\n\nold\n")
 	_, _, _, err := Plan(root, "digests/releases", "o/r", section("2026-10-26", "2026-11-01", "v2"), 600)
 	if err == nil {
 		t.Fatal("want an error for a mismatched title")
@@ -189,7 +189,7 @@ func TestReadVolumesAndIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeDoc(t, root, file, string(data))
-	writeDoc(t, root, "digests/releases/o/r.02.md", "# o/r\n\n> 上一册：[第 1 册](r.md)\n> 发版记录 · 每周一次 · 最近更新 2026-11-01\n\n## 2026-10-26 ~ 2026-11-01\n\nnew\n")
+	writeDoc(t, root, "digests/releases/o/r-02.md", "# o/r\n\n> 上一册：[第 1 册](r-01.md)\n> 发版记录 · 每周一次 · 最近更新 2026-11-01\n\n## 2026-10-26 ~ 2026-11-01\n\nnew\n")
 
 	vols, err := Index(root, "digests/releases", "o/r")
 	if err != nil {
@@ -198,7 +198,7 @@ func TestReadVolumesAndIndex(t *testing.T) {
 	if len(vols) != 2 {
 		t.Fatalf("volumes=%d, want 2", len(vols))
 	}
-	if vols[0].File != "o/r.md" || vols[1].File != "o/r.02.md" {
+	if vols[0].File != "o/r-01.md" || vols[1].File != "o/r-02.md" {
 		t.Fatalf("files=%q/%q", vols[0].File, vols[1].File)
 	}
 
@@ -273,7 +273,7 @@ func TestPlanSeesWeekInOlderVolume(t *testing.T) {
 	}
 	writeDoc(t, root, file, string(data))
 	// Simulate a rolled document that already contains the next week.
-	writeDoc(t, root, "digests/releases/o/r.02.md", "# o/r\n\n> 上一册：[第 1 册](r.md)\n> 发版记录 · 每周一次 · 最近更新 2026-11-01\n\n## 2026-10-26 ~ 2026-11-01\n\nnew\n")
+	writeDoc(t, root, "digests/releases/o/r-02.md", "# o/r\n\n> 上一册：[第 1 册](r-01.md)\n> 发版记录 · 每周一次 · 最近更新 2026-11-01\n\n## 2026-10-26 ~ 2026-11-01\n\nnew\n")
 
 	_, _, need, err := Plan(root, "digests/releases", "o/r", section("2026-10-26", "2026-11-01", "v2"), 600)
 	if err != nil {

@@ -870,14 +870,14 @@ export const fixtures = {
     "volumes": [
       {
         "index": 1,
-        "file": "vercel/next.js.md",
+        "file": "vercel/next.js-01.md",
         "from": "2026-10-19",
         "to": "2026-11-01",
         "lines": 18
       },
       {
         "index": 2,
-        "file": "vercel/next.js.02.md",
+        "file": "vercel/next.js-02.md",
         "from": "2026-09-28",
         "to": "2026-10-18",
         "lines": 412
@@ -1896,7 +1896,7 @@ const releases = {
     "SubscriptionVolume": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One volume file of a repo's release document. index 1 is <repo>.md; index >= 2 is <repo>.0N.md (zero padded). from/to are the oldest/newest week bounds present in that file.",
+      "description": "One volume file of a repo's release document. Every volume is numbered: index N is <repo>-0N.md (zero padded), so the first volume is -01. from/to are the oldest/newest week bounds present in that file.",
       "required": [
         "index",
         "file"
@@ -1908,7 +1908,7 @@ const releases = {
         },
         "file": {
           "type": "string",
-          "description": "Path relative to the releases document root (e.g. vercel/next.js.md)."
+          "description": "Path relative to the releases document root (e.g. vercel/next.js-01.md)."
         },
         "from": {
           "type": "string",

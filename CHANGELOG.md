@@ -9,9 +9,9 @@
   列出的版本数（其余写「其余 N 个」）。
 - **周闸门**：游标新增 ISO 周键（`2026-W44`，按 `releases.timezone` 计算）。同一周重复运行对
   该仓库不请求 GitHub、不调模型、不写文档；失败不写周键，因此同周重试仍可行、跨周不丢数据。
-- **一仓一份文档**：`<output.dir>/releases/<owner>/<repo>.md`，最新一周 prepend 到最上面，
+- **一仓一份文档**：`<output.dir>/releases/<owner>/<repo>-01.md`（每册都带两位序号，续册 `-02.md`），最新一周 prepend 到最上面，
   同一周重复写入是幂等的（标题已存在则跳过）。当前册超过 `releases.docMaxLines`（默认 600）
-  时**下一次**写入才开 `.02.md`——切卷只看写入前，任何一节都不会被拆到两册。
+  时**下一次**写入才开 `-02.md`——切卷只看写入前，任何一节都不会被拆到两册。
   首行不是 `# owner/repo`（被人工改过）时拒绝写入并告警，不覆盖用户内容。
 - 周文档（`ReleaseDigest`）保留并提供 `GET /api/v2/releases*`：`schema` 升到 2，
   `repos[]` 新增 `summaryZh` / `periodStart` / `periodEnd`；`ReleaseItem.summaryZh` 变为可选

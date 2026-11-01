@@ -94,7 +94,7 @@ func TestE2EReleasesStage(t *testing.T) {
 		t.Fatalf("release digest missing: %v", err)
 	}
 	// The per-repo document is the panel's read path: one file, week prepended.
-	docPath := filepath.Join(work, "digests", "releases", "o", "r.md")
+	docPath := filepath.Join(work, "digests", "releases", "o", "r-01.md")
 	doc, err := os.ReadFile(docPath)
 	if err != nil {
 		t.Fatalf("repo document missing: %v", err)

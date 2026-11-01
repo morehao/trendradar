@@ -80,7 +80,7 @@ func TestSubscriptionDocMatchesReadPath(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("HTTP doc != read path:\n got=%+v\nwant=%+v", got, want)
 	}
-	if got.Volume != 1 || len(got.Volumes) != 1 || got.Volumes[0].File != "o/r.md" {
+	if got.Volume != 1 || len(got.Volumes) != 1 || got.Volumes[0].File != "o/r-01.md" {
 		t.Fatalf("volume index = %+v", got.Volumes)
 	}
 	if got.UpdatedAt == nil || *got.UpdatedAt != "2026-11-01" {

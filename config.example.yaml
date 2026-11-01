@@ -63,7 +63,7 @@ releases:
   perRepoLimit: 10                       # 文档里每仓每周最多列出的版本数，其余写「其余 N 个」
   maxNotesChars: 4000                    # 一次总结可用的 notes 总预算（按版本均分）
   summaryMaxChars: 1200                  # 每仓每周一段总结的字符上限（500-2000）
-  docMaxLines: 600                       # 每仓文档行数阈值，超过后下一次写入开 .02.md
+  docMaxLines: 600                       # 每仓文档行数阈值，超过后下一次写入开 -02.md
   concurrency: auto                      # auto=clamp(4, ceil(N/10), 8)；也可写 1-8
   timeoutSeconds: 20
   budgetSeconds: auto                    # auto=min(300, 30+3N)；也可写 1-300

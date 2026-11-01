@@ -1,6 +1,7 @@
 // Package releasedoc owns the per-repo release document: one markdown file per
 // repository, one section per ISO week, newest section first, split into
-// zero-padded volumes once a volume grows past a line budget.
+// zero-padded volumes (`<repo>-01.md`, `<repo>-02.md`, …) once a volume grows
+// past a line budget.
 //
 // Why a separate package: the document is the single source of truth the panel
 // renders verbatim (the panel never re-summarizes). That means its layout and
@@ -59,30 +60,33 @@ func ValidRepo(repo string) bool {
 }
 
 // Rel returns a volume's path relative to the release document root:
-// <owner>/<repo>.md for volume 1, <owner>/<repo>.0N.md for N >= 2. The contract's
-// SubscriptionVolume.file uses this form so a client can show a portable path
-// whether serve was pointed at <repo>/digests or at an absolute directory.
+// <owner>/<repo>-01.md, <owner>/<repo>-02.md, … The first volume carries an
+// explicit `-01` too, so every volume sorts and reads the same way (and a repo
+// whose history was split never looks like it has one unnumbered document plus
+// numbered ones).
+//
+// The contract's SubscriptionVolume.file uses this form so a client can show a
+// portable path whether serve was pointed at <repo>/digests or at an absolute
+// directory.
 func Rel(repo string, index int) string {
-	owner, name, _ := strings.Cut(repo, "/")
-	if index <= 1 {
-		return path.Join(owner, name+".md")
-	}
-	return path.Join(owner, fmt.Sprintf("%s.%02d.md", name, index))
+	owner, _, _ := strings.Cut(repo, "/")
+	return path.Join(owner, volumeName(repo, index))
 }
 
-// Path joins the document root with a volume's relative path. root may be
-// repository-relative (what the writer uses) or absolute (what serve uses).
+// Path joins the document root with a volume's relative path
+// (<root>/<owner>/<repo>-0N.md). root may be repository-relative (what the
+// writer uses) or absolute (what serve uses).
 func Path(root, repo string, index int) string {
 	return path.Join(root, Rel(repo, index))
 }
 
-// volumeName is the file's base name for one volume.
+// volumeName is the file's base name for one volume: <repo>-01.md, <repo>-02.md…
 func volumeName(repo string, index int) string {
 	_, name, _ := strings.Cut(repo, "/")
-	if index <= 1 {
-		return name + ".md"
+	if index < 1 {
+		index = 1
 	}
-	return fmt.Sprintf("%s.%02d.md", name, index)
+	return fmt.Sprintf("%s-%02d.md", name, index)
 }
 
 // Item is one version listed in a week section.
@@ -184,9 +188,11 @@ func header(repo string, index int, prevFile, updatedAt string) string {
 	return b.String()
 }
 
-// Index lists the volumes that exist for repo, oldest index first. A repo with
-// no document yields an empty list (not an error): "no document yet" is a normal
-// state for a freshly added subscription.
+// Index lists the volumes that exist for repo, oldest index first. Volume files
+// are contiguous by construction (the writer only ever appends the next index),
+// so the scan stops at the first missing file. A repo with no document yields an
+// empty list (not an error): "no document yet" is a normal state for a freshly
+// added subscription.
 func Index(repoRoot, root, repo string) ([]contract.SubscriptionVolume, error) {
 	if !ValidRepo(repo) {
 		return nil, fmt.Errorf("invalid repo %q", repo)

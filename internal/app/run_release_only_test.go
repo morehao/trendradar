@@ -109,7 +109,7 @@ func TestReleaseOnlyRunLeavesSubscriptionsAlone(t *testing.T) {
 			t.Fatalf("trending artifact %s written by a release-only run", rel)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(work, "digests", "releases", "o", "r.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(work, "digests", "releases", "o", "r-01.md")); err != nil {
 		t.Fatalf("release document missing: %v", err)
 	}
 	// The branch follows the weekly summary period so subscribe/serve read the

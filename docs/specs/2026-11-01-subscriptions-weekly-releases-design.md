@@ -64,7 +64,7 @@
 | A3 | 抽屉可读 | 点「变更」到文档渲染完成，10 次采样 | P95 ≤ 300 ms |
 | A4 | 周幂等 | 同一 ISO 周连续跑两次 | 文档章节数不变，文件哈希不变 |
 | A5 | 无变化不写 | 一周内无新 tag 的仓库连跑两次 | 文档 mtime 与内容不变 |
-| A6 | 卷切分边界 | 构造 599 行的当前册，写入一段 20 行的周章节；再跑一周 | 第一次写入完整落在第 1 册（619 行，不拆节）；第二次才生成 `.02.md` 并写入新章节 |
+| A6 | 卷切分边界 | 构造 599 行的当前册，写入一段 20 行的周章节；再跑一周 | 第一次写入完整落在第 1 册（619 行，不拆节）；第二次才生成 `-02.md` 并写入新章节 |
 | A7 | 单一来源 | 面板抽屉文本与数据仓文档做 diff | 逐字一致（允许首尾空白差异） |
 | A8 | 异常可见 | 模拟 GitHub 限流 / 模型失败 | 行状态显示「限流 / 失败」，抽屉顶部提示本周未更新 |
 | A9 | 外部 API 不破 | 旧版 `GET /api/v2/releases` 消费方跑契约 fixture | 字段与语义保持，新增字段可忽略 |
@@ -87,7 +87,7 @@ flowchart LR
   S["插件调度 · 发版周定时"] -->|"run --stages releases"| C
   C -->|"每周一次检查"| G["GitHub Releases / Tags"]
   C -->|"每仓一次批量摘要"| M["模型"]
-  C --> R1["数据仓 releases/owner/repo.md（+ .02.md）"]
+  C --> R1["数据仓 releases/owner/repo-01.md（+ -02.md）"]
   C --> R2["数据仓 releases/2026-10-25.md / .json（周文档）"]
   W["外部 Web 服务"] -->|"GET /api/v2/releases"| C
 ```
@@ -98,7 +98,7 @@ flowchart LR
 
 1. **列表轻、文档按需**：列表只承载判断所需的最小信息（最近 tag、最近总结日期、状态）；完整总结放抽屉，打开时按仓取一次。
 2. **周粒度、批量总结**：核心每周一次，把一个仓库这一周新增的全部 tag/Release 合并成一次模型调用、一段总结；不再逐 tag 总结。
-3. **一仓一份文档、按周追加**：`releases/<owner>/<repo>.md` 是这份仓库的发版记录，最新一周在最上面；超过行数阈值另起 `.02.md`，面板按卷读取。
+3. **一仓一份文档、按周追加**：`releases/<owner>/<repo>-01.md` 是这份仓库的发版记录，最新一周在最上面；超过行数阈值另起 `-02.md`，面板按卷读取。
 4. **面板 = 文档的渲染**：抽屉不重新组织内容，直接把文档 markdown 渲染出来，保证「看到的就是仓库里那份」。
 5. **外部 API 保留**：周文档（ReleaseDigest JSON/MD）继续生成并保留 `GET /api/v2/releases`，供独立 Web 服务消费；每仓文档是并列的人类可读物，不是替代品。
 
@@ -129,7 +129,7 @@ flowchart LR
 | D1 | 列表只带每仓摘要字段，按需拉文档 | A1 / A2 | A 列表塞全量；不做 | 响应体积断言 | Accepted | 高 |
 | D2 | 每周一次批量总结 | 技术目标 3 | B 按 tag 逐条 | 调用次数日志 | Accepted | 高 |
 | D3 | 一仓一份 markdown，按周 prepend | A7 / 反目标 1 | D 纯 JSON | 抽屉与文档 diff | Accepted | 高 |
-| D4 | 写入前超过 600 行才另起 `.02.md`（阈值已定为 600） | A6 | 按年切卷；不切分 | 构造超长文档的用例 | Accepted | 中 |
+| D4 | 写入前超过 600 行才另起 `-02.md`（阈值已定为 600） | A6 | 按年切卷；不切分 | 构造超长文档的用例 | Accepted | 中 |
 | D5 | 抽屉用 markdown 渲染器渲染文档 | A7 | 结构化 sections 自绘 | 文本 diff | Accepted | 高 |
 | D6 | 保留 ReleaseDigest 与 `/api/v2/releases` | A9 / 硬约束 | 下线只留每仓文档 | 旧 fixture 回归 | Accepted | 高 |
 | D7 | 升级前的历史不回填 | 已知未覆盖 1 | 解析旧 `releases/*.md` 回填 | 无（范围外） | Accepted | 中 |
@@ -173,7 +173,7 @@ flowchart LR
 这一周发了 v15.2.0 与 v15.1.9 两个版本：构建缓存命中率提升，修复 App Router 下动态段预渲染的几处回归……
 ```
 
-- 第 1 册：`releases/<owner>/<repo>.md`；第 N 册（N ≥ 2）：`releases/<owner>/<repo>.0N.md`（`02`、`03`…，两位补零）。
+- 每册都带两位序号：第 N 册是 `releases/<owner>/<repo>-0N.md`（`-01`、`-02`…）。第 1 册也有 `-01`，这样「某仓库的全部卷」是一个稳定的通配，首册不会看起来像未切卷的另一份文档。
 - 新的一周 prepend 到「当前册」的标题行之后。**切卷判据只看写入前**：写入前当前册行数 `L` ≤ `maxLines`（默认 600）时，本次章节**完整写入当前册**，即使写完后超过 `maxLines`；只有下一次写入时（`L > maxLines`）才新开一册。新册首行写 `# owner/repo`，第二行写指向前一册的链接。
 - 这条规则保证：任何一节都不会被拆到两册，也不会因为「这次会超」而丢掉本周记录；极端情况下单节本身超过 `maxLines`，仍整节写入当前册，下一周再开新册。
 - 幂等：当前册里已存在同一 `weekStart ~ weekEnd` 的二级标题时直接跳过，不追加。
@@ -199,7 +199,7 @@ flowchart LR
 {
   "fullName": "vercel/next.js",
   "volume": 1,
-  "volumes": [{ "index": 1, "file": "next.js.md", "from": "2026-03-02", "to": "2026-10-25", "lines": 412 }],
+  "volumes": [{ "index": 1, "file": "next.js-01.md", "from": "2026-03-02", "to": "2026-10-25", "lines": 412 }],
   "updatedAt": "2026-10-25",
   "markdown": "# vercel/next.js\n\n> 发版记录 ……"
 }
@@ -362,6 +362,7 @@ HTTP 面仍只读、`no-store`、不返回密钥；`serve` 默认绑 `127.0.0.1`
 
 补充：
 
+- 卷名统一为 `<repo>-NN.md`（第 1 册也是 `-01`）：用户确认「release 相关的按仓库命名」，且每册都带序号比「首册裸名 + 续册带号」更一致。`SubscriptionVolume.file` 与抽屉里的路径说明随之统一。
 - 每仓文档的周章节里列出的版本数由 `releases.perRepoLimit` 决定（默认 10），**抓取与总结不受该值限制**；超出部分写「其余 N 个」。
 - 插件侧对 `@morehao/trendradar-contract` 的依赖在 0.4.0 发布前先用本地类型声明（`src/ipc.ts`，带注释），发布后再切回包导入——契约包发布需要用户确认，不在本期内自动执行。
 - HTTP 面新增 `GET /api/v2/repos/{owner}/{repo}/releases?volume=N`，与 IPC `subscribe releases` 共用 `releasedoc.Read`，A10 的「逐字段一致」由同一个函数保证。
@@ -384,7 +385,7 @@ HTTP 面仍只读、`no-store`、不返回密钥；`serve` 默认绑 `127.0.0.1`
 | A3 抽屉 P95 ≤ 300 ms | 机械覆盖（IPC 段）+ 走查 | 在 484 行 / 16.8 KB 的仓文档上跑 10 次 `subscribe releases --json`（冷启动预热 3 次）：p50 7.1 ms、p95 7.4 ms、max 7.4 ms；口径是「本地 IPC + 单文件读取」，不含浏览器渲染。浏览器渲染与面板交互仍需真机走查 |
 | A4 周幂等 | 机械覆盖 | `TestPlanIsIdempotentForSameWeek`、`TestBuildWeeklyGateSkipsSecondRun`、`TestReleaseOnlyRunIsIdempotentWithinWeek` |
 | A5 无变化不写 | 机械覆盖 | 周闸门 + `changed=0` → 无文档文件（`TestReleaseOnlyRunIsIdempotentWithinWeek` 断言无新 commit） |
-| A6 卷切分边界 | 机械覆盖 | `TestPlanRollsVolumeOnlyAfterExceedingBudget`（599 行 → 不拆；下一次 → `.02.md`） |
+| A6 卷切分边界 | 机械覆盖 | `TestPlanRollsVolumeOnlyAfterExceedingBudget`（599 行 → 不拆；下一次 → `-02.md`） |
 | A7 单一来源 | 机械覆盖 | `subscribe releases` 与 HTTP 都走 `releasedoc.Read`；`TestSubscriptionDocMatchesReadPath` 逐字段相等 |
 | A8 异常可见 | 机械覆盖（状态）+ 走查 | `TestBuildFailureIsolated` / `TestBuildRateLimitStopsRemainingRepos` 产出 `failed` / `rate_limited`；抽屉 warn 条由 `client/subscriptions.ts` 渲染 |
 | A9 外部 API 不破 | 机械覆盖 | `TestLegacyReleaseDigestStillServed`（schema 1 旧文档仍按原字段返回） |
