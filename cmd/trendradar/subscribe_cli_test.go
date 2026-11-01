@@ -205,3 +205,33 @@ func TestSubscribeReleasesReturnsDocument(t *testing.T) {
 		t.Fatal("want an error for an out-of-range volume")
 	}
 }
+
+// Bug reproduction (end-to-end via subscribe list): subscriptions.yaml is
+// committed on main, but subscribe reads today's period branch, which does not
+// exist yet. Before the fallback fix this resolved to 0 repos; now it must read
+// the baseline branch so the panel shows the real subscriptions.
+func TestSubscribeListFallsBackToBaseBranch(t *testing.T) {
+	cfgPath, work := setupSubscribeRepo(t)
+	// Land subscriptions.yaml on main (the baseline).
+	if err := os.MkdirAll(filepath.Join(work, "digests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "digests", "subscriptions.yaml"),
+		[]byte("schema: 1\nsubscriptions:\n  - o/a\n  - o/b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cliGit(t, work, "add", "-A")
+	cliGit(t, work, "commit", "-m", "subs on main")
+
+	// Do NOT create the period branch: the read must fall back to main.
+	out, err := runSubscribeOutput([]string{"list", "--config", cfgPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.List == nil {
+		t.Fatal("list payload missing")
+	}
+	if len(out.List.Repos) != 2 || out.List.Repos[0] != "o/a" || out.List.Repos[1] != "o/b" {
+		t.Fatalf("repos=%v, want [o/a o/b] via base-branch fallback", out.List.Repos)
+	}
+}

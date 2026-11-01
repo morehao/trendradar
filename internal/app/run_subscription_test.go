@@ -26,7 +26,7 @@ func releaseOptsForTest(t *testing.T, work string, cfg *config.Config, date stri
 		t.Fatal(err)
 	}
 	branch := subscription.RunBranchName(cfg.Output.BranchPrefix, cfg.Releases.Period, date)
-	baseStore, err := subscription.ReadRepoOnTargetBranch(work, cfg.Output.Dir, cfg.Releases.SubscriptionsFile, branch)
+	baseStore, err := subscription.ReadRepoWithFallback(work, cfg.Output.Dir, cfg.Releases.SubscriptionsFile, branch, cfg.Repo.BaseBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

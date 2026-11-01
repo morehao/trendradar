@@ -160,3 +160,38 @@ func TestReleaseOnlyRunIsIdempotentWithinWeek(t *testing.T) {
 		t.Fatalf("second run added commits: %d -> %d", base, got)
 	}
 }
+
+// Bug reproduction at the resolver layer (mirrors cmd.buildReleasesOptions): the
+// subscription file is committed on the baseline branch (main) only, and the
+// period branch for this date does not exist yet. releaseOptsForTest must fall
+// back to main, resolve a non-empty poll list, and the release-only run must
+// produce artifacts rather than being skipped for lack of subscriptions.
+func TestReleaseOnlyResolvesSubsFromBaseBranch(t *testing.T) {
+	_, work, cfg := setupRepo(t)
+	cfg.Releases = weeklyReleasesConfig(work)
+	// Commit subscriptions on main only; never create trending/weekly/2026-W44.
+	commitFile(t, work, "digests/subscriptions.yaml", "schema: 1\nsubscriptions:\n  - o/r\n")
+
+	opts := releaseOptsForTest(t, work, cfg, "2026-10-30", oneReleaseFetcher())
+	if len(opts.Repos) != 1 || opts.Repos[0] != "o/r" {
+		t.Fatalf("resolved repos = %v, want [o/r] via base-branch fallback", opts.Repos)
+	}
+
+	res, err := Run(context.Background(), cfg, Inputs{Date: "2026-10-30"}, Options{
+		Provider: model.NewFake(),
+		Stages:   []string{StageReleases},
+		Releases: opts,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if res.Skipped {
+		t.Fatal("release-only run skipped: subscriptions resolved to 0 from a missing period branch")
+	}
+	if res.Report.Releases == nil || res.Report.Releases.Checked != 1 {
+		t.Fatalf("release report=%+v, want checked=1", res.Report.Releases)
+	}
+	if _, err := os.Stat(filepath.Join(work, "digests", "releases", "o", "r-01.md")); err != nil {
+		t.Fatalf("release document missing: %v", err)
+	}
+}

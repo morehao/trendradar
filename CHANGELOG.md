@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.1
+
+### Fixed — 发版订阅按周期分支读不到 subscriptions.yaml
+- `subscription.ReadRepoWithFallback`：按周期分支（如 `trending/weekly/2026-W44`）读取
+  `subscriptions.yaml` 时，若该分支或文件不存在，回退到基准分支（`repo.baseBranch`，默认
+  `main`）再读一次；两者都缺才返回空。此前 `ReadRepoOnTargetBranch` 在周期分支缺文件时直接
+  返回空，导致「订阅只提交在 main / 别的周期分支」时解析成 0 订阅，release-only 运行被
+  `skipped`，插件侧「生成变更分析」跑不出内容。
+- `cmd/trendradar` 的 `buildReleasesOptions`（run）与 `subscribe list` 改为传入
+  `cfg.Repo.BaseBranch` 作为回退分支。release-only 仍「读但不合并/不落地 pending」，
+  `--repo` 单仓过滤与 commit/PR 流程不变；契约 wire 与对外数据形状不变。
+
 ## 0.7.0
 
 ### Changed — 发版订阅改为「每周一次 + 一仓一份文档」
@@ -41,7 +53,7 @@
 - `ReleaseDigest.degraded` 与逐条 `summarySource` 的语义对齐：现在由「仓库这一周是否降级」
   决定，`releases.degraded` 计的是降级仓库数（此前按版本条数计）。
 
-## Unreleased
+## 0.8.0
 
 ### Added — 发版单仓分析（contract 0.5.0）
 - `run --stages releases --repo <owner/repo>`：只分析指定的单个订阅仓库的 Release，

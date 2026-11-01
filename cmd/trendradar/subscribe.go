@@ -85,7 +85,7 @@ func runSubscribeOutput(args []string) (subscribeOutput, error) {
 		return subscribeReleases(cfg, positional, volumeRaw)
 	}
 
-	base, err := subscription.ReadRepoOnTargetBranch(repoPath, outputDir, file, branch)
+	base, err := subscription.ReadRepoWithFallback(repoPath, outputDir, file, branch, cfg.Repo.BaseBranch)
 	if err != nil {
 		return subscribeOutput{}, err
 	}

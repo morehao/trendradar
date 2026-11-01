@@ -87,14 +87,32 @@ func RunBranchName(branchPrefix, period, date string) string {
 }
 
 // ReadRepoOnTargetBranch reads the subscription file on the given branch of the
-// data repo, without checking it out. It reads via `git show <branch>:<path>` so
-// the caller does not have to be on that branch — subscribe runs outside a run,
-// often while the repo is on main, and reading the checked-out branch would pick
-// up a stale baseline from a previous date's branch.
-//
-// A missing branch (the date has not had its first run yet) or a missing file
-// yields an empty Store, not an error. Malformed YAML still fails fast.
+// data repo, without checking it out, falling back to an empty store if neither
+// branch nor file exists. It is a thin wrapper over ReadRepoWithFallback with no
+// fallback branch; prefer ReadRepoWithFallback in run/subscribe so a per-period
+// branch that lacks the versioned file still sees the baseline from BaseBranch.
 func ReadRepoOnTargetBranch(repoPath, outputDir, file, branch string) (*Store, error) {
+	return ReadRepoWithFallback(repoPath, outputDir, file, branch, "")
+}
+
+// ReadRepoWithFallback reads the subscription file on branch, and if branch (or
+// the file on it) does not exist, retries on fallbackBranch — typically
+// cfg.Repo.BaseBranch (main). It reads via `git show <ref>:<path>` so the caller
+// does not have to be on either branch — subscribe runs outside a run, often
+// while the repo is on main, and reading the checked-out branch would pick up a
+// stale baseline from a previous date's branch.
+//
+// Why the fallback: the versioned subscriptions.yaml is committed once but read
+// on each period's own branch (trending/weekly/2026-W44 etc.). A freshly cut or
+// reused period branch frequently does not carry the file (it lives on main or
+// on another period's branch); without a fallback that resolved to 0
+// subscriptions and a release-only run skipped with nothing to poll.
+//
+// A missing branch/file on both target and fallback yields an empty Store, not
+// an error. Malformed YAML on a hit fails fast (we do not swallow a corrupt file
+// by falling through to the baseline). An empty fallbackBranch disables the
+// fallback (single-branch behaviour, kept for callers/tests that want it).
+func ReadRepoWithFallback(repoPath, outputDir, file, branch, fallbackBranch string) (*Store, error) {
 	abs, err := RepoSubscriptionsPath(repoPath, outputDir, file)
 	if err != nil {
 		return nil, err
@@ -103,12 +121,28 @@ func ReadRepoOnTargetBranch(repoPath, outputDir, file, branch string) (*Store, e
 	if err != nil {
 		return nil, fmt.Errorf("subscription: relativize %s: %w", abs, err)
 	}
-	data, err := gitShow(repoPath, branch, filepath.ToSlash(rel))
+	relSlash := filepath.ToSlash(rel)
+
+	data, err := gitShow(repoPath, branch, relSlash)
 	if err != nil {
-		if errors.Is(err, errGitShowNotFound) {
-			return emptyStore(abs), nil
+		if !errors.Is(err, errGitShowNotFound) {
+			return nil, err
 		}
-		return nil, err
+		// Target branch/file missing: retry on the baseline branch if one is
+		// configured. Both "branch absent" and "file absent on branch" land here
+		// (gitShow maps every git failure to errGitShowNotFound), which is the
+		// intended trigger — only when the fallback is also missing do we go empty.
+		if strings.TrimSpace(fallbackBranch) != "" {
+			data, err = gitShow(repoPath, fallbackBranch, relSlash)
+			if err != nil {
+				if errors.Is(err, errGitShowNotFound) {
+					return emptyStore(abs), nil
+				}
+				return nil, err
+			}
+			return loadBytes(abs, data)
+		}
+		return emptyStore(abs), nil
 	}
 	return loadBytes(abs, data)
 }

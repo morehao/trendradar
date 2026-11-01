@@ -230,3 +230,116 @@ func TestReadRepoOnTargetBranchMalformedFails(t *testing.T) {
 		t.Fatal("expected parse error for malformed branch file")
 	}
 }
+
+// commitSubsOnBranch writes digests/subscriptions.yaml on a fresh branch cut from
+// main (so it does not touch main), then returns to main. Each call would fail if
+// the branch already exists; callers use distinct branch names.
+func commitSubsOnBranch(t *testing.T, work, branch string, repos ...string) {
+	t.Helper()
+	repoGit(t, work, "switch", "-c", branch)
+	var b strings.Builder
+	b.WriteString("schema: 1\nsubscriptions:\n")
+	for _, r := range repos {
+		b.WriteString("  - " + r + "\n")
+	}
+	if err := os.MkdirAll(filepath.Join(work, "digests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "digests", "subscriptions.yaml"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoGit(t, work, "add", "-A")
+	repoGit(t, work, "commit", "-m", "subs on "+branch)
+	repoGit(t, work, "switch", "main")
+	// Remove the working-tree file so main stays clean (the branch carries it).
+	_ = os.Remove(filepath.Join(work, "digests", "subscriptions.yaml"))
+}
+
+// Bug scenario: the period branch has no subscriptions.yaml but the baseline
+// branch (main) does — the read must fall back to the baseline, not resolve to 0.
+func TestReadRepoWithFallbackFallsBackToBase(t *testing.T) {
+	work := initRepoWithBranch(t)
+	// Cut the period branch BEFORE main gets the file, so it genuinely lacks it;
+	// otherwise the branch would inherit subscriptions.yaml and fallback is moot.
+	repoGit(t, work, "switch", "-c", "trending/weekly/2026-W44")
+	repoGit(t, work, "switch", "main")
+	// subscriptions.yaml lives on main only.
+	commitSubsMain(t, work, "a/b", "c/d")
+
+	branch := "trending/weekly/2026-W44"
+	st, err := ReadRepoWithFallback(work, "", "subscriptions.yaml", branch, "main")
+	if err != nil {
+		t.Fatalf("ReadRepoWithFallback: %v", err)
+	}
+	got := st.List()
+	if len(got) != 2 || got[0] != "a/b" || got[1] != "c/d" {
+		t.Fatalf("fallback list = %v, want [a/b c/d]", got)
+	}
+}
+
+// Neither the period branch nor the baseline has the file => empty, no error.
+func TestReadRepoWithFallbackNeitherExists(t *testing.T) {
+	work := initRepoWithBranch(t)
+	repoGit(t, work, "switch", "-c", "trending/weekly/2026-W44")
+	repoGit(t, work, "switch", "main")
+
+	st, err := ReadRepoWithFallback(work, "", "subscriptions.yaml", "trending/weekly/2026-W44", "main")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if st.Len() != 0 {
+		t.Fatalf("list = %v, want empty", st.List())
+	}
+}
+
+// The period branch has its own file => it wins; the baseline is not consulted.
+func TestReadRepoWithFallbackPrefersTargetBranch(t *testing.T) {
+	work := initRepoWithBranch(t)
+	commitSubsMain(t, work, "base/only")
+	commitSubsOnBranch(t, work, "trending/weekly/2026-W44", "on/branch")
+
+	st, err := ReadRepoWithFallback(work, "", "subscriptions.yaml", "trending/weekly/2026-W44", "main")
+	if err != nil {
+		t.Fatalf("ReadRepoWithFallback: %v", err)
+	}
+	got := st.List()
+	if len(got) != 1 || got[0] != "on/branch" {
+		t.Fatalf("list = %v, want [on/branch] (target branch must win)", got)
+	}
+}
+
+// Empty fallback branch keeps single-branch behaviour: a missing target is empty
+// even though main has a file.
+func TestReadRepoWithFallbackNoFallbackGiven(t *testing.T) {
+	work := initRepoWithBranch(t)
+	// Cut the empty period branch BEFORE main gets the file, so it truly lacks it.
+	repoGit(t, work, "switch", "-c", "trending/weekly/2026-W44")
+	repoGit(t, work, "switch", "main")
+	commitSubsMain(t, work, "a/b")
+
+	st, err := ReadRepoWithFallback(work, "", "subscriptions.yaml", "trending/weekly/2026-W44", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if st.Len() != 0 {
+		t.Fatalf("list = %v, want empty when no fallback configured", st.List())
+	}
+}
+
+// commitSubsMain writes digests/subscriptions.yaml on main and commits it.
+func commitSubsMain(t *testing.T, work string, repos ...string) {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("schema: 1\nsubscriptions:\n")
+	for _, r := range repos {
+		b.WriteString("  - " + r + "\n")
+	}
+	if err := os.MkdirAll(filepath.Join(work, "digests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "digests", "subscriptions.yaml"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoGit(t, work, "add", "-A")
+	repoGit(t, work, "commit", "-m", "subs on main")
+}
