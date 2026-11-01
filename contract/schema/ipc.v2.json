@@ -124,7 +124,8 @@
         },
         "repo": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "command=subscribe: the target repo for action=add/remove/releases. command=run: with stages including 'releases', analyze only this repository's releases (absent = every subscribed repo)."
         },
         "volume": {
           "type": "integer",
@@ -144,7 +145,7 @@
           }
         }
       },
-      "description": "Strict request envelope. command=subscribe manages the repo subscription list: action=list needs no repo; action=add/remove require exactly one repo; action=releases requires a repo and may name a volume. command=run may narrow its work with stages.",
+      "description": "Strict request envelope. command=subscribe manages the repo subscription list: action=list needs no repo; action=add/remove require exactly one repo; action=releases requires a repo and may name a volume. command=run may narrow its work with stages; when stages includes 'releases', repo optionally restricts the release analysis to a single repository.",
       "allOf": [
         {
           "if": {
@@ -250,7 +251,57 @@
             "properties": {
               "command": {
                 "enum": [
-                  "run",
+                  "run"
+                ]
+              }
+            },
+            "required": [
+              "command"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "action"
+                  ]
+                },
+                {
+                  "required": [
+                    "volume"
+                  ]
+                }
+              ]
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "repo"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "stages"
+                  ],
+                  "properties": {
+                    "stages": {
+                      "contains": {
+                        "const": "releases"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "enum": [
                   "serve",
                   "config",
                   "version"

@@ -29,6 +29,9 @@ var ErrNotSubscribed = errors.New("subscription: repo not subscribed")
 // reFullName accepts the GitHub owner/repo shape used throughout the project.
 var reFullName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
+// IsValidRepoName reports whether s has the owner/repo shape used by the subscription list.
+func IsValidRepoName(s string) bool { return reFullName.MatchString(s) }
+
 // file is the on-disk shape. The key is "subscriptions" (not the retired
 // config.repos) so the two concepts cannot be confused.
 type file struct {

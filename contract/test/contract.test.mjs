@@ -15,7 +15,7 @@ const jcsHash = (d) => {
   return 'sha256:' + crypto.createHash('sha256').update(canonicalize(basis), 'utf8').digest('hex')
 }
 
-test('contractVersion is 0.4.0', () => assert.equal(contractVersion, '0.4.0'))
+test('contractVersion is 0.5.0', () => assert.equal(contractVersion, '0.5.0'))
 
 test('error catalog has 17 retriable entries', () => {
   assert.equal(Object.keys(errorCatalog).length, 17)
@@ -82,8 +82,28 @@ test('RunRequest rejects malformed subscribe requests', () => {
 })
 
 test('non-subscribe commands must not carry subscribe fields', () => {
+  // run: repo is allowed only together with stages including 'releases' (see below);
+  // a bare run+repo with no stages is still rejected.
   assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', repo: 'o/r' }), false)
   assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', action: 'list' }), false)
+})
+
+test('RunRequest.run may restrict releases to a single repo', () => {
+  // allowed: run + stages releases + repo
+  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['releases'], repo: 'o/r' }))
+  // backward compatible: run + stages releases without repo (all repos)
+  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['releases'] }))
+  // repo requires stages to include 'releases'
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['trending'], repo: 'o/r' }), false)
+  // repo without stages is rejected (needs explicit releases stage)
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', repo: 'o/r' }), false)
+  // run must still not carry action/volume
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', action: 'list' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', volume: 1 }), false)
+  // malformed repo
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['releases'], repo: 'not-a-repo' }), false)
+  // serve/config/version still must not carry repo
+  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'serve', repo: 'o/r' }), false)
 })
 
 test('RunResult carries optional branch/commit/prUrl/contentHash', () => {

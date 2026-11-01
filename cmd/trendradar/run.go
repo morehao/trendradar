@@ -80,6 +80,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	defaultTrigger := firstNonEmpty(os.Getenv("TRENDRADAR_TRIGGER"), string(app.TriggerManual))
 	trigger := fs.String("trigger", defaultTrigger, "manual|schedule; schedule respects a human-closed PR")
 	force := fs.Bool("force", false, "ignore the persisted summary cache and regenerate")
+	repoFlag := fs.String("repo", "", "owner/repo; with --stages releases, analyze only this repository's releases")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -94,6 +95,18 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	for _, s := range stages {
 		if s != app.StageReleases {
 			releasesOnly = false
+		}
+	}
+	// --repo restricts a release-stage run to a single subscribed repository.
+	// It only makes sense for a release-only run; reject it elsewhere instead of
+	// silently ignoring the operator's intent.
+	onlyRepo := strings.TrimSpace(*repoFlag)
+	if onlyRepo != "" {
+		if !releasesOnly {
+			return ipc.NewError(ipc.CodeConfigInvalid, "--repo requires --stages releases")
+		}
+		if !subscription.IsValidRepoName(onlyRepo) {
+			return ipc.NewError(ipc.CodeConfigInvalid, "invalid --repo %q (want owner/repo)", onlyRepo)
 		}
 	}
 	tr := app.Trigger(*trigger)
@@ -169,7 +182,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	if err != nil {
 		return err
 	}
-	relOpts, err := buildReleasesOptions(cfg, in.Date, !releasesOnly)
+	relOpts, err := buildReleasesOptions(cfg, in.Date, !releasesOnly, onlyRepo)
 	if err != nil {
 		return err
 	}
@@ -410,7 +423,7 @@ func buildEnricher(cfg *config.Config, dryRun bool) (*enrich.Enricher, error) {
 // IsClean check; here we only read it to (a) know what to poll and (b) hand it
 // to app for the write/replay. Reading the *target branch* (not the current
 // checkout) avoids a stale baseline when the repo is sitting on main.
-func buildReleasesOptions(cfg *config.Config, date string, includePending bool) (*app.ReleasesOptions, error) {
+func buildReleasesOptions(cfg *config.Config, date string, includePending bool, onlyRepo string) (*app.ReleasesOptions, error) {
 	if cfg == nil || !cfg.Releases.Enabled {
 		return nil, nil
 	}
@@ -441,6 +454,17 @@ func buildReleasesOptions(cfg *config.Config, date string, includePending bool) 
 	if len(repos) == 0 {
 		fmt.Fprintf(os.Stderr, "warn: releases enabled but no subscriptions (branch %s, pending=%v)\n", branch, hasPending)
 	}
+	// Single-repo analysis: restrict the poll list to one subscribed repo and
+	// never land pending subscription changes (a manual per-repo trigger must not
+	// rewrite subscriptions.yaml or clear the queue — that belongs to the daily run).
+	if onlyRepo != "" {
+		filtered, ok := filterReposTo(repos, onlyRepo)
+		if !ok {
+			return nil, ipc.NewError(ipc.CodeConfigInvalid, "repo %q is not in the subscription list", onlyRepo)
+		}
+		repos = filtered
+		pend, hasPending = nil, false
+	}
 	statePath, cachePath := "", ""
 	if cfg.Repo.Path != "" {
 		statePath = releasewatch.StatePath(cfg.Repo.Path)
@@ -467,6 +491,18 @@ func buildReleasesOptions(cfg *config.Config, date string, includePending bool) 
 		opts.HasPending = false
 	}
 	return opts, nil
+}
+
+// filterReposTo narrows repos to a single entry equal to onlyRepo. It reports
+// false when onlyRepo is absent, so callers can surface a clear error instead of
+// silently analyzing nothing.
+func filterReposTo(repos []string, onlyRepo string) ([]string, bool) {
+	for _, r := range repos {
+		if r == onlyRepo {
+			return []string{r}, true
+		}
+	}
+	return nil, false
 }
 
 func selectProvider(cfg *config.Config) (model.Provider, error) {

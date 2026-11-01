@@ -2,7 +2,7 @@
 import Ajv from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 
-export const contractVersion = "0.4.0"
+export const contractVersion = "0.5.0"
 
 export const errorCatalog = {
   "INTERNAL": {
@@ -1103,7 +1103,8 @@ const ipc = {
         },
         "repo": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "command=subscribe: the target repo for action=add/remove/releases. command=run: with stages including 'releases', analyze only this repository's releases (absent = every subscribed repo)."
         },
         "volume": {
           "type": "integer",
@@ -1123,7 +1124,7 @@ const ipc = {
           }
         }
       },
-      "description": "Strict request envelope. command=subscribe manages the repo subscription list: action=list needs no repo; action=add/remove require exactly one repo; action=releases requires a repo and may name a volume. command=run may narrow its work with stages.",
+      "description": "Strict request envelope. command=subscribe manages the repo subscription list: action=list needs no repo; action=add/remove require exactly one repo; action=releases requires a repo and may name a volume. command=run may narrow its work with stages; when stages includes 'releases', repo optionally restricts the release analysis to a single repository.",
       "allOf": [
         {
           "if": {
@@ -1229,7 +1230,57 @@ const ipc = {
             "properties": {
               "command": {
                 "enum": [
-                  "run",
+                  "run"
+                ]
+              }
+            },
+            "required": [
+              "command"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "action"
+                  ]
+                },
+                {
+                  "required": [
+                    "volume"
+                  ]
+                }
+              ]
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "repo"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "stages"
+                  ],
+                  "properties": {
+                    "stages": {
+                      "contains": {
+                        "const": "releases"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "enum": [
                   "serve",
                   "config",
                   "version"
@@ -2339,7 +2390,7 @@ const errors = {
     }
   }
 }
-const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.4.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    contract schemas, so the plugin and any web UI consume the same shapes\n    whether data comes from the filesystem or over HTTP. Historical v1 digests\n    read from disk are normalized to the v2 shape with\n    contentHashAlgo=legacy-struct-marshal-v1.\n\n    Release endpoints are read-only. Token cost for a releases run is NOT part of\n    a stored document (it describes one run and cannot be reproduced); it is\n    reported in `releases.usage` of `trendradar run --json` and appended to\n    `<repo>/.git/trendradar-usage.jsonl` with stage=\"releases\".\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /api/v2/releases:\n    get:\n      operationId: listReleases\n      summary: List available release digests (newest first)\n      description: |\n        Returns an empty array (not 404) when no release digest exists yet.\n        Entries carry no token cost because stored documents do not record it.\n      parameters:\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: Manifest of release digests\n          content:\n            application/json:\n              schema:\n                type: array\n                items:\n                  $ref: \"./releases.v2.json#/$defs/ReleaseManifestEntry\"\n  /api/v2/releases/{date}:\n    get:\n      operationId: getReleases\n      summary: Fetch one period's release digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: The release digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json\"\n        \"404\":\n          description: No release digest for that date\n  /api/v2/subscriptions:\n    get:\n      operationId: listSubscriptions\n      summary: List the repo subscriptions the core will poll\n      description: |\n        Read-only mirror of the IPC `subscribe list` command: both return the\n        same SubscriptionList. `repos` is the legacy field; `items` adds the\n        per-repo row detail (latest tag, last summary date, check status) and is\n        optional, so an older core still satisfies this schema. Writing\n        subscriptions stays on the CLI / IPC subscribe command and is never\n        exposed over HTTP.\n      responses:\n        \"200\":\n          description: Current subscription list\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionList\"\n  /api/v2/repos/{owner}/{repo}/releases:\n    get:\n      operationId: getSubscriptionDoc\n      summary: Read one repo's release document\n      description: |\n        Read-only mirror of the IPC `subscribe releases` command. Returns the\n        exact markdown file content (plus the volume index) so a client renders\n        what the data repo stores instead of re-summarizing it. `volume`\n        defaults to the newest volume. Only repos matching\n        ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ are served: the path is resolved\n        inside the releases document root and never escapes it.\n      parameters:\n        - name: owner\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: repo\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: volume\n          in: query\n          required: false\n          schema:\n            type: integer\n            minimum: 1\n      responses:\n        \"200\":\n          description: The repo's release document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionDoc\"\n        \"400\":\n          description: Malformed owner/repo or non-positive volume\n        \"404\":\n          description: The repo has no release document, or that volume is absent\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
+const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.5.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    contract schemas, so the plugin and any web UI consume the same shapes\n    whether data comes from the filesystem or over HTTP. Historical v1 digests\n    read from disk are normalized to the v2 shape with\n    contentHashAlgo=legacy-struct-marshal-v1.\n\n    Release endpoints are read-only. Token cost for a releases run is NOT part of\n    a stored document (it describes one run and cannot be reproduced); it is\n    reported in `releases.usage` of `trendradar run --json` and appended to\n    `<repo>/.git/trendradar-usage.jsonl` with stage=\"releases\".\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /api/v2/releases:\n    get:\n      operationId: listReleases\n      summary: List available release digests (newest first)\n      description: |\n        Returns an empty array (not 404) when no release digest exists yet.\n        Entries carry no token cost because stored documents do not record it.\n      parameters:\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: Manifest of release digests\n          content:\n            application/json:\n              schema:\n                type: array\n                items:\n                  $ref: \"./releases.v2.json#/$defs/ReleaseManifestEntry\"\n  /api/v2/releases/{date}:\n    get:\n      operationId: getReleases\n      summary: Fetch one period's release digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: The release digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json\"\n        \"404\":\n          description: No release digest for that date\n  /api/v2/subscriptions:\n    get:\n      operationId: listSubscriptions\n      summary: List the repo subscriptions the core will poll\n      description: |\n        Read-only mirror of the IPC `subscribe list` command: both return the\n        same SubscriptionList. `repos` is the legacy field; `items` adds the\n        per-repo row detail (latest tag, last summary date, check status) and is\n        optional, so an older core still satisfies this schema. Writing\n        subscriptions stays on the CLI / IPC subscribe command and is never\n        exposed over HTTP.\n      responses:\n        \"200\":\n          description: Current subscription list\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionList\"\n  /api/v2/repos/{owner}/{repo}/releases:\n    get:\n      operationId: getSubscriptionDoc\n      summary: Read one repo's release document\n      description: |\n        Read-only mirror of the IPC `subscribe releases` command. Returns the\n        exact markdown file content (plus the volume index) so a client renders\n        what the data repo stores instead of re-summarizing it. `volume`\n        defaults to the newest volume. Only repos matching\n        ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ are served: the path is resolved\n        inside the releases document root and never escapes it.\n      parameters:\n        - name: owner\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: repo\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: volume\n          in: query\n          required: false\n          schema:\n            type: integer\n            minimum: 1\n      responses:\n        \"200\":\n          description: The repo's release document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionDoc\"\n        \"400\":\n          description: Malformed owner/repo or non-positive volume\n        \"404\":\n          description: The repo has no release document, or that volume is absent\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
 
 export const rawSchema = { model, ipc, digest, releases, errors, versionInfo, api }
 
