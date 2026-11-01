@@ -356,13 +356,14 @@ HTTP 面仍只读、`no-store`、不返回密钥；`serve` 默认绑 `127.0.0.1`
 
 | 项 | 方案写法 | 实际实现 | 为什么 |
 |---|---|---|---|
-| 周文档路径 | `releases/<周末日期>.md` | 沿用既有 `releases/<period>/<bucket>/<ISO周>.md`（如 `releases/weekly/2026/2026-W44.md`） | `GET /api/v2/releases/{date}` 的 date→文件名映射由 `render.NameOf` 决定，改命名会让历史文档失联（A9）。日期语义没变：`date` 仍是周末（period end），路由照旧可用 |
+| 周文档路径 | `releases/<周末日期>.md` | 沿用既有「周期目录/桶/ISO周」结构，周期目录改成 `releases/_weekly/<年>/<ISO周>.md` | `GET /api/v2/releases/{date}` 的 date→文件名映射由 `render.NameOf` 决定，改命名会让历史文档失联（A9）；只把周期目录加下划线前缀，既避开与 owner 同名目录的冲突，读取又同时兼容旧的 `releases/weekly/`。日期语义没变：`date` 仍是周末（period end），路由照旧可用 |
 | 发版运行分支 | 复用当日分支/PR，没有则 `releases/<date>` | 沿用 `subscription.RunBranchName(prefix, releases.period, date)` → `trending/weekly/<ISO周>` | 分支名必须与 `subscribe` / `serve` 读取订阅文件的分支**同源**（AGENTS §10 单一来源）。用 `releases/` 前缀会让 `subscribe list` 读到另一个分支，订阅状态与文档分叉。同一 ISO 周内重跑自然复用同一分支与 PR |
 | 失败与周闸门 | 失败也记「本周已检查」 | 只有成功（含 `no_change` / `baseline`）才写 `weekKey`；失败只写 `status`/`lastCheckedAt` | 失败没有推进游标，同周内显式重试是安全的、也更符合「失败可重试」。跨周不丢数据由「游标没动 → 下周一起总结」保证 |
 
 补充：
 
 - 卷名统一为 `<repo>-NN.md`（第 1 册也是 `-01`）：用户确认「release 相关的按仓库命名」，且每册都带序号比「首册裸名 + 续册带号」更一致。`SubscriptionVolume.file` 与抽屉里的路径说明随之统一。
+- 周汇总目录改成 `releases/_weekly/`（原 `releases/weekly/`）：`releases/` 顶层同时放「每仓目录」和「聚合周期目录」，owner 恰好叫 `weekly` 时两者会挤进同一个目录。加下划线前缀后新写入不再冲突；读取仍先看 `_weekly/` 再看旧的 `weekly/`，所以升级不会让历史周文档从 `GET /api/v2/releases*` 里消失，索引与清单按周去重。
 - 每仓文档的周章节里列出的版本数由 `releases.perRepoLimit` 决定（默认 10），**抓取与总结不受该值限制**；超出部分写「其余 N 个」。
 - 插件侧对 `@morehao/trendradar-contract` 的依赖在 0.4.0 发布前先用本地类型声明（`src/ipc.ts`，带注释），发布后再切回包导入——契约包发布需要用户确认，不在本期内自动执行。
 - HTTP 面新增 `GET /api/v2/repos/{owner}/{repo}/releases?volume=N`，与 IPC `subscribe releases` 共用 `releasedoc.Read`，A10 的「逐字段一致」由同一个函数保证。
@@ -388,7 +389,7 @@ HTTP 面仍只读、`no-store`、不返回密钥；`serve` 默认绑 `127.0.0.1`
 | A6 卷切分边界 | 机械覆盖 | `TestPlanRollsVolumeOnlyAfterExceedingBudget`（599 行 → 不拆；下一次 → `-02.md`） |
 | A7 单一来源 | 机械覆盖 | `subscribe releases` 与 HTTP 都走 `releasedoc.Read`；`TestSubscriptionDocMatchesReadPath` 逐字段相等 |
 | A8 异常可见 | 机械覆盖（状态）+ 走查 | `TestBuildFailureIsolated` / `TestBuildRateLimitStopsRemainingRepos` 产出 `failed` / `rate_limited`；抽屉 warn 条由 `client/subscriptions.ts` 渲染 |
-| A9 外部 API 不破 | 机械覆盖 | `TestLegacyReleaseDigestStillServed`（schema 1 旧文档仍按原字段返回） |
+| A9 外部 API 不破 | 机械覆盖 | `TestLegacyReleaseDigestStillServed`（schema 1 旧文档仍按原字段返回）、`TestLegacyWeeklyDirStillServed` / `TestWeeklyManifestDedupesAcrossDirs`（旧的 `releases/weekly/` 目录仍可读、与 `_weekly/` 同时存在时清单只列一次） |
 | A10 IPC/HTTP 同源同形 | 机械覆盖 | `TestSubscriptionDocMatchesReadPath`、`TestSubscriptionsEndpointCarriesItems`（同一 fixture 下与 IPC 读取函数逐字段一致） |
 | A11 发版定时 | 机械覆盖 | `test/schedule.test.mjs`：`isoWeekKey` / `nextReleaseOccurrence` / `isReleaseDue`（6 h 窗口）/ 每周只触发一次 / 超窗不触发 / 失败重试上限 |
 | A12 发版运行记录 | 机械覆盖 | `test/runner.test.mjs` 的 `runReleases` 用例 + `test/state.test.mjs`（≤30 条裁剪） |

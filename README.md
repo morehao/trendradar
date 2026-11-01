@@ -81,7 +81,7 @@ summarize:
 
 | 产物 | 路径 | 用途 |
 |---|---|---|
-| 周文档（外部 API 的数据面） | `<output.dir>/releases/weekly/<年>/<ISO周>.{md,json}` | `GET /api/v2/releases*` |
+| 周文档（外部 API 的数据面） | `<output.dir>/releases/_weekly/<年>/<ISO周>.{md,json}` | `GET /api/v2/releases*` |
 | 每仓文档（人读、面板渲染） | `<output.dir>/releases/<owner>/<repo>-01.md` | 最新一周在最上面；超过 `docMaxLines` 后下一次写入开 `-02.md`（每册都带序号） |
 
 订阅列表是一份**数据仓内受版本控制的文件** `<output.dir>/subscriptions.yaml`

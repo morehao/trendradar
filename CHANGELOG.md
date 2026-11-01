@@ -15,7 +15,7 @@
   首行不是 `# owner/repo`（被人工改过）时拒绝写入并告警，不覆盖用户内容。
 - 周文档（`ReleaseDigest`）保留并提供 `GET /api/v2/releases*`：`schema` 升到 2，
   `repos[]` 新增 `summaryZh` / `periodStart` / `periodEnd`；`ReleaseItem.summaryZh` 变为可选
-  （旧文档仍可读，新文档不再写逐条摘要）。文件名仍是 `releases/weekly/<年>/<ISO周>.{md,json}`，
+  （旧文档仍可读，新文档不再写逐条摘要）。文件名仍是 `<年>/<ISO周>.{md,json}`，目录改成 `releases/_weekly/`，
   保持 `GET /api/v2/releases/{date}` 的既有语义。
 - `releases.period` 语义改为「总结周期」，本版只接受 `weekly`（其他值 `CONFIG_INVALID`）；
   新增 `releases.timezone`、`releases.weekStart`、`releases.docMaxLines`、`releases.summaryMaxChars`。

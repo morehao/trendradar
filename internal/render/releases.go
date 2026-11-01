@@ -32,19 +32,43 @@ func releasePeriod(period string) string {
 	}
 }
 
+// ReleaseDir returns the on-disk directory for one period's digests. Weekly
+// digests live under a leading underscore so the directory cannot collide with a
+// subscribed owner named "weekly": releases/ holds one directory per owner plus
+// the aggregated periods, and an owner called "weekly" would otherwise share a
+// directory with the week rollups.
+func ReleaseDir(period string) string {
+	if releasePeriod(period) == PeriodWeekly {
+		return "_" + PeriodWeekly
+	}
+	return releasePeriod(period)
+}
+
+// ReleaseDirs returns the directories a reader must scan for one period, newest
+// convention first. Weekly digests written by 0.6.x live in "weekly"; keeping it
+// in the read path means upgrading does not hide already-committed history.
+func ReleaseDirs(period string) []string {
+	p := releasePeriod(period)
+	dir := ReleaseDir(p)
+	if dir == p {
+		return []string{p}
+	}
+	return []string{dir, p}
+}
+
 // ReleaseRoot returns the repository-relative releases root inside outDir.
 func ReleaseRoot(outDir, subdir string) string {
 	return path.Join(OutputRoot(outDir), releasesSubdir(subdir))
 }
 
 // BuildReleases renders one release digest plus the releases index. Artifacts
-// live at <outDir>/<subdir>/<period>/<bucket>/<name>.{md,json}; index at
-// <outDir>/<subdir>/index.md. Paths are repository-relative so the same
+// live at <outDir>/<subdir>/<ReleaseDir(period)>/<bucket>/<name>.{md,json}; index
+// at <outDir>/<subdir>/index.md. Paths are repository-relative so the same
 // g.AddAll(ctx, outDir) that stages trending also stages these.
 func BuildReleases(d releasedigest.ReleaseDigest, history []releasedigest.ReleaseDigest, limits map[string]int, outDir, subdir string) ([]File, error) {
 	root := ReleaseRoot(outDir, subdir)
 	period := releasePeriod(d.Period)
-	dir := path.Join(root, period, BucketOf(period, d.Date))
+	dir := path.Join(root, ReleaseDir(period), BucketOf(period, d.Date))
 	name := NameOf(period, d.Date)
 	js, err := json.MarshalIndent(d, "", "  ")
 	if err != nil {
@@ -140,7 +164,7 @@ func ReleaseIndex(digests []releasedigest.ReleaseDigest, limits map[string]int, 
 		b.WriteString("| 日期 | 数量 | 降级 | 摘要 |\n|---|---|---|---|\n")
 		for _, d := range ds {
 			name := NameOf(period, d.Date)
-			link := path.Join(root, period, BucketOf(period, d.Date), name+".md")
+			link := path.Join(root, ReleaseDir(period), BucketOf(period, d.Date), name+".md")
 			fmt.Fprintf(&b, "| %s | %d | %t | [%s](%s) |\n", d.Date, d.Count, d.Degraded, name, link)
 		}
 	}
@@ -154,7 +178,7 @@ func ListReleaseDigests(root, subdir string, limits map[string]int) ([]releasedi
 	base := filepath.Join(root, filepath.FromSlash(releasesSubdir(subdir)))
 	var out []releasedigest.ReleaseDigest
 	for _, period := range []string{PeriodDaily, PeriodWeekly, PeriodMonthly} {
-		ds, err := listReleasePeriod(base, period, limits[period])
+		ds, err := listReleasePeriodDirs(base, period, limits[period])
 		if err != nil {
 			return nil, err
 		}
@@ -163,32 +187,43 @@ func ListReleaseDigests(root, subdir string, limits map[string]int) ([]releasedi
 	return out, nil
 }
 
-func listReleasePeriod(base, period string, limit int) ([]releasedigest.ReleaseDigest, error) {
-	periodDir := filepath.Join(base, period)
-	buckets, err := os.ReadDir(periodDir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+// listReleasePeriodDirs scans every directory ReleaseDirs reports for the period
+// (current convention plus the pre-0.7 weekly/ location) and keeps one document
+// per (period, date). The prefixed location wins when both exist: it is what this
+// version writes, so a half-migrated repo lists the fresh copy.
+func listReleasePeriodDirs(base, period string, limit int) ([]releasedigest.ReleaseDigest, error) {
 	re := periodFileRe(period)
 	type ref struct{ name, path string }
 	var refs []ref
-	for _, b := range buckets {
-		if !b.IsDir() {
+	seen := map[string]bool{}
+	for _, dirName := range ReleaseDirs(period) {
+		periodDir := filepath.Join(base, dirName)
+		buckets, err := os.ReadDir(periodDir)
+		if os.IsNotExist(err) {
 			continue
 		}
-		dir := filepath.Join(periodDir, b.Name())
-		files, err := os.ReadDir(dir)
 		if err != nil {
-			continue
+			return nil, err
 		}
-		for _, f := range files {
-			if f.IsDir() || !re.MatchString(f.Name()) {
+		for _, b := range buckets {
+			if !b.IsDir() {
 				continue
 			}
-			refs = append(refs, ref{name: f.Name(), path: filepath.Join(dir, f.Name())})
+			dir := filepath.Join(periodDir, b.Name())
+			files, err := os.ReadDir(dir)
+			if err != nil {
+				continue
+			}
+			for _, f := range files {
+				if f.IsDir() || !re.MatchString(f.Name()) {
+					continue
+				}
+				if seen[f.Name()] {
+					continue
+				}
+				seen[f.Name()] = true
+				refs = append(refs, ref{name: f.Name(), path: filepath.Join(dir, f.Name())})
+			}
 		}
 	}
 	sort.Slice(refs, func(i, j int) bool { return refs[i].name > refs[j].name })

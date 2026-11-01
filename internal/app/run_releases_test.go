@@ -88,8 +88,9 @@ func TestE2EReleasesStage(t *testing.T) {
 	}
 	// Weekly digests keep the ISO-week file name so the existing
 	// /api/v2/releases/{date} route (which derives the name from the date) keeps
-	// serving stored documents.
-	want := filepath.Join(work, "digests", "releases", "weekly", "2026", "2026-W44.json")
+	// serving stored documents, and they live under "_weekly" so an owner named
+	// "weekly" cannot collide with the aggregated directory.
+	want := filepath.Join(work, "digests", "releases", "_weekly", "2026", "2026-W44.json")
 	if _, err := os.Stat(want); err != nil {
 		t.Fatalf("release digest missing: %v", err)
 	}

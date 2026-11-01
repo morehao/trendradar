@@ -40,7 +40,9 @@ func stripDigestRoot(p string) string {
 	return p
 }
 
-// Release loads one period's release digest.
+// Release loads one period's release digest. Weekly digests written by 0.7.0+
+// live under "_weekly" while 0.6.x wrote "weekly", so both locations are tried
+// and the new one wins.
 func (s *Store) Release(sub, period, date string) (*contract.ReleaseDigest, error) {
 	if !dateRe.MatchString(date) {
 		return nil, ErrReleasesNotFound
@@ -51,8 +53,17 @@ func (s *Store) Release(sub, period, date string) (*contract.ReleaseDigest, erro
 	if !validPeriod(period) {
 		return nil, ErrReleasesNotFound
 	}
-	p := filepath.Join(s.releaseRoot(sub), period, render.BucketOf(period, date), render.NameOf(period, date)+".json")
-	return readReleaseFile(p)
+	for _, dir := range render.ReleaseDirs(period) {
+		p := filepath.Join(s.releaseRoot(sub), dir, render.BucketOf(period, date), render.NameOf(period, date)+".json")
+		doc, err := readReleaseFile(p)
+		if err == nil {
+			return doc, nil
+		}
+		if !errors.Is(err, ErrReleasesNotFound) {
+			return nil, err
+		}
+	}
+	return nil, ErrReleasesNotFound
 }
 
 // ReleaseManifest lists available release digests, newest first. An empty sub
@@ -68,38 +79,48 @@ func (s *Store) ReleaseManifest(sub, period string) ([]releaseManifestEntry, err
 		return []releaseManifestEntry{}, nil
 	}
 	out := []releaseManifestEntry{}
+	seen := map[string]bool{}
 	for _, p := range periods {
-		dir := filepath.Join(root, p)
-		buckets, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		for _, b := range buckets {
-			if !b.IsDir() {
+		// Same rule as Release: scan the current directory plus the pre-0.7 one.
+		for _, dirName := range render.ReleaseDirs(p) {
+			dir := filepath.Join(root, dirName)
+			buckets, err := os.ReadDir(dir)
+			if os.IsNotExist(err) {
 				continue
 			}
-			files, err := os.ReadDir(filepath.Join(dir, b.Name()))
 			if err != nil {
-				continue
+				return nil, err
 			}
-			for _, f := range files {
-				if f.IsDir() || filepath.Ext(f.Name()) != ".json" {
+			for _, b := range buckets {
+				if !b.IsDir() {
 					continue
 				}
-				d, err := readReleaseFile(filepath.Join(dir, b.Name(), f.Name()))
+				files, err := os.ReadDir(filepath.Join(dir, b.Name()))
 				if err != nil {
 					continue
 				}
-				out = append(out, releaseManifestEntry{
-					Date:        d.Date,
-					Period:      d.Period,
-					Count:       d.Count,
-					Degraded:    d.Degraded,
-					ContentHash: d.ContentHash,
-				})
+				for _, f := range files {
+					if f.IsDir() || filepath.Ext(f.Name()) != ".json" {
+						continue
+					}
+					// One entry per period+date even if both directories have a copy.
+					key := p + "\x00" + f.Name()
+					if seen[key] {
+						continue
+					}
+					d, err := readReleaseFile(filepath.Join(dir, b.Name(), f.Name()))
+					if err != nil {
+						continue
+					}
+					seen[key] = true
+					out = append(out, releaseManifestEntry{
+						Date:        d.Date,
+						Period:      d.Period,
+						Count:       d.Count,
+						Degraded:    d.Degraded,
+						ContentHash: d.ContentHash,
+					})
+				}
 			}
 		}
 	}
