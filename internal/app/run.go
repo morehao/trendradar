@@ -65,6 +65,11 @@ type Options struct {
 	// stage, which is the historical behaviour. A release-only run passes
 	// [releases]: no trending fetch, no digest render.
 	Stages []string
+	// Force ignores the persisted summary cache so the model is re-asked and the
+	// digest is regenerated. It does NOT change the append-only commit logic: if
+	// the freshly rendered artifacts are byte-identical to the branch, the run
+	// still skips with skipReason=unchanged and creates no commit.
+	Force bool
 }
 
 // stageEnabled reports whether name should run for this Options.
@@ -186,9 +191,18 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		if cfg != nil && !opts.DryRun && cfg.Repo.Path != "" {
 			cachePath = summarize.CachePath(cfg.Repo.Path)
 		}
-		summaryCache, _ := summarize.LoadCache(cachePath)
-		if summaryCache == nil {
+		// --force: start from an empty in-memory cache so every lookup misses and
+		// the model is re-asked. We still Save() below, so the new prose warms the
+		// on-disk cache for the next non-forced run. Nothing about the append-only
+		// commit decision changes — an identical re-render still skips.
+		var summaryCache *summarize.Cache
+		if opts.Force {
 			summaryCache = summarize.NewCache()
+		} else {
+			summaryCache, _ = summarize.LoadCache(cachePath)
+			if summaryCache == nil {
+				summaryCache = summarize.NewCache()
+			}
 		}
 		enrichMode := enrich.ModeNone
 		if opts.Enricher != nil {

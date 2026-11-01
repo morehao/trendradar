@@ -79,6 +79,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 	stagesFlag := fs.String("stages", "", "comma-separated stages to run: trending,digest,releases (default: all enabled)")
 	defaultTrigger := firstNonEmpty(os.Getenv("TRENDRADAR_TRIGGER"), string(app.TriggerManual))
 	trigger := fs.String("trigger", defaultTrigger, "manual|schedule; schedule respects a human-closed PR")
+	force := fs.Bool("force", false, "ignore the persisted summary cache and regenerate")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -183,6 +184,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		Enricher: enricher,
 		Releases: relOpts,
 		Stages:   stages,
+		Force:    *force,
 	})
 	if err != nil {
 		return err
