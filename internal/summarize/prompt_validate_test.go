@@ -64,6 +64,41 @@ func TestParseAndValidateRejectsLongAndRepeatsDescription(t *testing.T) {
 	}
 }
 
+// A repo whose name/description is almost entirely English brand and API names
+// still deserves a valid Chinese summary. The old "Han ratio >= 40%" gate
+// rejected these even when the summary was perfectly good Chinese, so a whole
+// batch degraded to "original" for no real reason. English-heavy must not be a
+// reason to reject, as long as the summary is actually Chinese.
+func TestParseAndValidateAcceptsLatinHeavyChineseSummary(t *testing.T) {
+	batch := []digest.RepoSnapshot{{
+		FullName:    "Mag1cFall/AIStudio2API",
+		Description: digest.StrPtr("将AI Studio Playground和Build反代成API | AI Studio to OpenAI, Anthropic & Gemini Compatible API"),
+	}}
+	// Genuine Chinese summary, but dominated by Latin brand names (Han ratio ~0.14).
+	summary := "把 AI Studio Playground 与 Build 反代为 OpenAI、Anthropic、Gemini 兼容 API 的服务。"
+	raw := fmt.Sprintf(`{"summaries":[{"fullName":"Mag1cFall/AIStudio2API","summaryZh":%q}]}`, summary)
+	got, invalid, err := parseAndValidate(raw, batch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(invalid) != 0 {
+		t.Fatalf("latin-heavy Chinese summary should be valid, got invalid=%v", invalid)
+	}
+	if got["Mag1cFall/AIStudio2API"] != summary {
+		t.Fatalf("summary = %q, want %q", got["Mag1cFall/AIStudio2API"], summary)
+	}
+}
+
+// Pure-English output (model echoed the description instead of translating)
+// must still be rejected: it contains no Han characters.
+func TestParseAndValidateRejectsPureEnglishSummary(t *testing.T) {
+	batch := []digest.RepoSnapshot{{FullName: "acme/cache", Description: digest.StrPtr("A fast cache for services")}}
+	raw := `{"summaries":[{"fullName":"acme/cache","summaryZh":"A cache library for high concurrency services"}]}`
+	if _, invalid, err := parseAndValidate(raw, batch); err != nil || len(invalid) != 1 {
+		t.Fatalf("pure-English summary should be invalid: err=%v invalid=%v", err, invalid)
+	}
+}
+
 type repairProvider struct {
 	mu    sync.Mutex
 	calls int

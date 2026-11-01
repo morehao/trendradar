@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/morehao/trendradar/internal/digest"
@@ -18,6 +19,18 @@ import (
 	"github.com/morehao/trendradar/internal/envfile"
 	"github.com/morehao/trendradar/internal/model"
 )
+
+// countHan counts Han characters; used only by the eval harness's ChineseOK
+// quality metric (not by production validation).
+func countHan(s string) int {
+	n := 0
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) {
+			n++
+		}
+	}
+	return n
+}
 
 // TestEvalSummaries is a manual, live-model evaluation harness. It is excluded
 // from normal CI by the `eval` build tag. Put keys in a git-ignored .env and run:

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.3
+
+### Fixed — 英文占比高的仓库被误判为摘要无效、降级为原文
+- `internal/summarize/validate.go` 的 `validSummary` 去掉了「汉字占比 ≥ 40%」这一门槛，
+  改为「摘要至少含一个汉字且不等于原文描述」。原门槛本意是拦截「模型把英文原文照抄回来、
+  没有真正写中文摘要」，但它会误杀一类完全合法的摘要：仓库名/描述本身几乎全是英文专有名词
+  （如 `AI Studio Playground` / `Build` / `OpenAI` / `Anthropic` / `Gemini` / `API`）时，
+  即便模型写出通顺的简体中文摘要，汉字占比也只有 0.14~0.24，远低于 0.4，于是被判无效、
+  重试也救不回，整条被降级为 `[原文]`（`summarySource=original`），并触发误导性的
+  「模型不可用或返回了无效结果」告警。英文占比高本身不是问题，只要摘要是中文（含汉字）
+  且不是照抄描述就应接受。
+- 纯英文输出（模型照抄描述、未翻译，零汉字）仍会被拒绝，原拦截意图不变。
+- 新增回归测试 `TestParseAndValidateAcceptsLatinHeavyChineseSummary` 与
+  `TestParseAndValidateRejectsPureEnglishSummary`。契约 wire 与对外数据形状不变。
+
 ## 0.8.2
 
 ### Fixed — 握手 contractVersion 与契约包版本不一致

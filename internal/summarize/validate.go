@@ -103,20 +103,30 @@ func validSummary(s, desc string) bool {
 	if total > maxSummaryRunes {
 		return false
 	}
-	if total == 0 || float64(countHan(s))/float64(total) < 0.4 {
+	// 只要求「是中文」——即至少含一个汉字——而不是要求汉字占比达到某个比例。
+	// 早先用「汉字占比 ≥ 40%」当门槛，本意是拦截「模型把英文原文照抄回来，
+	// 没有真正写中文摘要」。但这个比例门槛会误杀一类完全合法的摘要：仓库名/描述
+	// 本身几乎全是英文专有名词（如 AI Studio Playground / OpenAI / Gemini / API），
+	// 即便模型写出通顺的简体中文摘要，汉字占比也远低于 40%，于是被判定为无效、
+	// 重试也救不回，最终降级为 [原文]。英文占比高本身不是问题——只要摘要确实是
+	// 中文（含汉字）且不是照抄原文描述，就应接受。
+	if !hasHan(s) {
 		return false
 	}
 	return strings.TrimSpace(s) != strings.TrimSpace(desc)
 }
 
-func countHan(s string) int {
-	n := 0
+// hasHan reports whether s contains at least one Han character. It is the
+// "is this actually written in Chinese" gate: pure-English (or pure-symbol)
+// output from the model is rejected, while a genuinely Chinese summary of a
+// Latin-heavy repository is accepted regardless of the Han ratio.
+func hasHan(s string) bool {
 	for _, r := range s {
 		if unicode.Is(unicode.Han, r) {
-			n++
+			return true
 		}
 	}
-	return n
+	return false
 }
 
 // stripFence removes a surrounding ```json ... ``` code fence if present.
