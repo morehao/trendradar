@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.4
+
+### Fixed — 趋势抓取失败导致整批退化、每语言仅零星几条且「今日新增」全为 0
+- `internal/fetch/trending.go`：`FetchTrending` 改为逐语言部分容错。原用 errgroup
+  任一语言失败即整批作废并回退搜索 API；现返回 `TrendingResult{Pages, FailedLangs}`，
+  只要有一个语言成功就用成功部分继续，全部失败才回退。一次网络抖动不再拖垮整批。
+- `internal/fetch/client.go`：默认重试次数 2 → 4（ghttp 已内置指数退避），HTML 路径改用
+  浏览器 UA，降低被判定为爬虫的概率。
+- `internal/fetch/search.go`：搜索兜底由「近 7 天新建 + 总 star」一锅烩改为**按语言**
+  分别查询（`language:<l> pushed:>昨日 sort=stars`），保留每语言维度，内部上限常量 30。
+- `internal/ingest/ingest.go`：新增 `DegradedReason`（`html_partial` / `search_fallback`）
+  与 `DegradedLangs`；部分语言失败时仍用成功数据继续，不再整体回退。
+- `internal/render/markdown.go` · `internal/render/files.go` · `internal/app/run.go`：
+  依据降级原因在 `warnings` 与 digest markdown 顶部注入可读降级横幅（搜索兜底无今日增量 /
+  部分语言抓取失败），降级继续出榜但明确标注，杜绝静默出残榜。
+- `internal/config/config.go`：移除 `trending.perLanguage`。HTML 正常路径本来就有多少收多少，
+  该字段仅曾用于搜索兜底的 `per_page`；同步 `config.example.yaml`。
+
+### Changed（破坏性配置）
+- 核心 YAML 不再接受 `trending.perLanguage`（`yaml.Unmarshal` 会静默忽略旧字段，向后兼容）。
+  榜单不再设每语言条数上限。契约 wire（ipcSchema/digestSchema=2）与对外数据形状不变。
+
 ## 0.8.3
 
 ### Fixed — 英文占比高的仓库被误判为摘要无效、降级为原文
