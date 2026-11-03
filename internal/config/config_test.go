@@ -43,8 +43,8 @@ func TestLoadValid(t *testing.T) {
 	if c.Repo.Remote != "origin" || c.Repo.BaseBranch != "main" {
 		t.Fatalf("defaults not applied: %+v", c.Repo)
 	}
-	if c.Trending.PerLanguage != 20 {
-		t.Fatalf("PerLanguage default = %d, want 20", c.Trending.PerLanguage)
+	if c.Trending.Since == "" {
+		t.Fatalf("Since default not applied: %+v", c.Trending)
 	}
 }
 

@@ -161,11 +161,12 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			return fmt.Errorf("--config is required when --input is not given")
 		}
 		client := fetch.NewClient(fetch.Options{})
-		res, err := ingest.Ingest(context.Background(), client, cfg.Trending.Languages, cfg.Trending.Since, cfg.Trending.PerLanguage)
+		res, err := ingest.Ingest(context.Background(), client, cfg.Trending.Languages, cfg.Trending.Since)
 		if err != nil {
 			return err
 		}
 		in.Repos, in.Degraded = res.Repos, res.Degraded
+		in.DegradedReason, in.DegradedLangs = res.DegradedReason, res.DegradedLangs
 	}
 	if len(in.Repos) == 0 && !releasesOnly {
 		return fmt.Errorf("no repository snapshots to process")

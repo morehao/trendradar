@@ -21,7 +21,6 @@ pr:
 trending:
   languages: [all, go, python, rust, typescript]
   since: daily
-  perLanguage: 20
 
 output:
   dir: digests

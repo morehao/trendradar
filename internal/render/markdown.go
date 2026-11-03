@@ -11,8 +11,23 @@ import (
 )
 
 // Markdown renders a digest as a markdown document with YAML frontmatter and a
-// table per language.
+// table per language. It keeps the legacy summary-degraded banner behavior by
+// deriving a default banner from d.Degraded.
 func Markdown(d digest.Digest) []byte {
+	var banners []string
+	if d.Degraded {
+		banners = append(banners, defaultDegradedBanner)
+	}
+	return MarkdownWithBanners(d, banners)
+}
+
+const defaultDegradedBanner = "> ⚠️ 本次摘要有降级：模型不可用或返回了无效结果，部分条目为英文原文（summarySource=original）。\n"
+
+// MarkdownWithBanners renders the digest and injects each banner line as a
+// blockquote right after the title. Banners let callers explain non-summary
+// degradation (e.g. search-API fallback has no per-period deltas) so a degraded
+// digest is never silently shown as if it were clean.
+func MarkdownWithBanners(d digest.Digest, banners []string) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "date: %s\n", d.Date)
@@ -29,8 +44,12 @@ func Markdown(d digest.Digest) []byte {
 	fmt.Fprintf(&b, "generatedAt: %s\n", gen)
 	b.WriteString("---\n\n")
 	fmt.Fprintf(&b, "# %s 趋势摘要\n\n", d.Date)
-	if d.Degraded {
-		b.WriteString("> ⚠️ 本次摘要有降级：模型不可用或返回了无效结果，部分条目为英文原文（summarySource=original）。\n\n")
+	for _, banner := range banners {
+		if banner == "" {
+			continue
+		}
+		b.WriteString(banner)
+		b.WriteString("\n")
 	}
 
 	groups := groupByLanguage(d.Repos)

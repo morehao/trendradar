@@ -37,8 +37,14 @@ func JSON(d digest.Digest) ([]byte, error) {
 // under one directory and stages another. Empty means "digests". Every returned
 // path is relative to the repository root.
 func Build(d digest.Digest, indexDigests []digest.Digest, limits map[string]int, outDir string) ([]File, error) {
+	return BuildWithBanners(d, indexDigests, limits, outDir, nil)
+}
+
+// BuildWithBanners is Build with caller-provided degradation banners injected
+// into the digest markdown (see MarkdownWithBanners).
+func BuildWithBanners(d digest.Digest, indexDigests []digest.Digest, limits map[string]int, outDir string, banners []string) ([]File, error) {
 	root := OutputRoot(outDir)
-	md := Markdown(d)
+	md := MarkdownWithBanners(d, banners)
 	js, err := JSON(d)
 	if err != nil {
 		return nil, err

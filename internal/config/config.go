@@ -209,9 +209,8 @@ type PRConfig struct {
 
 // TrendingConfig controls what to fetch.
 type TrendingConfig struct {
-	Languages   []string `yaml:"languages" validate:"required,min=1,dive,required"`
-	Since       string   `yaml:"since" validate:"required,oneof=daily weekly monthly"`
-	PerLanguage int      `yaml:"perLanguage" validate:"omitempty,gt=0"`
+	Languages []string `yaml:"languages" validate:"required,min=1,dive,required"`
+	Since     string   `yaml:"since" validate:"required,oneof=daily weekly monthly"`
 }
 
 // OutputConfig controls where rendered digests go.
@@ -287,9 +286,6 @@ func (c *Config) withDefaults() {
 	}
 	if c.Trending.Since == "" {
 		c.Trending.Since = "daily"
-	}
-	if c.Trending.PerLanguage == 0 {
-		c.Trending.PerLanguage = 20
 	}
 	if c.Output.BranchPrefix == "" {
 		c.Output.BranchPrefix = "trending/"

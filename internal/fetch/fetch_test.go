@@ -63,9 +63,9 @@ func TestFetchFailedAfterRetries(t *testing.T) {
 }
 
 func TestSearchFallbackMaps(t *testing.T) {
-	var gotQuery string
+	var gotQueries []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.Query().Get("q")
+		gotQueries = append(gotQueries, r.URL.Query().Get("q"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"items":[
 			{"full_name":"acme/one","html_url":"https://github.com/acme/one","description":"first","language":"Go","stargazers_count":1200,"forks_count":30},
@@ -76,12 +76,12 @@ func TestSearchFallbackMaps(t *testing.T) {
 
 	c := NewClient(Options{BaseURL: srv.URL, APIBaseURL: srv.URL})
 	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
-	repos, err := c.SearchFallbackAt(context.Background(), now, "daily", 2)
+	repos, err := c.SearchFallbackAt(context.Background(), now, []string{"go"}, "daily")
 	if err != nil {
 		t.Fatalf("SearchFallbackAt: %v", err)
 	}
-	if gotQuery != "created:>2026-10-23" {
-		t.Fatalf("query = %q, want created:>2026-10-23", gotQuery)
+	if len(gotQueries) != 1 || gotQueries[0] != "pushed:>2026-10-29 language:go" {
+		t.Fatalf("queries = %q, want [pushed:>2026-10-29 language:go]", gotQueries)
 	}
 	if len(repos) != 2 {
 		t.Fatalf("len = %d, want 2", len(repos))
@@ -94,5 +94,33 @@ func TestSearchFallbackMaps(t *testing.T) {
 	}
 	if repos[1].Language != "unknown" {
 		t.Fatalf("null language => %q, want unknown", repos[1].Language)
+	}
+}
+
+// TestFetchTrendingToleratesPartialFailure verifies one failed language does not
+// discard the successfully fetched pages.
+func TestFetchTrendingToleratesPartialFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/trending/python" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`<html><article class="Box-row"></article></html>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{BaseURL: srv.URL, APIBaseURL: srv.URL, RetryInterval: 5 * time.Millisecond, MaxRetry: 1})
+	res, err := c.FetchTrending(context.Background(), []string{"go", "python"}, "daily")
+	if err != nil {
+		t.Fatalf("FetchTrending: %v", err)
+	}
+	if !res.Any() || len(res.Pages) != 1 {
+		t.Fatalf("pages = %d, want 1", len(res.Pages))
+	}
+	if _, ok := res.Pages["go"]; !ok {
+		t.Fatal("expected go page present")
+	}
+	if len(res.FailedLangs) != 1 || res.FailedLangs[0] != "python" {
+		t.Fatalf("FailedLangs = %v, want [python]", res.FailedLangs)
 	}
 }

@@ -19,6 +19,17 @@ const (
 	maxBodyBytes   = 2 << 20 // 2 MiB
 	defaultHTMLURL = "https://github.com"
 	defaultAPIURL  = "https://api.github.com"
+
+	// defaultUserAgent mimics a mainstream browser. GitHub's trending HTML page
+	// serves the same rows to any UA in practice, but a browser-like UA reduces
+	// the chance of being treated as a bot on the HTML path (the API path is
+	// authenticated separately and does not depend on this).
+	defaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+	// defaultMaxRetry is total attempts including the first. ghttp already does
+	// exponential backoff (+ jitter-free) on network errors and RetryOnStatus,
+	// so a few more attempts meaningfully cut transient-failure fallout.
+	defaultMaxRetry = 4
 )
 
 // Error carries a stable IPC code so callers can branch on failure type.
@@ -67,13 +78,13 @@ func NewClient(opts Options) *Client {
 		opts.APIBaseURL = defaultAPIURL
 	}
 	if opts.UserAgent == "" {
-		opts.UserAgent = "trendradar/" + ipc.Version
+		opts.UserAgent = defaultUserAgent
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = 10 * time.Second
 	}
 	if opts.MaxRetry == 0 {
-		opts.MaxRetry = 2
+		opts.MaxRetry = defaultMaxRetry
 	}
 	if opts.RetryInterval == 0 {
 		opts.RetryInterval = time.Second

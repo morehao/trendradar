@@ -17,6 +17,7 @@ import (
 	"github.com/morehao/trendradar/internal/digest"
 	"github.com/morehao/trendradar/internal/enrich"
 	"github.com/morehao/trendradar/internal/gitx"
+	"github.com/morehao/trendradar/internal/ingest"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
 	"github.com/morehao/trendradar/internal/pr"
@@ -30,10 +31,12 @@ import (
 
 // Inputs are the snapshots for a run (already fetched/parsed).
 type Inputs struct {
-	Repos    []digest.RepoSnapshot
-	Degraded bool
-	Date     string
-	Period   string
+	Repos          []digest.RepoSnapshot
+	Degraded       bool
+	DegradedReason string
+	DegradedLangs  []string
+	Date           string
+	Period         string
 }
 
 // Trigger says who asked for the run. It only changes the PR lifecycle policy:
@@ -290,9 +293,26 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		summaryDegraded := degradedCount > 0
 		rep.SummaryDegraded = summaryDegraded
 		rep.Stages = append(rep.Stages, Stage{Name: "summarize", DurationMs: since(sumStart), Degraded: summaryDegraded})
+
+		// Assemble degradation banners/warnings. These explain *why* the digest is
+		// degraded so it is never shown as if it were a clean trending result.
+		var banners []string
 		if summaryDegraded {
+			banners = append(banners, "> ⚠️ 本次摘要有降级：模型不可用或返回了无效结果，部分条目为英文原文（summarySource=original）。\n")
 			rep.Warnings = append(rep.Warnings, fmt.Sprintf(
 				"%d/%d 仓库摘要降级为英文原文（模型不可用或返回无效结果）", degradedCount, len(repoDigests)))
+		}
+		switch in.DegradedReason {
+		case ingest.ReasonSearchFallback:
+			banners = append(banners, "> ⚠️ 本次为降级数据：趋势页抓取失败，已回退到 GitHub 搜索 API。搜索结果无「今日新增」增量（starsInPeriod 一律为 0），排序按总 star，仅供参考。\n")
+			rep.Warnings = append(rep.Warnings, "趋势页抓取失败，已回退到 GitHub 搜索 API：无今日新增增量（全部为 0），排序按总 star")
+		case ingest.ReasonHTMLPartial:
+			langs := "未知"
+			if len(in.DegradedLangs) > 0 {
+				langs = strings.Join(in.DegradedLangs, ", ")
+			}
+			banners = append(banners, fmt.Sprintf("> ⚠️ 本次为部分降级数据：以下语言抓取失败，未包含在本次榜单中：%s。其余语言为正常趋势数据。\n", langs))
+			rep.Warnings = append(rep.Warnings, fmt.Sprintf("以下语言抓取失败，已跳过：%s", langs))
 		}
 
 		coreV := ipc.Version
@@ -317,7 +337,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		history, _ := render.ListDigests(historyRoot, limits)
 		merged := mergeDigests(history, d)
 
-		built, berr := render.Build(d, merged, limits, outDir)
+		built, berr := render.BuildWithBanners(d, merged, limits, outDir, banners)
 		if berr != nil {
 			return res, berr
 		}
