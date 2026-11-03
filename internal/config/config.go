@@ -25,7 +25,31 @@ type Config struct {
 	Schedule  ScheduleConfig  `yaml:"schedule"`
 	Summarize SummarizeConfig `yaml:"summarize"`
 	Releases  ReleasesConfig  `yaml:"releases"`
+	Observe   ObserveConfig   `yaml:"observe"`
 }
+
+// ObserveConfig controls the local star observation store: a per-day snapshot
+// log used to compute real star deltas ("stars today") independently of the
+// trending page. It is on by default; setting enabled=false restores the exact
+// pre-observation behaviour where starsInPeriod comes only from the page/search
+// text. The store lives under $DSH_HOME (plan D4) — never inside the user's
+// digest repo.
+type ObserveConfig struct {
+	// Enabled is a pointer so an absent key defaults to true (the store is on by
+	// default) while an explicit `enabled: false` is still honoured — a plain bool
+	// cannot tell "unset" from "false". Use IsEnabled() to read it.
+	Enabled *bool `yaml:"enabled"`
+	// StoreDir overrides the default $DSH_HOME/github-trending/observation.
+	StoreDir string `yaml:"storeDir"`
+	// BackfillDays bounds how far back a first-seen repo is seeded from the
+	// stargazers history endpoint. 0 disables backfill (accumulate from today).
+	BackfillDays  int `yaml:"backfillDays" validate:"omitempty,gte=0,lte=365"`
+	MaxCandidates int `yaml:"maxCandidates" validate:"omitempty,gte=1,lte=1000"`
+}
+
+// IsEnabled reports whether the observation store is active. An unset flag means
+// enabled (opt-in default); only an explicit false turns it off.
+func (o ObserveConfig) IsEnabled() bool { return o.Enabled == nil || *o.Enabled }
 
 // ReleasesConfig controls the optional repo-release subscription stage. The
 // subscription list itself lives in a separate subscriptions.yaml managed by
@@ -272,6 +296,7 @@ func (c *Config) expandEnv() {
 	c.Output.BranchPrefix = os.ExpandEnv(c.Output.BranchPrefix)
 	c.Releases.SubscriptionsFile = os.ExpandEnv(c.Releases.SubscriptionsFile)
 	c.Releases.OutputDir = os.ExpandEnv(c.Releases.OutputDir)
+	c.Observe.StoreDir = os.ExpandEnv(c.Observe.StoreDir)
 }
 
 func (c *Config) withDefaults() {
@@ -361,5 +386,13 @@ func (c *Config) withDefaults() {
 	}
 	if c.Releases.SummaryMaxChars == 0 {
 		c.Releases.SummaryMaxChars = 1200
+	}
+	// Observation store defaults (plan D2): 300 candidates ≈ 3 GraphQL batches/day;
+	// 30-day backfill covers the d30 window so a first-seen repo can report d30.
+	if c.Observe.BackfillDays == 0 {
+		c.Observe.BackfillDays = 30
+	}
+	if c.Observe.MaxCandidates == 0 {
+		c.Observe.MaxCandidates = 300
 	}
 }

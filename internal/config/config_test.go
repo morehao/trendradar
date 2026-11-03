@@ -89,3 +89,47 @@ func TestValidateRejectsBadSince(t *testing.T) {
 		t.Fatalf("expected ErrInvalid for since=hourly, got %v", err)
 	}
 }
+
+// TestObserveDefaults: the observation store is on by default with the plan's
+// default backfill window and candidate cap; an explicit false disables it.
+func TestObserveDefaults(t *testing.T) {
+	c, err := Load(writeTemp(t, validYAML))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !c.Observe.IsEnabled() {
+		t.Fatal("observe should default to enabled")
+	}
+	if c.Observe.BackfillDays != 30 {
+		t.Fatalf("backfillDays = %d, want 30", c.Observe.BackfillDays)
+	}
+	if c.Observe.MaxCandidates != 300 {
+		t.Fatalf("maxCandidates = %d, want 300", c.Observe.MaxCandidates)
+	}
+}
+
+// TestObserveExplicitDisable: enabled:false is honoured (pointer distinguishes
+// unset from false).
+func TestObserveExplicitDisable(t *testing.T) {
+	body := validYAML + "observe:\n  enabled: false\n"
+	c, err := Load(writeTemp(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Observe.IsEnabled() {
+		t.Fatal("observe enabled:false should disable the store")
+	}
+}
+
+// TestObserveStoreDirExpandsEnv: ${VAR} in storeDir is expanded like other paths.
+func TestObserveStoreDirExpandsEnv(t *testing.T) {
+	t.Setenv("OBSERVE_TEST_DIR", "/custom/obs")
+	body := validYAML + "observe:\n  storeDir: ${OBSERVE_TEST_DIR}\n"
+	c, err := Load(writeTemp(t, body))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Observe.StoreDir != "/custom/obs" {
+		t.Fatalf("storeDir = %q, want /custom/obs (env expanded)", c.Observe.StoreDir)
+	}
+}

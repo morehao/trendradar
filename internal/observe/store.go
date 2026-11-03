@@ -93,6 +93,24 @@ func Open(dir string) (*Store, error) {
 // Dir returns the store root directory.
 func (s *Store) Dir() string { return s.dir }
 
+// DefaultStoreDir resolves the default observation store directory under
+// $DSH_HOME (plan D4: the store lives in DSH's home, never in the user's digest
+// repo). Resolution order for the home: $DSH_HOME, then $HOME/.dsh. The trailing
+// path is github-trending/observation, matching the plugin's home layout.
+func DefaultStoreDir() string {
+	home := os.Getenv("DSH_HOME")
+	if strings.TrimSpace(home) == "" {
+		if userHome, err := os.UserHomeDir(); err == nil && userHome != "" {
+			home = filepath.Join(userHome, ".dsh")
+		}
+	}
+	if strings.TrimSpace(home) == "" {
+		// Last resort: a relative dir, so a run still works in a bare environment.
+		return filepath.Join("github-trending", "observation")
+	}
+	return filepath.Join(home, "github-trending", "observation")
+}
+
 // Skipped returns how many corrupt lines were skipped during loads so far. A
 // non-zero value is a signal (surfaced by callers as a warning), never a fatal
 // error: one bad line must not take the whole observation history down.

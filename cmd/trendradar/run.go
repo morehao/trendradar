@@ -15,12 +15,14 @@ import (
 
 	"github.com/morehao/trendradar/internal/app"
 	"github.com/morehao/trendradar/internal/config"
+	"github.com/morehao/trendradar/internal/digest"
 	"github.com/morehao/trendradar/internal/enrich"
 	"github.com/morehao/trendradar/internal/fetch"
 	"github.com/morehao/trendradar/internal/gitx"
 	"github.com/morehao/trendradar/internal/ingest"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
+	"github.com/morehao/trendradar/internal/observe"
 	"github.com/morehao/trendradar/internal/releasewatch"
 	"github.com/morehao/trendradar/internal/subscription"
 )
@@ -174,6 +176,22 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		// falls back to the legacy layout.
 		in.Requested = cfg.Trending.Languages
 		in.ByPage = res.ByPage
+
+		// Local star observation store: record this run's snapshots and, where a
+		// baseline exists, replace the page-reported starsInPeriod with a real
+		// observed delta. Disabled or in dry-run, this is a no-op and the run keeps
+		// its pre-observation behaviour (plan: observe.enabled=false is byte-
+		// identical to v0.8.7). The store lives under $DSH_HOME, never the repo.
+		if cfg.Observe.IsEnabled() && !*dryRun {
+			if applied, ares, aerr := applyObservation(cfg, in.Repos, client); aerr != nil {
+				fmt.Fprintf(os.Stderr, "warn: observe: %v\n", aerr)
+			} else {
+				in.Repos = applied
+				for _, w := range ares.Warnings {
+					fmt.Fprintf(os.Stderr, "warn: %s\n", w)
+				}
+			}
+		}
 	}
 	if len(in.Repos) == 0 && !releasesOnly {
 		return fmt.Errorf("no repository snapshots to process")
@@ -541,4 +559,31 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// applyObservation runs the local star observation pass for one live run: it
+// opens the store from config, records this run's snapshots (fetching
+// authoritative counts via GraphQL when available), and writes a real observed
+// delta into each repo's StarsInPeriod where a baseline exists. The delta window
+// matches the digest period (daily->d1, weekly->d7, monthly->d30); observation
+// dates are UTC (plan D1). Any store problem is returned as a warning by the
+// caller and never fails the run: the digest still renders with whatever
+// starsInPeriod the ingest path supplied.
+func applyObservation(cfg *config.Config, repos []digest.RepoSnapshot, fetcher observe.Fetcher) ([]digest.RepoSnapshot, observe.ApplyResult, error) {
+	dir := cfg.Observe.StoreDir
+	if strings.TrimSpace(dir) == "" {
+		dir = observe.DefaultStoreDir()
+	}
+	st, err := observe.Open(dir)
+	if err != nil {
+		return repos, observe.ApplyResult{}, err
+	}
+	opts := observe.ApplyOptions{
+		Date:          time.Now().UTC().Format("2006-01-02"),
+		Source:        "snapshot",
+		Period:        cfg.Trending.Since,
+		MaxCandidates: cfg.Observe.MaxCandidates,
+		BackfillDays:  cfg.Observe.BackfillDays,
+	}
+	return observe.Apply(context.Background(), st, repos, opts, fetcher)
 }
