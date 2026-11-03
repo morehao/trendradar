@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added — 同一天的多周期可合并到一条分支（`output.branchGrouping`）
+- 现象：`schedule.periods` 同时跑日/周/月时，每个周期各建一条分支；三条分支都改写同一份
+  `<branchPrefix>index.md`，先合入的 PR 落地后，后面的 PR 必然冲突。
+- `internal/config`：新增 `output.branchGrouping`，取值 `per-period`（默认）/ `per-date`。
+- `internal/app`：`per-date` 时分支名为 `<branchPrefix><date>`，其余分支与索引逻辑不变，
+  沿用既有的「分支已存在就追加」，索引在同一条分支上自然累积成三节。
+- `internal/subscription`：`RunBranchName` 委托给新增的 `RunBranchNameGrouped`，`run` 与
+  `subscribe` 共用一套分支名，避免两处各写一份。
+- `internal/pr`：新增 `UpdateBody`；复用已有 PR 时只更新正文，不再用最后一个周期覆盖标题。
+
+### 兼容性
+- 默认 `per-period`：不写这个键时，分支命名、PR 数量、索引行为与现在完全一致。
+- 契约未改：`contract/` 无改动，`ipcSchema` / `digestSchema` = 2。
+- 配置走非严格 YAML 解析，旧核心收到该键会忽略、不报错。
+
 ## 0.9.1
 
 ### Fixed — 手动重建已合并日期时，PR 永久冲突

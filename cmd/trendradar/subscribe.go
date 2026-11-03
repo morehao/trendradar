@@ -79,7 +79,7 @@ func runSubscribeOutput(args []string) (subscribeOutput, error) {
 	outputDir := cfg.Output.Dir
 	file := cfg.Releases.SubscriptionsFile
 	today := time.Now().Format("2006-01-02")
-	branch := subscription.RunBranchName(cfg.Output.BranchPrefix, cfg.Releases.Period, today)
+	branch := subscription.RunBranchNameGrouped(cfg.Output.BranchPrefix, cfg.Output.BranchGrouping, cfg.Releases.Period, today)
 
 	if action == "releases" {
 		return subscribeReleases(cfg, positional, volumeRaw)

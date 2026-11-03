@@ -78,9 +78,23 @@ func PendingPath(repoPath string) string {
 // branch than run writes. Mirrors internal/app/run.go (prefix default + branch
 // construction) and internal/render/period.go NameOf.
 func RunBranchName(branchPrefix, period, date string) string {
+	return RunBranchNameGrouped(branchPrefix, "", period, date)
+}
+
+// RunBranchNameGrouped is RunBranchName with output.branchGrouping applied:
+//
+//	per-period ("" or "per-period") -> <prefix><period>/<render.NameOf(period, date)>
+//	per-date                        -> <prefix><date>
+//
+// Both app.Run and every reader (subscribe, serve) must agree on this, so the
+// grouping is threaded through instead of being re-derived at each call site.
+func RunBranchNameGrouped(branchPrefix, grouping, period, date string) string {
 	prefix := branchPrefix
 	if prefix == "" {
 		prefix = "trending/"
+	}
+	if grouping == "per-date" {
+		return prefix + date
 	}
 	p := render.PeriodOf(digest.Digest{Period: period})
 	return prefix + p + "/" + render.NameOf(p, date)

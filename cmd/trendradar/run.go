@@ -458,7 +458,7 @@ func buildReleasesOptions(cfg *config.Config, date string, includePending bool, 
 	if err != nil {
 		return nil, err
 	}
-	branch := subscription.RunBranchName(cfg.Output.BranchPrefix, cfg.Releases.Period, date)
+	branch := subscription.RunBranchNameGrouped(cfg.Output.BranchPrefix, cfg.Output.BranchGrouping, cfg.Releases.Period, date)
 	baseStore, err := subscription.ReadRepoWithFallback(cfg.Repo.Path, cfg.Output.Dir, cfg.Releases.SubscriptionsFile, branch, cfg.Repo.BaseBranch)
 	if err != nil {
 		return nil, err

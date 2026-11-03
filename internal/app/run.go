@@ -528,6 +528,14 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		prefix = "trending/"
 	}
 	branch := prefix + period + "/" + name
+	if cfg.Output.BranchGrouping == config.BranchGroupingPerDate {
+		// One branch per date instead of one per period: daily/weekly/monthly
+		// append onto the same branch, so trending/index.md grows on a single
+		// branch (no sibling branches rewriting the same file) and one PR can
+		// carry all digests of the date. The append-only path below already
+		// switches to an existing branch and stacks a commit on it.
+		branch = prefix + d.Date
+	}
 
 	// Fast-forward the local base before deriving a new date branch from it. A
 	// prior run that ended by auto-merging (and so skipped the cleanup block) or
@@ -886,6 +894,7 @@ type prAPI interface {
 	Get(ctx context.Context, number int) (*pr.Pull, error)
 	Create(ctx context.Context, title, head, base, bodyText string) (*pr.Pull, error)
 	Update(ctx context.Context, number int, title, bodyText string) (*pr.Pull, error)
+	UpdateBody(ctx context.Context, number int, bodyText string) (*pr.Pull, error)
 	Merge(ctx context.Context, number int) error
 	DeleteBranch(ctx context.Context, branch string) error
 }
@@ -938,7 +947,10 @@ func openPR(ctx context.Context, client prAPI, cfg *config.Config, branch string
 		}
 		num, url = p.Number, p.HTMLURL
 	} else {
-		p, uerr := client.Update(ctx, existing.Number, title, bodyText)
+		// Keep the title the first period gave this PR: with branchGrouping per-date
+		// all periods share one branch and one PR, and re-sending the title renamed
+		// it after whichever period ran last.
+		p, uerr := client.UpdateBody(ctx, existing.Number, bodyText)
 		if uerr != nil {
 			return "", uerr
 		}

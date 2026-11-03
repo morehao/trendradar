@@ -217,6 +217,9 @@ type fakePR struct {
 	merged     []int
 	creates    int
 	deleted    []string
+	// titleUpdates / bodyUpdates record which edit path openPR took on reuse.
+	titleUpdates int
+	bodyUpdates  int
 	// latestAfterCreate, when set, is what FindForBranch returns once a PR has
 	// been created — lets a test model "the new PR exists in some state".
 	latestAfterCreate *pr.Pull
@@ -243,6 +246,12 @@ func (f *fakePR) Create(context.Context, string, string, string, string) (*pr.Pu
 	return f.created, nil
 }
 func (f *fakePR) Update(context.Context, int, string, string) (*pr.Pull, error) {
+	f.titleUpdates++
+	return f.existing, nil
+}
+
+func (f *fakePR) UpdateBody(_ context.Context, _ int, _ string) (*pr.Pull, error) {
+	f.bodyUpdates++
 	return f.existing, nil
 }
 func (f *fakePR) Merge(_ context.Context, n int) error {
@@ -292,6 +301,26 @@ func TestOpenPRMergesExisting(t *testing.T) {
 	}
 	if len(fake.merged) != 1 || fake.merged[0] != 9 {
 		t.Fatalf("existing PR merge = %v", fake.merged)
+	}
+}
+
+// Reusing a PR must not rename it: with branchGrouping per-date every period
+// reuses the PR of the first one, and the old code re-sent the title each time,
+// leaving the pull request named after whichever period ran last.
+func TestOpenPRKeepsExistingTitle(t *testing.T) {
+	fake := &fakePR{existing: &pr.Pull{Number: 9, HTMLURL: "https://github.com/acme/widgets/pull/9"}}
+	cfg := &config.Config{
+		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
+		PR:   config.PRConfig{Enabled: true},
+	}
+	if _, err := openPR(context.Background(), fake, cfg, "trending/2026-11-04", digest.Digest{Date: "2026-11-04", Count: 1}); err != nil {
+		t.Fatalf("openPR: %v", err)
+	}
+	if fake.titleUpdates != 0 {
+		t.Fatalf("reuse rewrote the PR title %d time(s)", fake.titleUpdates)
+	}
+	if fake.bodyUpdates != 1 {
+		t.Fatalf("body update = %d, want 1", fake.bodyUpdates)
 	}
 }
 
@@ -600,6 +629,46 @@ func TestSameDayThreePeriodsDistinctBranches(t *testing.T) {
 	}
 	if len(branches) != 3 {
 		t.Fatalf("want 3 distinct branches, got %v", branches)
+	}
+}
+
+// Branch layout: with output.branchGrouping=per-date the periods of one date
+// share a single branch and stack one commit each, so the shared index.md grows
+// on that branch instead of diverging across sibling branches (which made every
+// second PR of the day conflict).
+func TestBranchGroupingPerDateSharesOneBranch(t *testing.T) {
+	remote, work, cfg := setupRepo(t)
+	cfg.Output.BranchGrouping = config.BranchGroupingPerDate
+	base := countRef(t, remote, "main")
+	const wantBranch = "trending/2026-11-01"
+	for i, period := range []string{"daily", "weekly", "monthly"} {
+		in := fixtureInputs()
+		in.Date = "2026-11-01"
+		in.Period = period
+		r, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake()})
+		if err != nil {
+			t.Fatalf("%s run: %v", period, err)
+		}
+		if r.Skipped {
+			t.Fatalf("%s run unexpectedly skipped", period)
+		}
+		if r.Branch != wantBranch {
+			t.Fatalf("%s branch = %q, want %q", period, r.Branch, wantBranch)
+		}
+		if got := countRef(t, remote, wantBranch); got != base+1+i {
+			t.Fatalf("after %s: %s commits = %d, want %d", period, wantBranch, got, base+1+i)
+		}
+	}
+	// All three artifacts and their rows live on the one branch's index.
+	b, err := os.ReadFile(filepath.Join(work, "digests", "index.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := string(b)
+	for _, want := range []string{"daily/2026-11/2026-11-01.md", "weekly/2026/2026-W44.md", "monthly/2026/2026-11.md"} {
+		if !strings.Contains(idx, want) {
+			t.Fatalf("index is missing %s:\n%s", want, idx)
+		}
 	}
 }
 

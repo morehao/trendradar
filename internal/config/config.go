@@ -237,12 +237,26 @@ type TrendingConfig struct {
 	Since     string   `yaml:"since" validate:"required,oneof=daily weekly monthly"`
 }
 
+// BranchGrouping values accepted by OutputConfig.BranchGrouping.
+const (
+	// BranchGroupingPerPeriod (the default) gives every period its own branch:
+	// trending/daily/2026-11-01, trending/weekly/2026-W44, trending/monthly/2026-11.
+	BranchGroupingPerPeriod = "per-period"
+	// BranchGroupingPerDate makes every period of one date commit to a single
+	// branch (trending/2026-11-01), so the digests and the shared index.md are
+	// appended on one branch and one pull request carries all of them.
+	BranchGroupingPerDate = "per-date"
+)
+
 // OutputConfig controls where rendered digests go.
 type OutputConfig struct {
 	Dir           string `yaml:"dir" validate:"required"`
 	BranchPrefix  string `yaml:"branchPrefix"`
 	CommitMessage string `yaml:"commitMessage"`
 	RetentionDays int    `yaml:"retentionDays"`
+	// BranchGrouping picks the branch layout. Empty means per-period, i.e. the
+	// layout every config written before this field existed expects.
+	BranchGrouping string `yaml:"branchGrouping" validate:"omitempty,oneof=per-period per-date"`
 }
 
 // ScheduleConfig is optional; used only when running in serve mode.

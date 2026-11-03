@@ -133,3 +133,24 @@ func TestObserveStoreDirExpandsEnv(t *testing.T) {
 		t.Fatalf("storeDir = %q, want /custom/obs (env expanded)", c.Observe.StoreDir)
 	}
 }
+
+// Two valid branch layouts, and anything else is a config error rather than a
+// silently ignored typo that would keep the per-period layout.
+func TestValidateBranchGrouping(t *testing.T) {
+	mk := func(grouping string) *Config {
+		return &Config{
+			Model:    ModelConfig{Provider: "deepseek", Name: "m", BaseURL: "https://x.example/v1"},
+			Repo:     RepoConfig{Path: "/tmp/repo"},
+			Trending: TrendingConfig{Languages: []string{"all"}, Since: "daily"},
+			Output:   OutputConfig{Dir: "digests", BranchGrouping: grouping},
+		}
+	}
+	for _, ok := range []string{"", BranchGroupingPerPeriod, BranchGroupingPerDate} {
+		if err := mk(ok).Validate(); err != nil {
+			t.Fatalf("branchGrouping=%q should be valid: %v", ok, err)
+		}
+	}
+	if err := mk("per-day").Validate(); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("branchGrouping=per-day should be ErrInvalid, got %v", err)
+	}
+}

@@ -26,6 +26,9 @@ output:
   dir: digests
   branchPrefix: trending/
   retentionDays: 90
+  # per-period（默认）：<branchPrefix><period>/<name>，每个周期一条分支
+  # per-date：<branchPrefix><date>，同一天的多周期追加到同一条分支，只开一个 PR
+  branchGrouping: per-period
 
 schedule:
   cron: "0 8 * * *"                 # 仅供 serve 模式参考

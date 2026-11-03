@@ -188,6 +188,25 @@ func (c *Client) Update(ctx context.Context, number int, title, bodyText string)
 	return &p, nil
 }
 
+// UpdateBody rewrites only an existing PR's body, leaving its title alone.
+//
+// Runs that share one branch (branchGrouping: per-date) reuse the PR opened by
+// the first period. Sending a fresh title on every reuse made the pull request
+// end up named after whichever period ran last, so the title is set once at
+// creation and only the body keeps being refreshed.
+func (c *Client) UpdateBody(ctx context.Context, number int, bodyText string) (*Pull, error) {
+	path := fmt.Sprintf("/repos/%s/%s/pulls/%d", c.Owner, c.Repo, number)
+	data, err := c.do(ctx, http.MethodPatch, path, map[string]any{"body": bodyText})
+	if err != nil {
+		return nil, err
+	}
+	var p Pull
+	if err := json.Unmarshal(data, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // Merge merges a PR (squash). 405/409 map to NOT_MERGEABLE.
 func (c *Client) Merge(ctx context.Context, number int) error {
 	path := fmt.Sprintf("/repos/%s/%s/pulls/%d/merge", c.Owner, c.Repo, number)
