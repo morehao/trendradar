@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.1
+
+### Fixed — 手动重建已合并日期时，PR 永久冲突
+- 现象：对已合并的日期点「重新生成这一期」，core 复用旧分支 append；主分支是
+  squash 合并（同一批文件有新提交），分支仍基于旧 base → 新 PR 永远 `CONFLICTING`，
+  只能手工关掉再删分支。
+- `internal/app`：manual 触发且该分支的 PR 已 merged / closed（分支已花掉）时，
+  改成从 `origin/<base>` 重建分支（`switch -C`）并 `--force-with-lease` 推送；
+  open PR 仍保持 append（不重写在审历史），schedule 行为不变。
+- `internal/gitx`：新增 `PushForce`（仅用于这条重建路径）。
+
+### Fixed — 发版阶段覆盖了榜单 digest 的日期 / 周期
+- `internal/app`：`releasewatch` 的 `drel.Date` / `drel.Period` 不再写回 trending 的
+  `d`。此前同时启用订阅的组合运行会把 PR 标题/正文写成 release 文档的「周末 +
+  weekly」（月榜 PR 显示成 `trending weekly 2026-11-08`），也污染 `Result.Digest`。
+
 ## 0.9.0
 
 ### Changed — 榜单文档随 `RunResult` 回传（ipc v3）

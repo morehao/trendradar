@@ -91,11 +91,20 @@ func (g *Git) Commit(ctx context.Context, message, name, email string) error {
 // is fed through a temporary GIT_ASKPASS helper (0600, removed after), never via
 // argv.
 //
-// The automation never force-pushes: per-date branches are append-only, so a
-// rejected push means the remote moved and the caller should fetch + rebase +
-// retry once (see app.pushWithRetry).
+// Per-date branches are append-only, so a rejected push means the remote moved
+// and the caller should fetch + rebase + retry once (see app.pushWithRetry).
+// The single exception is PushForce, used only when a spent branch is
+// intentionally recreated from base.
 func (g *Git) Push(ctx context.Context, remote, branch, token string) error {
 	return g.push(ctx, []string{"push", "-u", remote, branch}, token)
+}
+
+// PushForce replaces the remote branch using force-with-lease. It exists for
+// intentional rebuilds of a spent branch (its PR was merged or closed): the
+// caller resets the local branch to base first, so a normal push can only be
+// rejected. The lease keeps it safe if someone else pushed in the meantime.
+func (g *Git) PushForce(ctx context.Context, remote, branch, token string) error {
+	return g.push(ctx, []string{"push", "--force-with-lease", "-u", remote, branch}, token)
 }
 
 func (g *Git) push(ctx context.Context, args []string, token string) error {

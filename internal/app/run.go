@@ -411,10 +411,10 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		if rerr != nil {
 			rep.Warnings = append(rep.Warnings, "releases: "+rerr.Error())
 		} else {
-			// The document date follows the summary period, so a mid-week run and
-			// the Sunday run land on the same weekly files.
-			d.Date = drel.Date
-			d.Period = drel.Period
+			// drel.Date is the release document's week end; the trending digest d
+			// keeps its own date/period. Overwriting d here used to leak the
+			// release date into the PR title/body (a monthly run showing up as a
+			// weekly PR for next Sunday) and into Result.Digest.
 			if drel.Count > 0 {
 				coreV := ipc.Version
 				drel.CoreVersion = &coreV
@@ -498,12 +498,19 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	//                         a finished day, and the merged PR record persists in
 	//                         GitHub even after the branch is deleted);
 	//   merged + manual    -> explicit "regenerate this period" request: rebuild
-	//                         and open a fresh PR. The old PR stays merged, so
-	//                         openPR's FindOpen sees nothing and Create runs;
+	//                         the branch from base (force-with-lease) and open a
+	//                         fresh PR. The old PR stays merged, so openPR's
+	//                         FindOpen sees nothing and Create runs;
 	//   closed + schedule  -> a human said no; an automated run must not reopen it;
 	//   closed + manual    -> explicit request, rebuild/reopen.
 	prRequested := cfg.PR.Enabled && opts.Token != ""
 	var prClient prAPI
+	// rebuildFromBase marks a manual regenerate of a date whose branch is already
+	// spent (its PR was merged or closed). Appending to such a branch diverges
+	// from a squash-merged base — the two sides touch the same digest files and
+	// the new PR can never merge. Those runs recreate the branch from base
+	// instead (see the checkout block below).
+	rebuildFromBase := false
 	if prRequested {
 		c, cerr := newPRClientFor(ctx, g, cfg, opts.Token)
 		if cerr != nil {
@@ -529,14 +536,16 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 				// Includes merged + manual: rebuild the branch and let openPR open
 				// a fresh PR (FindOpen returns nil for a merged/absent open PR).
 				prClient = c
+				rebuildFromBase = trigger == TriggerManual && (latest.Merged() || latest.ClosedUnmerged())
 			}
 		}
 	}
 
-	// Append-only branches: reuse what exists instead of resetting from the base.
-	// A reset made every rerun a rewritten branch (hence the old force-with-lease);
-	// appending means a plain push is always a fast-forward and nothing a human
-	// committed on the branch is ever clobbered.
+	// Branch lifecycle:
+	//   - spent branch + manual rebuild → reset to base and force-push (below);
+	//   - otherwise append-only: reuse what exists instead of resetting from the
+	//     base, so a plain push is always a fast-forward and nothing a human
+	//     committed on the branch is clobbered.
 	hasLocal, err := g.HasRef(ctx, "refs/heads/"+branch)
 	if err != nil {
 		return res, err
@@ -546,6 +555,10 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		return res, err
 	}
 	switch {
+	case rebuildFromBase:
+		if err := g.SwitchCreate(ctx, branch, remote+"/"+base); err != nil {
+			return res, err
+		}
 	case hasLocal:
 		if err := g.Switch(ctx, branch); err != nil {
 			return res, err
@@ -625,8 +638,14 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		if sha, err := g.HeadSHA(ctx); err == nil {
 			res.Commit = sha
 		}
-		if err := pushWithRetry(ctx, g, remote, branch, opts.Token); err != nil {
-			return res, pushFailure(err, branch, remote)
+		var perr error
+		if rebuildFromBase {
+			perr = pushForceWithRetry(ctx, g, remote, branch, opts.Token)
+		} else {
+			perr = pushWithRetry(ctx, g, remote, branch, opts.Token)
+		}
+		if perr != nil {
+			return res, pushFailure(perr, branch, remote)
 		}
 		pushed = true
 	}
@@ -708,6 +727,21 @@ func filesMatch(files []render.File, repoPath string) bool {
 		}
 	}
 	return true
+}
+
+// pushForceWithRetry force-replaces the remote branch (force-with-lease) for an
+// intentional rebuild from base. A rejected lease means the remote moved after
+// our fetch: refetch and retry once. The force is bounded to the branch we just
+// recreated from base, never to an open PR's in-flight history.
+func pushForceWithRetry(ctx context.Context, g *gitx.Git, remote, branch, token string) error {
+	err := g.PushForce(ctx, remote, branch, token)
+	if err == nil || !gitx.PushRejected(err) {
+		return err
+	}
+	if ferr := g.Fetch(ctx, remote); ferr != nil {
+		return err
+	}
+	return g.PushForce(ctx, remote, branch, token)
 }
 
 // pushWithRetry pushes and, when the remote moved under us, rebases once onto

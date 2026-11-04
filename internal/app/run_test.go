@@ -18,6 +18,7 @@ import (
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/digest"
 	"github.com/morehao/trendradar/internal/enrich"
+	"github.com/morehao/trendradar/internal/fetch"
 	"github.com/morehao/trendradar/internal/gitx"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
@@ -834,4 +835,127 @@ func TestRunExposesDigestPathForWeeklyAndMonthly(t *testing.T) {
 			t.Fatalf("%s DigestPath = %q, want %q", tc.period, r.DigestPath, tc.want)
 		}
 	}
+}
+
+// A manual regenerate of a date whose PR was already merged must rebuild the
+// branch from base, not append to the spent branch: main holds a squash-merged
+// copy, so appending keeps the old base and the new PR can never merge.
+func TestManualRebuildResetsSpentBranchToBase(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	cfg.PR = config.PRConfig{Enabled: true, AutoMerge: false}
+
+	first, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if first.Commit == "" {
+		t.Fatal("first run did not commit")
+	}
+	oldCommit := first.Commit
+
+	mergedAt := time.Now()
+	created := &pr.Pull{Number: 9, HTMLURL: "https://github.com/acme/widgets/pull/9"}
+	fake := &fakePR{
+		latest:  &pr.Pull{Number: 5, State: "closed", MergedAt: &mergedAt},
+		created: created,
+	}
+	withPRClient(t, fake)
+
+	in := fixtureInputs()
+	in.Repos = append(in.Repos, digest.RepoSnapshot{
+		FullName: "acme/three", URL: "https://github.com/acme/three", Description: digest.StrPtr("third"),
+		Language: "go", Stars: 300, StarsInPeriod: 30, Forks: digest.IntPtr(6), Rank: 3, Source: digest.SourceTrendingHTML,
+	})
+	r, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake(), Token: "tok", Trigger: TriggerManual})
+	if err != nil {
+		t.Fatalf("manual rebuild: %v", err)
+	}
+	if r.Skipped {
+		t.Fatalf("manual rebuild must not skip, got %q", r.SkipReason)
+	}
+	if fake.creates != 1 || r.PRURL != created.HTMLURL {
+		t.Fatalf("expected a fresh PR, creates=%d url=%q", fake.creates, r.PRURL)
+	}
+	// The spent branch's commit must be gone: the rebuilt branch starts at base.
+	if isAncestor(t, remote, oldCommit, "refs/heads/trending/daily/2026-10-30") {
+		t.Fatal("rebuilt branch still contains the old (spent) commit; it was appended, not reset")
+	}
+}
+
+// An open PR's branch is still in flight: a manual rerun keeps appending so the
+// PR history (and any human review context) is preserved.
+func TestManualRerunKeepsAppendingWhenPROpen(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	cfg.PR = config.PRConfig{Enabled: true, AutoMerge: false}
+
+	first, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	before := countRef(t, remote, "trending/daily/2026-10-30")
+
+	open := &pr.Pull{Number: 7, State: "open", HTMLURL: "https://github.com/acme/widgets/pull/7"}
+	withPRClient(t, &fakePR{latest: open, existing: open})
+	in := fixtureInputs()
+	in.Repos = append(in.Repos, digest.RepoSnapshot{
+		FullName: "acme/three", URL: "https://github.com/acme/three", Description: digest.StrPtr("third"),
+		Language: "go", Stars: 300, StarsInPeriod: 30, Forks: digest.IntPtr(6), Rank: 3, Source: digest.SourceTrendingHTML,
+	})
+	if _, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake(), Token: "tok", Trigger: TriggerManual}); err != nil {
+		t.Fatalf("manual rerun: %v", err)
+	}
+	if after := countRef(t, remote, "trending/daily/2026-10-30"); after != before+1 {
+		t.Fatalf("open PR branch should append one commit: before=%d after=%d", before, after)
+	}
+	if !isAncestor(t, remote, first.Commit, "refs/heads/trending/daily/2026-10-30") {
+		t.Fatal("open PR branch lost its previous commit")
+	}
+}
+
+// Regression: the release stage used to overwrite the trending digest's
+// date/period with the release document's week end, which leaked into the PR
+// title ("monthly" runs titled as weekly PRs for the following Sunday) and into
+// Result.Digest.
+func TestReleaseStageDoesNotRewriteTrendingDigest(t *testing.T) {
+	_, _, cfg := setupRepo(t)
+	cfg.Releases = config.ReleasesConfig{Enabled: true, Period: "weekly", Timezone: "Asia/Shanghai"}
+	dir := t.TempDir()
+	r, err := Run(context.Background(), cfg, fixtureInputs(), Options{
+		Provider: model.NewFake(),
+		Releases: &ReleasesOptions{
+			Repos:     []string{"acme/one"},
+			Fetcher:   emptyReleaseFetcher{},
+			StatePath: filepath.Join(dir, "release-state.json"),
+			CachePath: filepath.Join(dir, "release-cache.json"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if r.Digest.Date != "2026-10-30" || r.Digest.Period != "daily" {
+		t.Fatalf("release stage rewrote the trending digest: date=%q period=%q", r.Digest.Date, r.Digest.Period)
+	}
+}
+
+// emptyReleaseFetcher reports no releases/tags; it only exists so the release
+// stage runs (and used to overwrite the digest) without touching the network.
+type emptyReleaseFetcher struct{}
+
+func (emptyReleaseFetcher) ListReleasesPage(context.Context, string, string, int, int) (fetch.ReleasePage, error) {
+	return fetch.ReleasePage{}, nil
+}
+
+func (emptyReleaseFetcher) ListTagsPage(context.Context, string, string, int, int) (fetch.TagPage, error) {
+	return fetch.TagPage{}, nil
+}
+
+func (emptyReleaseFetcher) GetCommit(context.Context, string, string, string) (fetch.Commit, error) {
+	return fetch.Commit{}, nil
+}
+
+// isAncestor reports whether commit is reachable from ref in the bare remote.
+func isAncestor(t *testing.T, remote, commit, ref string) bool {
+	t.Helper()
+	cmd := exec.Command("git", "--git-dir", remote, "merge-base", "--is-ancestor", commit, ref)
+	return cmd.Run() == nil
 }
