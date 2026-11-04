@@ -928,8 +928,8 @@ func openPR(ctx context.Context, client prAPI, cfg *config.Config, branch string
 		return "", err
 	}
 	var (
-		num  int
-		url  string
+		num int
+		url string
 	)
 	if existing == nil {
 		p, cerr := client.Create(ctx, title, branch, cfg.Repo.BaseBranch, bodyText)
