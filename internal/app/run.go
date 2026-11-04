@@ -556,9 +556,14 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	// rebuildFromBase marks a manual regenerate of a date whose branch is already
 	// spent (its PR was merged or closed). Appending to such a branch diverges
 	// from a squash-merged base — the two sides touch the same digest files and
-	// the new PR can never merge. Those runs recreate the branch from base
-	// instead (see the checkout block below).
+	// the new PR can never merge. Those runs delete the spent branch and recreate
+	// it from base (see the checkout block below).
 	rebuildFromBase := false
+	// rebuildNeedsForce is set only when deleting the remote spent branch failed:
+	// the ref is still there, so a plain push cannot fast-forward and the push
+	// step must fall back to force-with-lease. In the normal path it stays false
+	// and the rebuild ends with a plain push.
+	rebuildNeedsForce := false
 	if prRequested {
 		c, cerr := newPRClientFor(ctx, g, cfg, opts.Token)
 		if cerr != nil {
@@ -590,7 +595,8 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	}
 
 	// Branch lifecycle:
-	//   - spent branch + manual rebuild → reset to base and force-push (below);
+	//   - spent branch + manual rebuild → delete the branch (remote + local) and
+	//     recreate it from base so the push is a plain fast-forward (below);
 	//   - otherwise append-only: reuse what exists instead of resetting from the
 	//     base, so a plain push is always a fast-forward and nothing a human
 	//     committed on the branch is clobbered.
@@ -604,6 +610,30 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	}
 	switch {
 	case rebuildFromBase:
+		// Rebuild cleanly: drop the spent branch on both sides, then branch
+		// afresh from base. A plain push of a from-base branch is a fast-forward
+		// on the remote (the old ref is gone), so we never need force-push in the
+		// normal path. Deleting the remote branch also leaves the repo with only
+		// the branches it should have — a spent branch is not kept around.
+		//
+		// Guard: never touch the base branch itself. If branch==base a delete or
+		// reset would wipe the repository's trunk; treat that as a hard error.
+		if branch == base {
+			return res, fmt.Errorf("app: refusing to rebuild %q: it is the base branch %q", branch, base)
+		}
+		// Delete the remote branch first so the subsequent push has no ref to
+		// be non-fast-forward against. If deletion fails (e.g. a protected-branch
+		// rule still guards it, or a race), we fall back to force-with-lease at
+		// push time — that is now the exception, not the rule.
+		if hasRemote {
+			if derr := g.DeleteRemoteBranch(ctx, remote, branch, opts.Token); derr != nil {
+				rep.Warnings = append(rep.Warnings, "rebuild: delete remote branch: "+derr.Error())
+				// Keep going; pushForceFallback above handles a still-present ref.
+				rebuildNeedsForce = true
+			}
+		}
+		// Recreating the local branch from base via switch -C resets it, so a
+		// stale local copy cannot re-introduce the deleted history.
 		if err := g.SwitchCreate(ctx, branch, remote+"/"+base); err != nil {
 			return res, err
 		}
@@ -688,7 +718,21 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		}
 		var perr error
 		if rebuildFromBase {
-			perr = pushForceWithRetry(ctx, g, remote, branch, opts.Token)
+			// Preferred: a plain push. Because the remote branch was deleted above
+			// and we recreated the local branch from base, this is a fast-forward
+			// on a ref that no longer exists — exactly what an append-only push
+			// looks like. Only when the delete failed (rebuildNeedsForce) is the
+			// remote ref still there and a force-with-lease needed to replace it.
+			if rebuildNeedsForce {
+				perr = pushForceWithRetry(ctx, g, remote, branch, opts.Token)
+			} else {
+				perr = g.Push(ctx, remote, branch, opts.Token)
+				if perr != nil && gitx.PushRejected(perr) {
+					// The remote ref lingered (delete raced / was recreated):
+					// fall back to force-with-lease as a bounded recovery.
+					perr = pushForceWithRetry(ctx, g, remote, branch, opts.Token)
+				}
+			}
 		} else {
 			perr = pushWithRetry(ctx, g, remote, branch, opts.Token)
 		}

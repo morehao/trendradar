@@ -1015,3 +1015,83 @@ func TestStaleBaseStillRendersMergedDatesInIndex(t *testing.T) {
 		t.Fatalf("index.md missing the new 2026-10-31 row:\n%s", body)
 	}
 }
+
+// installNoForceHook installs a pre-receive hook on the bare remote that rejects
+// any force update of an existing branch (a non-fast-forward that is not a
+// delete), while still allowing branch deletion and plain fast-forward pushes.
+// This models a remote policy where force-push is forbidden but delete+recreate
+// is fine — the exact situation the manual rebuild must survive.
+func installNoForceHook(t *testing.T, remote string) {
+	t.Helper()
+	hook := filepath.Join(remote, "hooks", "pre-receive")
+	if err := os.MkdirAll(filepath.Dir(hook), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `#!/bin/sh
+# Reject force (non-fast-forward) updates; allow deletes and fast-forwards.
+rc=0
+while read old new ref; do
+  # delete: new is all zeros — allow.
+  case "$new" in 0000000000000000000000000000000000000000*) continue;; esac
+  # create: old is all zeros — allow.
+  case "$old" in 0000000000000000000000000000000000000000*) continue;; esac
+  if ! git merge-base --is-ancestor "$old" "$new"; then
+    echo "force-push is forbidden on this remote ($ref)" >&2
+    rc=1
+  fi
+done
+exit $rc
+`
+	if err := os.WriteFile(hook, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Regression (B): a manual rebuild of a spent branch must delete the remote
+// branch and recreate it from base with a plain push, so it succeeds even on a
+// remote that forbids force-push. The previous implementation force-with-leased
+// over the spent branch, which this remote rejects.
+func TestManualRebuildSucceedsOnNoForceRemote(t *testing.T) {
+	remote, _, cfg := setupRepo(t)
+	cfg.PR = config.PRConfig{Enabled: true, AutoMerge: false}
+	dateBranch := "trending/daily/2026-10-30"
+
+	// Seed the spent branch with a normal run.
+	first, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	oldCommit := first.Commit
+	installNoForceHook(t, remote)
+
+	mergedAt := time.Now()
+	fake := &fakePR{
+		latest:            &pr.Pull{Number: 5, State: "closed", MergedAt: &mergedAt},
+		created:           &pr.Pull{Number: 9, HTMLURL: "https://github.com/acme/widgets/pull/9"},
+		latestAfterCreate: &pr.Pull{Number: 9, State: "open"},
+	}
+	withPRClient(t, fake)
+
+	// Manual regenerate with changed content must rebuild the spent branch.
+	in2 := fixtureInputs()
+	in2.Repos[0].Stars += 50
+	r, err := Run(context.Background(), cfg, in2, Options{Provider: model.NewFake(), Token: "tok", Trigger: TriggerManual})
+	if err != nil {
+		t.Fatalf("manual rebuild on no-force remote: %v", err)
+	}
+	if r.Skipped {
+		t.Fatalf("manual rebuild must not skip, got %q", r.SkipReason)
+	}
+	if r.PRURL != fake.created.HTMLURL {
+		t.Fatalf("PRURL = %q, want %q", r.PRURL, fake.created.HTMLURL)
+	}
+	// The rebuilt branch exists, descends from main, and no longer contains the
+	// old spent commit — proof it was deleted and recreated, not force-rewound.
+	newHead := refSHA(t, remote, dateBranch)
+	if !isAncestor(t, remote, refSHA(t, remote, "main"), newHead) {
+		t.Fatal("rebuilt branch does not descend from main")
+	}
+	if isAncestor(t, remote, oldCommit, newHead) {
+		t.Fatal("rebuilt branch still contains the old spent commit")
+	}
+}

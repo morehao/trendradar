@@ -99,10 +99,11 @@ func (g *Git) Push(ctx context.Context, remote, branch, token string) error {
 	return g.push(ctx, []string{"push", "-u", remote, branch}, token)
 }
 
-// PushForce replaces the remote branch using force-with-lease. It exists for
-// intentional rebuilds of a spent branch (its PR was merged or closed): the
-// caller resets the local branch to base first, so a normal push can only be
-// rejected. The lease keeps it safe if someone else pushed in the meantime.
+// PushForce replaces the remote branch using force-with-lease. It is now only a
+// fallback for the manual rebuild: the primary path deletes the spent remote
+// branch (DeleteRemoteBranch) and recreates it from base, so a plain push is a
+// fast-forward. Force-with-lease is used only when that delete failed and the
+// ref is still present. The lease keeps it safe if someone else pushed meanwhile.
 func (g *Git) PushForce(ctx context.Context, remote, branch, token string) error {
 	return g.push(ctx, []string{"push", "--force-with-lease", "-u", remote, branch}, token)
 }
@@ -243,6 +244,26 @@ func writeAskpass(token string) (string, func(), error) {
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	return script, cleanup, nil
+}
+
+// DeleteRemoteBranch deletes a branch on the remote (git push <remote> --delete
+// <branch>). A missing branch is not an error: the goal is "branch absent", so
+// the caller can then recreate it from base with a plain push. Errors carry the
+// remote stderr so the caller can decide whether to fall back to force-push
+// (e.g. a remote that rejects deletion but accepts a force rewind).
+func (g *Git) DeleteRemoteBranch(ctx context.Context, remote, branch, token string) error {
+	err := g.push(ctx, []string{"push", remote, "--delete", branch}, token)
+	if err == nil {
+		return nil
+	}
+	var ge *Error
+	if errors.As(err, &ge) {
+		msg := strings.ToLower(ge.Message)
+		if strings.Contains(msg, "remote ref does not exist") {
+			return nil
+		}
+	}
+	return err
 }
 
 // RemoteURL returns the URL configured for a remote.
