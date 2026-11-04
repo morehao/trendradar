@@ -883,6 +883,7 @@ func pushFailure(err error, branch, remote string) error {
 type prAPI interface {
 	FindOpen(ctx context.Context, head, base string) (*pr.Pull, error)
 	FindForBranch(ctx context.Context, head, base string) (*pr.Pull, error)
+	Get(ctx context.Context, number int) (*pr.Pull, error)
 	Create(ctx context.Context, title, head, base, bodyText string) (*pr.Pull, error)
 	Update(ctx context.Context, number int, title, bodyText string) (*pr.Pull, error)
 	Merge(ctx context.Context, number int) error
@@ -926,30 +927,66 @@ func openPR(ctx context.Context, client prAPI, cfg *config.Config, branch string
 	if err != nil {
 		return "", err
 	}
+	var (
+		num  int
+		url  string
+	)
 	if existing == nil {
-		p, err := client.Create(ctx, title, branch, cfg.Repo.BaseBranch, bodyText)
-		if err != nil {
-			return "", err
+		p, cerr := client.Create(ctx, title, branch, cfg.Repo.BaseBranch, bodyText)
+		if cerr != nil {
+			return "", cerr
 		}
-		// A freshly created PR must also honour autoMerge. Previously only the
-		// "existing PR" path merged, so the first PR of a run was left open.
-		if cfg.PR.AutoMerge {
-			if err := client.Merge(ctx, p.Number); err != nil {
-				return p.HTMLURL, err
+		num, url = p.Number, p.HTMLURL
+	} else {
+		p, uerr := client.Update(ctx, existing.Number, title, bodyText)
+		if uerr != nil {
+			return "", uerr
+		}
+		num, url = p.Number, p.HTMLURL
+	}
+	// A freshly created PR must also honour autoMerge (previously only the
+	// "existing PR" path merged, so the first PR of a run was left open).
+	if cfg.PR.AutoMerge {
+		// Never fire PUT /merge at a PR GitHub has already determined is not
+		// mergeable: it just 405s and the caller reports a failure, while the
+		// useful outcome (a PR left open for a human) is identical. Re-read the
+		// PR first because list projections often return mergeable=null; when it
+		// is positively false, leave the PR open and warn with the reason.
+		mergeable, merr := mergeableNow(ctx, client, num)
+		if merr != nil {
+			return url, merr
+		}
+		if mergeable != nil && !*mergeable {
+			state := ""
+			if fresh, gerr := client.Get(ctx, num); gerr == nil && fresh != nil {
+				state = fresh.MergeableState
+			}
+			return url, &ipc.ErrorInfo{
+				Code:      ipc.CodeNotMergeable,
+				Message:   fmt.Sprintf("PR #%d left open: not mergeable (state=%q); not attempting merge", num, state),
+				Retriable: false,
 			}
 		}
-		return p.HTMLURL, nil
-	}
-	p, err := client.Update(ctx, existing.Number, title, bodyText)
-	if err != nil {
-		return "", err
-	}
-	if cfg.PR.AutoMerge {
-		if err := client.Merge(ctx, existing.Number); err != nil {
-			return p.HTMLURL, err
+		if err := client.Merge(ctx, num); err != nil {
+			return url, err
 		}
 	}
-	return p.HTMLURL, nil
+	return url, nil
+}
+
+// mergeableNow returns the PR's current mergeable flag, re-reading the single PR
+// to settle a null that the create/update list projection often leaves behind.
+// A nil return means GitHub has still not computed it — callers proceed and let
+// the merge call itself decide (a 405 there is still mapped by pr.Client.Merge).
+func mergeableNow(ctx context.Context, client prAPI, number int) (*bool, error) {
+	fresh, err := client.Get(ctx, number)
+	if err != nil {
+		return nil, err
+	}
+	if fresh == nil {
+		return nil, nil
+	}
+	return fresh.Mergeable, nil
 }
 
 func commitMessage(cfg *config.Config, period, name string) string {

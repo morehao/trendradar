@@ -220,6 +220,11 @@ type fakePR struct {
 	// latestAfterCreate, when set, is what FindForBranch returns once a PR has
 	// been created — lets a test model "the new PR exists in some state".
 	latestAfterCreate *pr.Pull
+	// get, when set, is what Get returns (a freshly read PR with a settled
+	// mergeable flag). Nil models "GitHub has not computed mergeable yet".
+	get       *pr.Pull
+	getErr    error
+	mergeErrs []error
 }
 
 func (f *fakePR) FindOpen(context.Context, string, string) (*pr.Pull, error) { return f.existing, nil }
@@ -229,6 +234,7 @@ func (f *fakePR) FindForBranch(context.Context, string, string) (*pr.Pull, error
 	}
 	return f.latest, nil
 }
+func (f *fakePR) Get(context.Context, int) (*pr.Pull, error) { return f.get, f.getErr }
 func (f *fakePR) Create(context.Context, string, string, string, string) (*pr.Pull, error) {
 	f.creates++
 	if f.createdErr != nil {
@@ -240,6 +246,13 @@ func (f *fakePR) Update(context.Context, int, string, string) (*pr.Pull, error) 
 	return f.existing, nil
 }
 func (f *fakePR) Merge(_ context.Context, n int) error {
+	if len(f.mergeErrs) > 0 {
+		err := f.mergeErrs[0]
+		f.mergeErrs = f.mergeErrs[1:]
+		if err != nil {
+			return err
+		}
+	}
 	f.merged = append(f.merged, n)
 	return nil
 }
@@ -1093,5 +1106,60 @@ func TestManualRebuildSucceedsOnNoForceRemote(t *testing.T) {
 	}
 	if isAncestor(t, remote, oldCommit, newHead) {
 		t.Fatal("rebuilt branch still contains the old spent commit")
+	}
+}
+
+// Regression (C): when GitHub reports a PR is not mergeable, openPR must not
+// fire PUT /merge (which would 405 and be reported as a failure). It must leave
+// the PR open and return a NOT_MERGEABLE warning carrying the reason, so the
+// plugin can tell the user to look at the PR instead of seeing a red run.
+func TestOpenPRSkipsMergeWhenNotMergeable(t *testing.T) {
+	notMergeable := false
+	fake := &fakePR{
+		created: &pr.Pull{Number: 11, HTMLURL: "https://github.com/acme/widgets/pull/11"},
+		get:     &pr.Pull{Number: 11, State: "open", Mergeable: &notMergeable, MergeableState: "dirty"},
+	}
+	cfg := &config.Config{
+		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
+		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
+	}
+	url, err := openPR(context.Background(), fake, cfg, "trending/daily/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 3})
+	if url != fake.created.HTMLURL {
+		t.Fatalf("url = %q, want %q", url, fake.created.HTMLURL)
+	}
+	if len(fake.merged) != 0 {
+		t.Fatalf("Merge must not be called when not mergeable, merged=%v", fake.merged)
+	}
+	var ei *ipc.ErrorInfo
+	if !errors.As(err, &ei) || ei.Code != ipc.CodeNotMergeable {
+		t.Fatalf("err = %v, want NOT_MERGEABLE warning", err)
+	}
+	if !strings.Contains(err.Error(), "dirty") {
+		t.Fatalf("warning should carry mergeable_state, got %q", err.Error())
+	}
+}
+
+// Regression (C): an existing open PR that is not mergeable must likewise be
+// left open without a merge attempt.
+func TestOpenPRExistingNotMergeableLeftOpen(t *testing.T) {
+	notMergeable := false
+	fake := &fakePR{
+		existing: &pr.Pull{Number: 9, HTMLURL: "https://github.com/acme/widgets/pull/9"},
+		get:      &pr.Pull{Number: 9, State: "open", Mergeable: &notMergeable, MergeableState: "blocked"},
+	}
+	cfg := &config.Config{
+		Repo: config.RepoConfig{Remote: "origin", BaseBranch: "main"},
+		PR:   config.PRConfig{Enabled: true, AutoMerge: true},
+	}
+	url, err := openPR(context.Background(), fake, cfg, "trending/daily/2026-10-30", digest.Digest{Date: "2026-10-30", Count: 1})
+	if url != fake.existing.HTMLURL {
+		t.Fatalf("url = %q, want %q", url, fake.existing.HTMLURL)
+	}
+	if len(fake.merged) != 0 {
+		t.Fatalf("Merge must not be called when not mergeable, merged=%v", fake.merged)
+	}
+	var ei *ipc.ErrorInfo
+	if !errors.As(err, &ei) || ei.Code != ipc.CodeNotMergeable {
+		t.Fatalf("err = %v, want NOT_MERGEABLE warning", err)
 	}
 }

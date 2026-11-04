@@ -40,10 +40,22 @@ type Pull struct {
 	HTMLURL  string     `json:"html_url"`
 	State    string     `json:"state"`
 	MergedAt *time.Time `json:"merged_at"`
+	// Mergeable is GitHub's computed mergeability (true/false/null). It is nil
+	// while GitHub is still computing it (the list API often returns null on the
+	// first read); callers must re-read the single PR to get a settled value
+	// before deciding whether a merge would succeed. MergeableState carries the
+	// human reason ("dirty" for conflicts, "blocked" for required checks, etc.).
+	Mergeable      *bool  `json:"mergeable"`
+	MergeableState string `json:"mergeable_state"`
 }
 
 // Merged reports whether the PR was merged (as opposed to closed unmerged).
 func (p *Pull) Merged() bool { return p != nil && p.MergedAt != nil }
+
+// MergeableFalse reports whether GitHub has positively determined the PR cannot
+// be merged right now (mergeable == false). A nil (still computing) is not false
+// and is treated as "unknown, not blocked".
+func (p *Pull) MergeableFalse() bool { return p != nil && p.Mergeable != nil && !*p.Mergeable }
 
 // ClosedUnmerged reports whether a human closed the PR without merging it.
 // Automated runs treat this as "this date was rejected" and do not reopen it;
@@ -129,6 +141,23 @@ func (c *Client) FindForBranch(ctx context.Context, head, base string) (*Pull, e
 		return nil, nil
 	}
 	return &pulls[0], nil
+}
+
+// Get reads a single PR by number, freshly. Unlike the list endpoints, which
+// frequently return mergeable=null (GitHub computes it lazily and the list
+// projection can be stale), reading the PR directly returns the current
+// mergeable value once GitHub has settled it.
+func (c *Client) Get(ctx context.Context, number int) (*Pull, error) {
+	path := fmt.Sprintf("/repos/%s/%s/pulls/%d", c.Owner, c.Repo, number)
+	data, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var p Pull
+	if err := json.Unmarshal(data, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 // Create opens a PR.

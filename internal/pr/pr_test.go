@@ -2,10 +2,13 @@ package pr
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/morehao/trendradar/internal/ipc"
 )
 
 func TestParseRemote(t *testing.T) {
@@ -126,5 +129,71 @@ func TestDeleteBranch(t *testing.T) {
 				t.Fatalf("unexpected error for status %d: %v", c.status, err)
 			}
 		})
+	}
+}
+
+func TestGetParsesMergeable(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		wantFalse bool
+		wantNil   bool
+	}{
+		{"mergeable true", `{"number":7,"state":"open","mergeable":true,"mergeable_state":"clean"}`, false, false},
+		{"mergeable false", `{"number":7,"state":"open","mergeable":false,"mergeable_state":"dirty"}`, true, false},
+		{"mergeable null", `{"number":7,"state":"open","mergeable":null,"mergeable_state":"unknown"}`, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/repos/acme/widgets/pulls/7" {
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			t.Cleanup(srv.Close)
+			c := New("acme", "widgets", "tok")
+			c.BaseURL = srv.URL
+			p, err := c.Get(context.Background(), 7)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Number != 7 {
+				t.Fatalf("number = %d", p.Number)
+			}
+			if tc.wantNil && p.Mergeable != nil {
+				t.Fatalf("want nil mergeable, got %v", *p.Mergeable)
+			}
+			if !tc.wantNil && p.Mergeable == nil {
+				t.Fatal("want a mergeable value, got nil")
+			}
+			if p.MergeableFalse() != tc.wantFalse {
+				t.Fatalf("MergeableFalse() = %v, want %v", p.MergeableFalse(), tc.wantFalse)
+			}
+		})
+	}
+}
+
+// Merge must keep mapping GitHub's 405 (not mergeable) to NOT_MERGEABLE, so the
+// caller surfaces a clear reason rather than a generic PR failure.
+func TestMergeMaps405ToNotMergeable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/repos/acme/widgets/pulls/7/merge" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = io.WriteString(w, `{"message":"Pull Request is not mergeable"}`)
+	}))
+	t.Cleanup(srv.Close)
+	c := New("acme", "widgets", "tok")
+	c.BaseURL = srv.URL
+	err := c.Merge(context.Background(), 7)
+	if err == nil {
+		t.Fatal("expected an error for 405")
+	}
+	var ei *ipc.ErrorInfo
+	if !errors.As(err, &ei) || ei.Code != ipc.CodeNotMergeable {
+		t.Fatalf("err = %v, want NOT_MERGEABLE", err)
 	}
 }
