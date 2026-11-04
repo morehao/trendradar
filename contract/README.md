@@ -1,4 +1,4 @@
-# @morehao/trendradar-contract (0.4.0)
+# @morehao/trendradar-contract (0.6.0)
 
 The single source of truth for the data shapes shared by the **trendradar Go
 core** (`github.com/morehao/trendradar`) and the **DSH plugin**
@@ -12,16 +12,17 @@ artifacts from one tag:
 
 Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 
-> Version model: the **package** is `0.4.0`, while the
-> **wire format** it carries is the second generation — `ipcSchema=2`,
-> `digestSchema=2`. The integers 2 distinguish this contract from the legacy
-> in-repo v1; they are intentionally decoupled from the package semver.
+> Version model: the **package** is `0.6.0`, while the
+> **wire format** it carries is the third generation — `ipcSchema=3`,
+> `digestSchema=2`. The integers distinguish this contract from the legacy
+> in-repo v1 and the pre-inline `ipcSchema=2`; they are intentionally decoupled
+> from the package semver.
 
 ## Install
 
 ```bash
-npm i @morehao/trendradar-contract@0.4.0
-go get github.com/morehao/trendradar/contract@v0.4.0   # resolves tag contract/v0.4.0
+npm i @morehao/trendradar-contract@0.6.0
+go get github.com/morehao/trendradar/contract@v0.6.0   # resolves tag contract/v0.6.0
 ```
 
 ## Layout
@@ -29,7 +30,7 @@ go get github.com/morehao/trendradar/contract@v0.4.0   # resolves tag contract/v
 | Path | Purpose |
 |---|---|
 | `schema/model.v2.json` | `RepoSnapshot`; `RepoDigest` composes it via `allOf` |
-| `schema/ipc.v2.json` | `RunRequest` (strict), `RunResult`, `ErrorInfo`, `State`, `FileArtifact` |
+| `schema/ipc.v3.json` | `RunRequest` (strict), `RunResult` (incl. inlined `DigestArtifact`), `ErrorInfo`, `State`, `FileArtifact` |
 | `schema/digest.v2.json` | rendered digest document, incl. `contentHashAlgo` |
 | `schema/releases.v2.json` | release-subscription document + `ReleasesReport` (run cost) |
 | `schema/errors.v2.json` | 17 error codes with `retriable`/`description` (single source of truth) |

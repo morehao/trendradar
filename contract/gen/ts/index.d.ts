@@ -36,8 +36,16 @@ export interface FileArtifact {
   [k: string]: unknown;
 }
 
+export interface DigestArtifact {
+  "path": string;
+  "bytes": number;
+  "sha256": string;
+  "text": string;
+  [k: string]: unknown;
+}
+
 export interface RunRequest {
-  "ipcSchema": 2;
+  "ipcSchema": 3;
   "command": "run" | "serve" | "config" | "version" | "subscribe";
   "configPath"?: string;
   "date"?: string;
@@ -50,13 +58,14 @@ export interface RunRequest {
 }
 
 export interface RunResult {
-  "ipcSchema": 2;
+  "ipcSchema": 3;
   "ok": boolean;
   "command": "run" | "serve" | "config" | "version" | "subscribe";
   "startedAt": string;
   "finishedAt": string;
   "skipped": boolean;
   "files": Array<FileArtifact>;
+  "digest"?: DigestArtifact;
   "branch"?: string;
   "commit"?: string;
   "prUrl"?: string;
@@ -92,8 +101,8 @@ export interface StateRun {
 }
 
 export interface State {
-  "ipcSchema": 2;
-  "stateSchema": 2;
+  "ipcSchema": 3;
+  "stateSchema": 3;
   "lastRun"?: StateRun;
   [k: string]: unknown;
 }
@@ -225,7 +234,7 @@ export interface ReleaseDigest {
 export interface VersionInfo {
   "version": string;
   "commit": string;
-  "ipcSchema": 2;
+  "ipcSchema": 3;
   "digestSchema": 2;
   "contractVersion": string;
   "supportedProviders": Array<string>;

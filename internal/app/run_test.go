@@ -385,6 +385,11 @@ func TestMergedPRSkipsScheduledRun(t *testing.T) {
 	if got := countRef(t, remote, "trending/daily/2026-10-30"); got != 0 {
 		t.Fatalf("unexpected branch pushed for merged date: %d commits", got)
 	}
+	// Rendering happens before the PR pre-check, so even a merged/scheduled skip
+	// carries the (unchanged) digest. The plugin refreshes its preview with it.
+	if r.DigestPath != "digests/daily/2026-10/2026-10-30.md" {
+		t.Fatalf("merged skip DigestPath = %q", r.DigestPath)
+	}
 }
 
 // A manual run on a date whose PR was already merged must rebuild and open a
@@ -762,4 +767,71 @@ func contains(ss []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// The digest bytes must be addressable from the Result itself: the CLI inlines
+// them into RunResult (ipc v3) so consumers never read the output repository.
+func TestRunExposesDigestPath(t *testing.T) {
+	_, _, cfg := setupRepo(t)
+	in := fixtureInputs()
+
+	r, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	const want = "digests/daily/2026-10/2026-10-30.md"
+	if r.DigestPath != want {
+		t.Fatalf("DigestPath = %q, want %q", r.DigestPath, want)
+	}
+	var data []byte
+	for _, f := range r.Files {
+		if f.Path == want {
+			data = f.Data
+		}
+	}
+	if len(data) == 0 {
+		t.Fatalf("digest file %q missing from Files", want)
+	}
+	if !strings.Contains(string(data), "## all") && !strings.Contains(string(data), "## go") {
+		t.Fatalf("digest body does not look like markdown:\n%s", data)
+	}
+
+	// An unchanged rerun is skipped, but it still rendered the same artifacts:
+	// the digest must remain addressable (the plugin refreshes its preview).
+	r2, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake()})
+	if err != nil {
+		t.Fatalf("rerun: %v", err)
+	}
+	if !r2.Skipped {
+		t.Fatal("second run should be skipped")
+	}
+	if r2.DigestPath != want {
+		t.Fatalf("skipped rerun DigestPath = %q, want %q", r2.DigestPath, want)
+	}
+}
+
+// Weekly/monthly use different bucket/name rules (ISO year + YYYY-Wnn, YYYY + YYYY-MM);
+// the suffix match must keep picking the digest itself, not index.md.
+func TestRunExposesDigestPathForWeeklyAndMonthly(t *testing.T) {
+	cases := []struct {
+		period string
+		date   string
+		want   string
+	}{
+		{"weekly", "2026-11-01", "digests/weekly/2026/2026-W44.md"},
+		{"monthly", "2026-10-31", "digests/monthly/2026/2026-10.md"},
+	}
+	for _, tc := range cases {
+		_, _, cfg := setupRepo(t)
+		in := fixtureInputs()
+		in.Date = tc.date
+		in.Period = tc.period
+		r, err := Run(context.Background(), cfg, in, Options{Provider: model.NewFake()})
+		if err != nil {
+			t.Fatalf("%s run: %v", tc.period, err)
+		}
+		if r.DigestPath != tc.want {
+			t.Fatalf("%s DigestPath = %q, want %q", tc.period, r.DigestPath, tc.want)
+		}
+	}
 }

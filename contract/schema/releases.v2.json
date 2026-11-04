@@ -240,7 +240,7 @@
           "minimum": 0
         },
         "usage": {
-          "$ref": "ipc.v2.json#/$defs/Usage"
+          "$ref": "ipc.v3.json#/$defs/Usage"
         }
       }
     },

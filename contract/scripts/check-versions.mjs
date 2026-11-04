@@ -16,7 +16,7 @@ const check = (cond, msg) => { if (!cond) fail.push(msg) }
 
 const vm = readJson(path.join(ROOT, 'version-map.json'))
 const pkg = readJson(path.join(ROOT, 'package.json'))
-const ipc = readJson(path.join(SCHEMA, 'ipc.v2.json'))
+const ipc = readJson(path.join(SCHEMA, 'ipc.v3.json'))
 const digest = readJson(path.join(SCHEMA, 'digest.v2.json'))
 const vinfo = readJson(path.join(SCHEMA, 'version-info.v2.json'))
 const errors = readJson(path.join(SCHEMA, 'errors.v2.json'))
@@ -29,17 +29,18 @@ const vinfoIpc = vinfo.properties.ipcSchema.const
 const vinfoDigest = vinfo.properties.digestSchema.const
 const apiVer = (api.match(/^\s*version:\s*(\S+)\s*$/m) || [])[1]
 
-check(ipcConst === 2, `ipcSchema const = ${ipcConst}, want 2`)
+check(ipcConst === 3, `ipcSchema const = ${ipcConst}, want 3`)
 check(digestConst === 2, `digest schema const = ${digestConst}, want 2`)
-check(vinfoIpc === 2 && vinfoDigest === 2, `version-info ipcSchema/digestSchema = ${vinfoIpc}/${vinfoDigest}, want 2/2`)
-check(vm['ipc.v2.json'].current === ipcConst, 'version-map ipc current != ipcSchema const')
+check(vinfoIpc === 3 && vinfoDigest === 2, `version-info ipcSchema/digestSchema = ${vinfoIpc}/${vinfoDigest}, want 3/2`)
+check(vm['ipc.v3.json'].current === ipcConst, 'version-map ipc current != ipcSchema const')
 check(vm['digest.v2.json'].current === digestConst, 'version-map digest current != schema const')
 check(vm['releases.v2.json'].current === releasesS.properties.schema.const, 'version-map releases current != releases schema const')
-check(vm['version-info.v2.json'].current === '0.5.0', 'version-map version-info current != 0.5.0')
+check(vm['version-info.v2.json'].current === '0.6.0', 'version-map version-info current != 0.6.0')
 check(vm['api.v2.yaml'].current === apiVer, `version-map api current != api.v2.yaml info.version (${apiVer})`)
-check(pkg.version === '0.5.0', `package.json version = ${pkg.version}, want 0.5.0`)
+check(pkg.version === '0.6.0', `package.json version = ${pkg.version}, want 0.6.0`)
 // Package semver major is decoupled from the wire integer on purpose:
-// package 0.2.0 carries the second-generation wire format (ipcSchema=2).
+// package 0.2.0 carries the second-generation wire format (ipcSchema=2);
+// package 0.6.0 carries the third (ipcSchema=3, digest inlined in RunResult).
 check(pkg.version.split('.')[0] === '0', `expected 0.x package version, got ${pkg.version}`)
 
 // error code catalogs must agree everywhere
@@ -60,7 +61,7 @@ for (const f of ['digest-normal.json','digest-degraded.json','digest-empty-lang.
 const BASE = process.env.BASE_REF
 if (BASE) {
   const gitShow = (rel) => {
-    try { return execFileSync('git', ['show', `${BASE}:contract/${rel}`], { cwd: ROOT, encoding: 'utf8' }) }
+    try { return execFileSync('git', ['show', `${BASE}:contract/${rel}`], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }) }
     catch { return null }
   }
   const breakingOf = (baseSchema, headSchema) => {
@@ -74,20 +75,21 @@ if (BASE) {
     for (const k of bReq) if (!hReq.has(k)) problems.push(`dropped required ${k}`)
     return problems
   }
-  for (const f of ['ipc.v2.json','digest.v2.json','version-info.v2.json']) {
-    const baseTxt = gitShow(`schema/${f}`)
+  for (const f of ['ipc.v3.json','digest.v2.json','version-info.v2.json']) {
+    // ipc v3 renames the file: compare against the newest base ipc schema.
+    const baseTxt = gitShow(`schema/${f}`) ?? (f === 'ipc.v3.json' ? gitShow('schema/ipc.v2.json') : null)
     if (!baseTxt) continue
     const baseS = JSON.parse(baseTxt), headS = readJson(path.join(SCHEMA, f))
     const problems = []
-    if (f === 'ipc.v2.json') {
+    if (f.startsWith('ipc.')) {
       for (const def of Object.keys(baseS.$defs || {})) if (headS.$defs && headS.$defs[def]) problems.push(...breakingOf(baseS.$defs[def], headS.$defs[def]).map(p=>`${def}: ${p}`))
     } else {
       problems.push(...breakingOf(baseS, headS))
     }
     if (problems.length) {
-      const baseConst = f === 'ipc.v2.json' ? baseS.$defs.RunRequest.properties.ipcSchema.const
+      const baseConst = f.startsWith('ipc.') ? baseS.$defs.RunRequest.properties.ipcSchema.const
         : f === 'digest.v2.json' ? baseS.properties.schema.const : null
-      const headConst = f === 'ipc.v2.json' ? ipcConst : digestConst
+      const headConst = f.startsWith('ipc.') ? ipcConst : digestConst
       const bumped = baseConst !== headConst
       if (!bumped) fail.push(`${f}: breaking changes without version bump -> ${problems.join('; ')}`)
     }

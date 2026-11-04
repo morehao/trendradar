@@ -145,7 +145,10 @@ type ReleasesOptions struct {
 
 // Result is the outcome of a run.
 type Result struct {
-	Digest     digest.Digest
+	Digest digest.Digest
+	// DigestPath is the repo-relative path of the markdown digest rendered by
+	// this run (empty when no digest was rendered: dry-run/merged/pr-closed).
+	DigestPath string
 	Files      []render.File
 	Report     Report
 	Skipped    bool
@@ -358,6 +361,16 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 			return res, berr
 		}
 		files = built
+		// Remember which artifact is the digest itself. The CLI inlines its bytes
+		// into RunResult so the consumer never has to read the output repository
+		// (the branch may already be merged and deleted by the time it looks).
+		digestName := render.NameOf(period, d.Date) + ".md"
+		for _, f := range files {
+			if strings.HasSuffix(f.Path, "/"+digestName) {
+				res.DigestPath = f.Path
+				break
+			}
+		}
 	} // end wantsDigest
 
 	// Optional repo-release subscription stage. Its artifacts are appended to

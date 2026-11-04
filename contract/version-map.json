@@ -1,12 +1,4 @@
 {
-  "ipc.v2.json": {
-    "wireKey": "ipcSchema",
-    "current": 2,
-    "breakingBump": [
-      "ipcSchema",
-      "packageMajor"
-    ]
-  },
   "digest.v2.json": {
     "wireKey": "digestSchema",
     "current": 2,
@@ -34,14 +26,14 @@
   },
   "version-info.v2.json": {
     "wireKey": "contractVersion",
-    "current": "0.5.0",
+    "current": "0.6.0",
     "breakingBump": [
       "packageMajor"
     ]
   },
   "api.v2.yaml": {
     "wireKey": "info.version",
-    "current": "0.5.0",
+    "current": "0.6.0",
     "breakingBump": [
       "packageMajor"
     ]
@@ -51,6 +43,14 @@
     "current": 2,
     "propagatesTo": [],
     "breakingBump": [
+      "packageMajor"
+    ]
+  },
+  "ipc.v3.json": {
+    "wireKey": "ipcSchema",
+    "current": 3,
+    "breakingBump": [
+      "ipcSchema",
       "packageMajor"
     ]
   }

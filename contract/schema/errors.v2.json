@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/morehao/trendradar/contract/schema/errors.v2.json",
   "title": "trendradar errors v2",
-  "description": "Canonical error-code catalog. Each property is one error code whose retriable/description are consts, so this file is the single source of truth for retriability. ipc.v2.json ErrorCode enum must match these keys exactly.",
+  "description": "Canonical error-code catalog. Each property is one error code whose retriable/description are consts, so this file is the single source of truth for retriability. ipc.v3.json ErrorCode enum must match these keys exactly.",
   "type": "object",
   "additionalProperties": false,
   "required": [

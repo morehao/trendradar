@@ -5,8 +5,9 @@ package ipc
 
 import contract "github.com/morehao/trendradar/contract"
 
-// SchemaVersion is the IPC envelope version (second generation).
-const SchemaVersion = 2
+// SchemaVersion is the IPC envelope version (third generation: RunResult
+// inlines the rendered digest so consumers never read the output repository).
+const SchemaVersion = 3
 
 // Command enumerates the sub-commands the core exposes over IPC.
 type Command string
@@ -20,11 +21,12 @@ const (
 
 // Aliases to the contract package (single source of truth).
 type (
-	RunRequest   = contract.RunRequest
-	FileArtifact = contract.FileArtifact
-	RunResult    = contract.RunResult
-	State        = contract.State
-	StateRun     = contract.StateRun
+	RunRequest     = contract.RunRequest
+	FileArtifact   = contract.FileArtifact
+	DigestArtifact = contract.DigestArtifact
+	RunResult      = contract.RunResult
+	State          = contract.State
+	StateRun       = contract.StateRun
 )
 
 // ErrorInfo mirrors contract.ErrorInfo but adds the error interface so the core

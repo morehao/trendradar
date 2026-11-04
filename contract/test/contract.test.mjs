@@ -15,7 +15,7 @@ const jcsHash = (d) => {
   return 'sha256:' + crypto.createHash('sha256').update(canonicalize(basis), 'utf8').digest('hex')
 }
 
-test('contractVersion is 0.5.0', () => assert.equal(contractVersion, '0.5.0'))
+test('contractVersion is 0.6.0', () => assert.equal(contractVersion, '0.6.0'))
 
 test('error catalog has 17 retriable entries', () => {
   assert.equal(Object.keys(errorCatalog).length, 17)
@@ -31,6 +31,12 @@ test('all fixtures validate against digest v2 schema', () => {
   for (const name of DIGEST_FIXTURES) {
     assert.ok(validators.digest(fixtures[name]), `${name} should be valid`)
   }
+})
+
+test('rejects a v2 RunResult (ipcSchema const mismatch)', () => {
+  const rr = { ipcSchema: 2, ok: true, command: 'run', startedAt: '2026-10-30T00:00:00Z', finishedAt: '2026-10-30T00:05:00Z', skipped: false, files: [] }
+  assert.equal(validators.runResult(rr), false)
+  assert.ok(validators.runResult({ ...rr, ipcSchema: 3 }))
 })
 
 test('rejects a v1-shaped digest (schema const mismatch)', () => {
@@ -57,58 +63,58 @@ test('jcs contentHash matches every release fixture', () => {
 })
 
 test('RunRequest is strict about extra fields', () => {
-  const req = { ipcSchema: 2, command: 'run', date: '2026-10-30' }
+  const req = { ipcSchema: 3, command: 'run', date: '2026-10-30' }
   assert.ok(validators.runRequest(req))
   assert.equal(validators.runRequest({ ...req, unexpected: true }), false)
 })
 
 test('RunRequest accepts subscribe with action', () => {
-  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'list' }))
-  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'add', repo: 'o/r' }))
-  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'remove', repo: 'o/r' }))
+  assert.ok(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'list' }))
+  assert.ok(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'add', repo: 'o/r' }))
+  assert.ok(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'remove', repo: 'o/r' }))
 })
 
 test('RunRequest rejects malformed subscribe requests', () => {
   // missing action
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe' }), false)
   // add/remove require repo
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'add' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'add' }), false)
   // list must not carry repo
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'list', repo: 'o/r' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'list', repo: 'o/r' }), false)
   // unknown action
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'bogus' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'bogus' }), false)
   // malformed repo
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'add', repo: 'not-a-repo' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'add', repo: 'not-a-repo' }), false)
 })
 
 test('non-subscribe commands must not carry subscribe fields', () => {
   // run: repo is allowed only together with stages including 'releases' (see below);
   // a bare run+repo with no stages is still rejected.
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', repo: 'o/r' }), false)
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', action: 'list' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'run', repo: 'o/r' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'run', action: 'list' }), false)
 })
 
 test('RunRequest.run may restrict releases to a single repo', () => {
   // allowed: run + stages releases + repo
-  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['releases'], repo: 'o/r' }))
+  assert.ok(validators.runRequest({ ipcSchema: 3, command: 'run', stages: ['releases'], repo: 'o/r' }))
   // backward compatible: run + stages releases without repo (all repos)
-  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['releases'] }))
+  assert.ok(validators.runRequest({ ipcSchema: 3, command: 'run', stages: ['releases'] }))
   // repo requires stages to include 'releases'
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['trending'], repo: 'o/r' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'run', stages: ['trending'], repo: 'o/r' }), false)
   // repo without stages is rejected (needs explicit releases stage)
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', repo: 'o/r' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'run', repo: 'o/r' }), false)
   // run must still not carry action/volume
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', action: 'list' }), false)
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', volume: 1 }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'run', action: 'list' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'run', volume: 1 }), false)
   // malformed repo
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'run', stages: ['releases'], repo: 'not-a-repo' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'run', stages: ['releases'], repo: 'not-a-repo' }), false)
   // serve/config/version still must not carry repo
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'serve', repo: 'o/r' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'serve', repo: 'o/r' }), false)
 })
 
 test('RunResult carries optional branch/commit/prUrl/contentHash', () => {
   const rr = {
-    ipcSchema: 2, ok: true, command: 'run',
+    ipcSchema: 3, ok: true, command: 'run',
     startedAt: '2026-10-30T00:00:00Z', finishedAt: '2026-10-30T00:05:00Z',
     skipped: false, files: [],
     branch: 'feat/x', commit: 'abc123', prUrl: 'https://github.com/o/r/pull/1',
@@ -148,7 +154,7 @@ test('ReleasesReport requires usage so zero cost is distinguishable', () => {
 
 test('RunResult carries an optional releases report', () => {
   const rr = {
-    ipcSchema: 2, ok: true, command: 'run',
+    ipcSchema: 3, ok: true, command: 'run',
     startedAt: '2026-10-30T00:00:00Z', finishedAt: '2026-10-30T00:05:00Z',
     skipped: false, files: [],
     releases: {
@@ -171,7 +177,7 @@ test('RunResult accepts an optional usage block', () => {
     usageKnown: true, calls: 1, retries: 0, batches: 1, cacheHits: 0,
   }
   const rr = {
-    ipcSchema: 2, ok: true, command: 'run',
+    ipcSchema: 3, ok: true, command: 'run',
     startedAt: '2026-10-30T00:00:00Z', finishedAt: '2026-10-30T00:05:00Z',
     skipped: false, files: [], usage,
   }
@@ -217,32 +223,32 @@ test('SubscriptionDoc is the markdown file plus its volume index', () => {
 })
 
 test('RunRequest carries optional stages for a release-only run', () => {
-  const base = { ipcSchema: 2, command: 'run' }
+  const base = { ipcSchema: 3, command: 'run' }
   assert.ok(validators.runRequest(base), 'absent stages means every stage')
   assert.ok(validators.runRequest({ ...base, stages: ['releases'] }))
   assert.ok(validators.runRequest({ ...base, stages: ['trending', 'digest'] }))
   assert.equal(validators.runRequest({ ...base, stages: ['bogus'] }), false)
   assert.equal(validators.runRequest({ ...base, stages: 'releases' }), false)
   // stages is a run-only knob.
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'version', stages: ['releases'] }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'version', stages: ['releases'] }), false)
   assert.equal(
-    validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'list', stages: ['releases'] }),
+    validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'list', stages: ['releases'] }),
     false,
   )
 })
 
 test('RunRequest accepts subscribe releases with an optional volume', () => {
-  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases', repo: 'o/r' }))
-  assert.ok(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases', repo: 'o/r', volume: 2 }))
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases' }), false)
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'list', volume: 2 }), false)
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'remove', repo: 'o/r', volume: 1 }), false)
-  assert.equal(validators.runRequest({ ipcSchema: 2, command: 'subscribe', action: 'releases', repo: 'o/r', volume: 0 }), false)
+  assert.ok(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'releases', repo: 'o/r' }))
+  assert.ok(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'releases', repo: 'o/r', volume: 2 }))
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'releases' }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'list', volume: 2 }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'remove', repo: 'o/r', volume: 1 }), false)
+  assert.equal(validators.runRequest({ ipcSchema: 3, command: 'subscribe', action: 'releases', repo: 'o/r', volume: 0 }), false)
 })
 
 test('RunResult can carry a subscription list or document envelope', () => {
   const base = {
-    ipcSchema: 2, ok: true, command: 'subscribe',
+    ipcSchema: 3, ok: true, command: 'subscribe',
     startedAt: '2026-11-01T00:00:00Z', finishedAt: '2026-11-01T00:00:01Z',
     skipped: false, files: [],
   }

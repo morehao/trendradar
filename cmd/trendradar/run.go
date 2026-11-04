@@ -324,6 +324,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			sum := sha256.Sum256(f.Data)
 			out.Files = append(out.Files, ipc.FileArtifact{Path: f.Path, Bytes: len(f.Data), SHA256: "sha256:" + hex.EncodeToString(sum[:])})
 		}
+		out.Digest = digestArtifact(result, *dryRun)
 		b, _ := json.Marshal(out)
 		fmt.Println(string(b))
 		return nil
@@ -586,4 +587,28 @@ func applyObservation(cfg *config.Config, repos []digest.RepoSnapshot, fetcher o
 		BackfillDays:  cfg.Observe.BackfillDays,
 	}
 	return observe.Apply(context.Background(), st, repos, opts, fetcher)
+}
+
+// digestArtifact projects the digest rendered by this run into the wire shape
+// (ipc v3). It returns nil when the run rendered nothing: dry runs and the
+// merged / pr-closed early exits never build artifacts. The consumer may look
+// at the result only after the branch was merged and deleted, so the bytes must
+// ride in the envelope rather than be re-read from the output repository.
+func digestArtifact(result app.Result, dryRun bool) *ipc.DigestArtifact {
+	if dryRun || result.DigestPath == "" {
+		return nil
+	}
+	for _, f := range result.Files {
+		if f.Path != result.DigestPath {
+			continue
+		}
+		sum := sha256.Sum256(f.Data)
+		return &ipc.DigestArtifact{
+			Path:   f.Path,
+			Bytes:  len(f.Data),
+			SHA256: "sha256:" + hex.EncodeToString(sum[:]),
+			Text:   string(f.Data),
+		}
+	}
+	return nil
 }

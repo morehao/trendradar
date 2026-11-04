@@ -97,8 +97,8 @@ contract/              独立 Go module + npm 包：所有对外数据形状的�
   **不要手改** `contract.gen.go` 与 `gen/ts/*`。
 - **别名而非复制**：内核用 `type X = contract.X` 引用，禁止在 `internal/` 里再定义一份
   同名结构（`internal/digest`、`internal/releasedigest` 都是这个模式）。
-- **wire 整数与包版本解耦**：`ipcSchema`/`digestSchema` 目前都是 `2`；新增**可选**字段
-  只升包版本（`0.2.0 → 0.3.0`），提升 wire 整数会让所有旧插件握手失败。
+- **wire 整数与包版本解耦**：`ipcSchema=3`、`digestSchema=2`；新增**可选**字段只升包版本，
+  提升 wire 整数会让所有旧插件握手失败（0.6.0 的 `ipcSchema` 2→3 就是一次这样的破坏性切换）。
 - **`RunRequest` 是唯一严格对象**（`additionalProperties: false`），新增字段必须显式声明；
   条件规则用 `if/then` 表达（例如 `subscribe` 的 `action`/`repo`）。
 - **生成器限制**：`allOf` 有两种形态——组合（首项是 `$ref`）与条件校验；新增 schema 时

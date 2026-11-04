@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: trendradar serve API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the
     contract schemas, so the plugin and any web UI consume the same shapes

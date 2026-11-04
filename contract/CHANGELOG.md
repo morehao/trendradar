@@ -3,9 +3,21 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
-## Unreleased
+## 0.6.0
 
-_Nothing yet._
+Digest inlined in `RunResult`. **Breaking wire bump**: `ipcSchema` 2 → 3
+(`digestSchema` stays 2). A core/plugin pair must both move to this contract
+line; the plugin's handshake hard-rejects the mismatch.
+
+### Added
+- `RunResult.digest` (optional): the digest document this run rendered —
+  `{ path, bytes, sha256, text }`. `bytes`/`sha256` describe `text`'s UTF-8 bytes
+  exactly as written to `path`; `text` is capped at 1 MiB.
+  Present whenever the digest stage rendered a document (including
+  `skipped=unchanged` and the `merged` / `pr-closed` early exits, which render
+  before the PR pre-check); absent for dry runs, release-only runs, and failures
+  before rendering. Consumers no longer need to read the output repository to
+  display the digest.
 
 ## 0.5.0
 

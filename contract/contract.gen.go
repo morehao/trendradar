@@ -69,6 +69,13 @@ type FileArtifact struct {
 	SHA256 string `json:"sha256"`
 }
 
+type DigestArtifact struct {
+	Path   string `json:"path"`
+	Bytes  int    `json:"bytes"`
+	SHA256 string `json:"sha256"`
+	Text   string `json:"text"`
+}
+
 type RunRequest struct {
 	IPCSchema  int      `json:"ipcSchema"`
 	Command    string   `json:"command"`
@@ -90,6 +97,7 @@ type RunResult struct {
 	FinishedAt      time.Time         `json:"finishedAt"`
 	Skipped         bool              `json:"skipped"`
 	Files           []FileArtifact    `json:"files"`
+	Digest          *DigestArtifact   `json:"digest,omitempty"`
 	Branch          *string           `json:"branch,omitempty"`
 	Commit          *string           `json:"commit,omitempty"`
 	PRUrl           *string           `json:"prUrl,omitempty"`

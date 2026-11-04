@@ -155,7 +155,7 @@ daily=90 / weekly=12 / monthly=12。配置文件里的 `output.retentionDays` �
 | `model.v2.json` | `RepoSnapshot` / `RepoDigest` | 经 digestSchema 传递 |
 | `digest.v2.json` | 榜单文档 | `digestSchema` (2) |
 | `releases.v2.json` | 发版文档 + 运行报告 + 订阅列表 | 无独立 wire key |
-| `ipc.v2.json` | `RunRequest`（严格）/ `RunResult` / `Usage` / `State` | `ipcSchema` (2) |
+| `ipc.v3.json` | `RunRequest`（严格）/ `RunResult`（含回传的 `DigestArtifact`）/ `Usage` / `State` | `ipcSchema` (3) |
 | `errors.v2.json` | 17 个错误码 + 可重试标记 | — |
 | `version-info.v2.json` | 握手 | `contractVersion` |
 | `api.v2.yaml` | serve 的 OpenAPI | `info.version` |

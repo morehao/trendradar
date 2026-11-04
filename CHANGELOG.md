@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.0
+
+### Changed — 榜单文档随 `RunResult` 回传（ipc v3）
+- 背景：插件原先在运行结束后**读用户仓库的工作树**取本期 digest 做预览。0.8.6 起 PR 自动合并后会
+  切回 base 并删除分支，本地 base 往往落后于远端，导致读到的文件缺失或还是旧版，预览被静默跳过
+  （表现：面板里周/月榜长期停留在旧副本，缺少新排版里的 `## all` 分块）。
+- `contract` 0.6.0：`ipcSchema` 2 → 3；`RunResult` 新增可选 `digest`
+  `{path, bytes, sha256, text}`，即本次渲染出的 markdown 原文。`bytes`/`sha256` 与 `text` 的
+  UTF-8 字节一致，`text` 上限 1 MiB。凡是渲染出 digest 的运行都会带（含 `skipped=unchanged`、
+  `merged`、`pr-closed`，它们在 PR 预检之前就完成渲染）；dry-run、releases-only、渲染前失败不带。
+- `internal/app`：`Result` 新增 `DigestPath`，渲染后从产物里认出本期 digest。
+- `cmd/trendradar`：`run --json` 新增 `digest` 字段（`digestArtifact`），复用与 `files` 同一份
+  字节计算 sha，不再需要调用方二次读盘。
+
+### 兼容性
+- **破坏性**：`ipcSchema` 2 → 3（`digestSchema` 保持 2）。新旧核心/插件不能混搭，插件握手会直接
+  拒绝；插件侧随 0.9.0 升级契约依赖与预览实现。
+- `digests/` 目录布局、`contentHash`、`files` 形状均不变。
+
 ## 0.8.7
 
 ### Fixed — 降级告警只说「哪个语言失败」，不说「为什么」
