@@ -203,6 +203,42 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	var files []render.File
 	var d digest.Digest
 
+	// Sync the local base checkout before reading history for the index. The
+	// renderer's ListDigests (below) reads the *working tree* of whatever branch
+	// is checked out. Between runs the automation only `git switch`es back to the
+	// base branch (see the cleanup block at the end) and never pulls it, while
+	// the remote base keeps advancing as merged PRs land. Reading a stale base
+	// drops every date merged since the last pull: index.md loses rows for days
+	// already shipped. Fast-forward the local base first so the history scan sees
+	// the repo's truth. Must run before the digest render below.
+	if !opts.DryRun && cfg != nil {
+		base := cfg.Repo.BaseBranch
+		if base == "" {
+			base = "main"
+		}
+		remote := cfg.Repo.Remote
+		if remote == "" {
+			remote = "origin"
+		}
+		if serr := gitx.EnsureInstalled(); serr != nil {
+			return res, serr
+		}
+		g := gitx.New(cfg.Repo.Path)
+		if _, terr := g.Toplevel(ctx); terr != nil {
+			return res, terr
+		}
+		// Best-effort: a sync failure must not abort a run whose artifacts can
+		// still be rendered and pushed. It is surfaced as a warning, and the
+		// branch-level sync below retries the fast-forward before switching.
+		if ferr := g.Fetch(ctx, remote); ferr != nil {
+			rep.Warnings = append(rep.Warnings, "base sync (fetch): "+ferr.Error())
+		} else if cur, cerr := g.CurrentBranch(ctx); cerr == nil && cur == base {
+			if perr := g.PullFFOnly(ctx, remote, base); perr != nil {
+				rep.Warnings = append(rep.Warnings, "base sync (pull): "+perr.Error())
+			}
+		}
+	}
+
 	if wantsDigest {
 		sumStart := time.Now()
 		// Persisted summary cache: without it every run re-asks the model, the
@@ -493,6 +529,18 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	}
 	branch := prefix + period + "/" + name
 
+	// Fast-forward the local base before deriving a new date branch from it. A
+	// prior run that ended by auto-merging (and so skipped the cleanup block) or
+	// a run that never got as far as cleanup leaves the local base behind the
+	// remote; branching from a stale remote/base would omit dates already merged
+	// upstream. Only when we are actually on base — switching away from a date
+	// branch is handled when that branch is (re)created below.
+	if cur, cerr := g.CurrentBranch(ctx); cerr == nil && cur == base {
+		if perr := g.PullFFOnly(ctx, remote, base); perr != nil {
+			return res, perr
+		}
+	}
+
 	// PR lifecycle pre-check, before any git work:
 	//   merged + schedule  -> the date is done, skip (automation must not re-open
 	//                         a finished day, and the merged PR record persists in
@@ -686,10 +734,17 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 					rep.Warnings = append(rep.Warnings, "branch cleanup (remote): "+derr.Error())
 				}
 				// Delete the local branch too; must switch off it first because git
-				// refuses to delete the current branch.
+				// refuses to delete the current branch. After switching to base,
+				// fast-forward it so the next run's history scan starts from an
+				// up-to-date working tree (see the start-of-run base sync above:
+				// cleanup used to switch without pulling, so back-to-back runs read
+				// a stale base and dropped merged dates from index.md).
 				if serr := g.Switch(ctx, cfg.Repo.BaseBranch); serr == nil {
 					if derr := g.DeleteLocalBranch(ctx, branch); derr != nil {
 						rep.Warnings = append(rep.Warnings, "branch cleanup (local): "+derr.Error())
+					}
+					if perr := g.PullFFOnly(ctx, remote, cfg.Repo.BaseBranch); perr != nil {
+						rep.Warnings = append(rep.Warnings, "branch cleanup (pull base): "+perr.Error())
 					}
 				} else {
 					rep.Warnings = append(rep.Warnings, "branch cleanup (switch to base): "+serr.Error())

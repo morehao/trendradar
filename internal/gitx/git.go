@@ -219,6 +219,17 @@ func (g *Git) PullRebase(ctx context.Context, remote, branch string) error {
 	return err
 }
 
+// PullFFOnly fast-forwards the current branch onto remote/branch, refusing to
+// create a merge commit or rebase. It is how the automation keeps its local base
+// checkout current: the repo is only ever appended to on the base branch, so a
+// fast-forward is the only correct sync. A non-fast-forward (local commits on
+// base, or a force-pushed remote) is returned as an error rather than silently
+// diverging — the caller surfaces it and the next run retries.
+func (g *Git) PullFFOnly(ctx context.Context, remote, branch string) error {
+	_, _, err := g.run(ctx, "pull", "--ff-only", remote, branch)
+	return err
+}
+
 func writeAskpass(token string) (string, func(), error) {
 	dir, err := os.MkdirTemp("", "trendradar-askpass-*")
 	if err != nil {

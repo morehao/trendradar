@@ -959,3 +959,59 @@ func isAncestor(t *testing.T, remote, commit, ref string) bool {
 	cmd := exec.Command("git", "--git-dir", remote, "merge-base", "--is-ancestor", commit, ref)
 	return cmd.Run() == nil
 }
+
+// Regression (A): the local base checkout must be fast-forwarded before the
+// index is rendered. Between runs the automation only switches back to base (or
+// ends on a merged-PR skip) and never pulls, while the remote base keeps moving
+// as merged PRs land. Reading a stale base makes ListDigests miss every date
+// merged since the last sync, so index.md silently loses already-shipped rows.
+// This test advances origin/main behind the local checkout's back and asserts the
+// next run still renders both dates into index.md.
+func TestStaleBaseStillRendersMergedDatesInIndex(t *testing.T) {
+	remote, work, cfg := setupRepo(t)
+
+	// Day 1: a normal run on a date branch. It is not auto-merged, so the run
+	// ends by switching back to base but leaves the date branch checked out
+	// nowhere — cleanup is skipped because the PR is not merged.
+	if _, err := Run(context.Background(), cfg, fixtureInputs(), Options{Provider: model.NewFake()}); err != nil {
+		t.Fatalf("day 1 run: %v", err)
+	}
+
+	// Simulate another machine merging day 1's PR into main: check out the day-1
+	// branch, add the index commit it would have produced, and push it to main.
+	// Then return the local checkout to base WITHOUT pulling — exactly the state
+	// a completed automation loop leaves behind.
+	day1 := "trending/daily/2026-10-30"
+	runGit(t, work, "fetch", "origin")
+	runGit(t, work, "switch", "-C", "sim-merge", "origin/"+day1)
+	// The branch carries the digest artifacts; commit them onto main to model a
+	// squash merge of the PR.
+	runGit(t, work, "push", "origin", "sim-merge:main")
+	runGit(t, work, "switch", "main")
+
+	// Local main is now behind the remote (which has day 1's files). The old
+	// behaviour would render day 2 against this stale tree and lose day 1.
+	if got := countRef(t, remote, "main"); got == 0 {
+		t.Fatal("remote main unexpectedly empty")
+	}
+
+	// Day 2: a different date. The start-of-run base sync must ff-only main so the
+	// history scan sees day 1's files and index.md keeps its row.
+	in2 := fixtureInputs()
+	in2.Date = "2026-10-31"
+	if _, err := Run(context.Background(), cfg, in2, Options{Provider: model.NewFake()}); err != nil {
+		t.Fatalf("day 2 run: %v", err)
+	}
+
+	idx, err := os.ReadFile(filepath.Join(work, "digests", "index.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(idx)
+	if !strings.Contains(body, "2026-10-30") {
+		t.Fatalf("index.md lost the already-merged 2026-10-30 row after a stale-base run:\n%s", body)
+	}
+	if !strings.Contains(body, "2026-10-31") {
+		t.Fatalf("index.md missing the new 2026-10-31 row:\n%s", body)
+	}
+}
