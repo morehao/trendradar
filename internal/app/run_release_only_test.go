@@ -125,6 +125,44 @@ func TestReleaseOnlyRunLeavesSubscriptionsAlone(t *testing.T) {
 	}
 }
 
+// Regression: with branchGrouping=per-date, a release-only run has no digest, so
+// d.Date is "". The per-date branch override must not fire on the empty date —
+// otherwise the branch degrades to the bare prefix ("trending/"), which git
+// rejects (fatal: 'trending/' is not a valid branch name) and the whole run
+// fails with GIT_OPERATION_FAILED. The release-only run must keep the per-period
+// branch (trending/weekly/<date>) even under per-date grouping.
+func TestReleaseOnlyRunPerDateGroupingKeepsPeriodBranch(t *testing.T) {
+	_, work, cfg := setupRepo(t)
+	cfg.Output.BranchGrouping = config.BranchGroupingPerDate
+	cfg.Releases = weeklyReleasesConfig(work)
+	commitFile(t, work, "digests/subscriptions.yaml", "schema: 1\nsubscriptions:\n  - o/r\n")
+
+	tm := time.Unix(1700000000, 0).UTC()
+	svc := &fakeReleaseFetcher{releases: map[string][]fetch.Release{
+		"o/r": {{ID: 1, TagName: "v1", Name: "v1", Body: "first", PublishedAt: &tm, HTMLURL: "https://github.com/o/r/releases/tag/v1"}},
+	}}
+
+	res, err := Run(context.Background(), cfg, Inputs{Date: "2026-10-30"}, Options{
+		Provider: model.NewFake(),
+		Stages:   []string{StageReleases},
+		Releases: &ReleasesOptions{
+			Repos:     []string{"o/r"},
+			Fetcher:   svc,
+			StatePath: releasewatch.StatePath(work),
+			CachePath: filepath.Join(work, ".git", "trendradar-release-cache.json"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("release-only run with per-date grouping failed: %v", err)
+	}
+	if res.Branch != "trending/weekly/2026-W44" {
+		t.Fatalf("branch=%q, want trending/weekly/2026-W44 (not the bare prefix 'trending/')", res.Branch)
+	}
+	if _, err := os.Stat(filepath.Join(work, "digests", "releases", "o", "r-01.md")); err != nil {
+		t.Fatalf("release document missing: %v", err)
+	}
+}
+
 // A4 at the run level: the same week twice produces exactly one commit.
 func TestReleaseOnlyRunIsIdempotentWithinWeek(t *testing.T) {
 	remote, work, cfg := setupRepo(t)
