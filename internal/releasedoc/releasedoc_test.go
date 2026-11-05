@@ -235,6 +235,27 @@ func TestSectionCapsListedTags(t *testing.T) {
 	}
 }
 
+func TestSectionRendersStructuredSummary(t *testing.T) {
+	sec := Section{
+		Repo:      "o/r",
+		WeekStart: "2026-10-26",
+		WeekEnd:   "2026-11-01",
+		SummaryZh: "本周要点一句话。\n\n**主要变更**\n- 新增 A\n- 修复 B\n\n**升级建议**\n- 建议升级",
+		Items:     []Item{{Tag: "v1.0.0", URL: "https://github.com/o/r/releases/tag/v1.0.0", Date: "2026-11-01"}},
+	}
+	text := sec.Render()
+	for _, want := range []string{"**主要变更**", "- 新增 A", "- 修复 B", "**升级建议**"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("structured summary piece %q missing:\n%s", want, text)
+		}
+	}
+	// The section must still expose exactly one `## ` heading (the week line);
+	// the structured summary must not introduce any additional ATX heading.
+	if strings.Count(text, "\n## ") != 0 || !strings.HasPrefix(text, "## 2026-10-26 ~ 2026-11-01") {
+		t.Fatalf("section heading corrupted by structured summary:\n%s", text)
+	}
+}
+
 func TestValidRepoRejectsTraversal(t *testing.T) {
 	for _, repo := range []string{"o/r", "a-b/c.d", "a_b/c-d"} {
 		if !ValidRepo(repo) {

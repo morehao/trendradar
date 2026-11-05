@@ -171,24 +171,82 @@ var (
 	reMDLink = regexp.MustCompile(`!?\[[^\]]*\]\([^)]*\)`)
 	reHTML   = regexp.MustCompile(`<[^>]*>`)
 	reURL    = regexp.MustCompile(`https?://\S+`)
+	// leadHash strips a rogue ATX heading marker: the release *document* splits
+	// sections on `## ` lines, so model output must never introduce a heading
+	// that could be mistaken for a section boundary. The prompt forbids `#`
+	// anyway; this is the defensive net.
+	leadHash = regexp.MustCompile(`^\s{0,3}#{1,6}\s*`)
 )
 
+// sanitize keeps the summary safe while preserving the light Markdown structure
+// the model is asked to produce (bold labels + `- ` bullets). It still treats
+// the text as data: Markdown links, raw HTML and bare URLs are removed, and the
+// text is never interpreted as instructions.
+//
+// Unlike the previous version it does NOT collapse every whitespace run into a
+// single space — that flattened structured output back into one dense paragraph,
+// which is exactly the readability problem this change fixes. Line breaks are
+// kept; only pathological runs of blank lines are squeezed.
 func sanitize(s string) string {
-	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
 	s = reMDLink.ReplaceAllString(s, "")
 	s = reHTML.ReplaceAllString(s, "")
 	s = reURL.ReplaceAllString(s, "")
 	s = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
+		switch r {
+		case '\n':
+			return '\n'
+		case '\t':
 			return ' '
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
 		}
 		return r
 	}, s)
-	return strings.TrimSpace(strings.Join(strings.Fields(s), " "))
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	blank := 0
+	for _, line := range lines {
+		line = strings.TrimRight(line, " ")
+		line = leadHash.ReplaceAllString(line, "")
+		// Normalize common bullet glyphs to a Markdown "- " so the renderer
+		// treats them consistently.
+		line = strings.TrimLeft(line, " ")
+		switch {
+		case line == "•" || line == "·":
+			line = "- "
+		case strings.HasPrefix(line, "• "):
+			line = "- " + strings.TrimPrefix(line, "• ")
+		case strings.HasPrefix(line, "· "):
+			line = "- " + strings.TrimPrefix(line, "· ")
+		}
+		if strings.TrimSpace(line) == "" {
+			blank++
+			if blank > 1 {
+				continue
+			}
+			out = append(out, "")
+			continue
+		}
+		blank = 0
+		out = append(out, line)
+	}
+	// Trim leading/trailing blank lines.
+	for len(out) > 0 && out[0] == "" {
+		out = out[1:]
+	}
+	for len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return strings.Join(out, "\n")
 }
 
 // degradeSummary is the no-model fallback: it keeps every version's own notes
-// so the week is not silently lost, then trims to the configured budget.
+// so the week is not silently lost, then trims to the configured budget. Notes
+// are kept on their own lines so the document stays readable when the model is
+// unavailable.
 func degradeSummary(cands []candidate) string {
 	parts := make([]string, 0, len(cands))
 	for _, c := range cands {
@@ -196,12 +254,12 @@ func degradeSummary(cands []candidate) string {
 		if text == "" {
 			continue
 		}
-		parts = append(parts, c.tagName()+": "+text)
+		parts = append(parts, "**"+c.tagName()+"**\n"+text)
 	}
 	if len(parts) == 0 {
 		return fmt.Sprintf("本周 %d 个版本（未获取到变更说明）", len(cands))
 	}
-	return "本周 " + fmt.Sprint(len(cands)) + " 个版本。" + strings.Join(parts, "；")
+	return "本周 " + fmt.Sprint(len(cands)) + " 个版本。" + strings.Join(parts, "\n\n")
 }
 
 // hanRatio is used by tests/diagnostics if needed.
