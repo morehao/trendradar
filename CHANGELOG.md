@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.0
+
+### Changed — 发版订阅摘要改为轻量结构化，面板不再是一大段密文
+- 现象：订阅页抽屉里每期「变更记录」的模型摘要是**一整段密集散文**（外加版本列表），
+  长文难扫读、没有层级。
+- 根因：`releasewatch` 的发版摘要 prompt 只要求「合成一段总结」，且 `sanitize()` 用
+  `strings.Fields` 把换行也压成空格——**即使模型写了分段也会被压平**，所以文档永远是
+  一个段落。这是内容生成侧的问题，不是渲染侧。
+- 改动（**content，不是 wire**，`summaryZh` 仍是字符串，契约/schema 不变）：
+  - `internal/releasewatch/prompt.go`：`PromptVersion` v2→v3，要求用**加粗短标签**
+    （如 `**主要变更**` / `**破坏性变更**` / `**升级建议**`）分小段、条目用无序列表
+    （`- `），明确禁止 `#`/`##` 标题、表格与 HTML；`buildUserPrompt` 措辞同步。
+  - `internal/releasewatch/summary.go`：`sanitize()` 改为**保留行结构**（换行、`- ` 列表、
+    `**加粗**`），仍按数据清洗——移除 Markdown 链接 / HTML / 裸 URL，折叠多余空行，
+    归一 `•`/`·` 为 `- `，并**剥除模型误写的 ATX `#` 标题**（避免与文档 `## 周区间`
+    小节分界冲突）。`degradeSummary` 降级摘要改为「**版本** + 独立行原文」，同样可读。
+- 影响面：非破坏性。旧缓存因 `PromptVersion` 升号自动失效、重新生成；历史已提交的文档
+  保持原样（不回写）。下游 `serve` 的 `/api/v2/releases*` 读的 `summaryZh` 仍是字符串，
+  无需改动；`@morehao/trendradar-contract` 不升版本。唯一约束：消费方若假定 `summaryZh`
+  是「单行纯文本」，需允许其含换行与轻量 Markdown（DSH 插件已支持渲染 `**`/`- `）。
+
 ## 0.9.3
 
 ### Fixed — `per-date` 分组下发版订阅运行报 `'trending/' is not a valid branch name`
