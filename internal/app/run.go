@@ -528,12 +528,20 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		prefix = "trending/"
 	}
 	branch := prefix + period + "/" + name
-	if cfg.Output.BranchGrouping == config.BranchGroupingPerDate {
+	if cfg.Output.BranchGrouping == config.BranchGroupingPerDate && d.Date != "" {
 		// One branch per date instead of one per period: daily/weekly/monthly
 		// append onto the same branch, so trending/index.md grows on a single
 		// branch (no sibling branches rewriting the same file) and one PR can
 		// carry all digests of the date. The append-only path below already
 		// switches to an existing branch and stacks a commit on it.
+		//
+		// Guard on d.Date: a release-only run (stages: ["releases"]) has no
+		// digest, so d is the zero value and d.Date is "". Without this guard
+		// per-date would produce the bare prefix ("trending/"), which git
+		// rejects (fatal: 'trending/' is not a valid branch name). Release-only
+		// runs therefore keep the per-period name (prefix+period+"/"+name,
+		// e.g. trending/weekly/2026-W45), which is also the branch subscribe/
+		// serve read via subscription.RunBranchName.
 		branch = prefix + d.Date
 	}
 
