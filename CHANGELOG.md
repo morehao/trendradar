@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.9.3
+
+### Fixed — `per-date` 分组下发版订阅运行报 `'trending/' is not a valid branch name`
+- 现象：开启 `output.branchGrouping: per-date` 后，**release-only 运行**
+  （`run --stages releases`，即发版订阅）整次失败，报
+  `GIT_OPERATION_FAILED: fatal: 'trending/' is not a valid branch name`；
+  普通榜单/digest 运行不受影响。
+- 根因：release-only 没有 digest，`d` 为零值、`d.Date == ""`；`internal/app` 的
+  `per-date` 分支覆盖无差别执行 `branch = prefix + d.Date`，退化成裸前缀 `trending/`，
+  随后 `git switch -C trending/ origin/main` 被 git 拒绝。
+- `internal/app`：`per-date` 覆盖增加 `d.Date != ""` 守卫。release-only 保持 per-period
+  分支名（`<branchPrefix><period>/<date>`，如 `trending/weekly/2026-W45`），也正是
+  subscribe/serve 通过 `subscription.RunBranchName` 读取的分支。
+- 测试：新增 `TestReleaseOnlyRunPerDateGroupingKeepsPeriodBranch`（撤销修复即以同一条
+  `GIT_OPERATION_FAILED` 失败，可直接捕获）。
+
+## 0.9.2
 
 ### Added — 同一天的多周期可合并到一条分支（`output.branchGrouping`）
 - 现象：`schedule.periods` 同时跑日/周/月时，每个周期各建一条分支；三条分支都改写同一份
