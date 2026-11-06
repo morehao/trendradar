@@ -39,15 +39,14 @@ func (c candidate) tagName() string {
 	return c.rel.Name
 }
 
-// cacheKey covers the whole week: the week key plus a hash of every tag and its
-// notes, so an edited release body or a late-added tag re-summarizes while an
-// unchanged week is served from cache.
-func (s *Summarizer) cacheKey(weekKey string, cands []candidate) string {
+// cacheKey covers one version: its tag and a hash of its notes, so an edited
+// body re-summarizes while an unchanged version is served from cache. The key is
+// per (repo, tag) — the incremental unit — not per week, so adding one version to
+// a week only summarizes that one and reuses the rest.
+func (s *Summarizer) cacheKey(c candidate) string {
 	h := sha256.New()
-	for _, c := range cands {
-		fmt.Fprintf(h, "%s\x00%s\x00", c.tagName(), c.rel.Body)
-	}
-	return weekKey + "|" + hex.EncodeToString(h.Sum(nil)[:8])
+	fmt.Fprintf(h, "%s\x00%s\x00", c.tagName(), c.rel.Body)
+	return c.tagName() + "|" + hex.EncodeToString(h.Sum(nil)[:8])
 }
 
 // Summarizer writes weekly release summaries with a persistent cache and
@@ -80,21 +79,20 @@ func NewSummarizer(chat model.Provider, cache *summarize.Cache, maxNotes, maxCha
 	return &Summarizer{chat: chat, cache: cache, maxNotes: maxNotes, maxChars: maxChars}
 }
 
-// SummarizeRepo makes at most one model call for the whole week and returns one
-// Chinese summary. A cache hit costs nothing; a model failure degrades to the
-// original notes instead of dropping the week.
-func (s *Summarizer) SummarizeRepo(ctx context.Context, repo, weekKey string, cands []candidate) SummaryResult {
-	if len(cands) == 0 {
-		return SummaryResult{}
-	}
-	key := s.cacheKey(weekKey, cands)
+// SummarizeCandidate produces one Chinese summary for a single version. Each
+// version is summarized independently so the document carries a per-release
+// summary (the incremental unit), and the cache is keyed per (repo, tag) so only
+// newly published versions cost a model call. A cache hit costs nothing; a model
+// failure degrades to the original notes instead of dropping the version.
+func (s *Summarizer) SummarizeCandidate(ctx context.Context, repo string, c candidate) SummaryResult {
+	key := s.cacheKey(c)
 	if s.cache != nil {
 		if zh, ok := s.cache.Get(repo, key); ok {
 			return SummaryResult{SummaryZh: zh, Source: "model"}
 		}
 	}
 	if s.chat != nil {
-		res, err := s.chat.Complete(ctx, SystemPrompt, buildUserPrompt(repo, cands, s.maxNotes, s.maxChars))
+		res, err := s.chat.Complete(ctx, SystemPrompt, buildItemPrompt(repo, c, s.maxNotes, s.maxChars))
 		if err == nil {
 			s.mu.Lock()
 			s.calls++
@@ -120,8 +118,19 @@ func (s *Summarizer) SummarizeRepo(ctx context.Context, repo, weekKey string, ca
 			}
 		}
 	}
-	zh, truncated := s.cap(degradeSummary(cands))
+	zh, truncated := s.cap(degradeOne(c))
 	return SummaryResult{SummaryZh: zh, Source: "original", Truncated: truncated}
+}
+
+// SummarizeRepo summarizes every candidate independently and returns one result
+// per candidate, in the same order. It is a thin fan-out over SummarizeCandidate
+// so callers (and older tests) keep a single entry point.
+func (s *Summarizer) SummarizeRepo(ctx context.Context, repo, weekKey string, cands []candidate) []SummaryResult {
+	out := make([]SummaryResult, 0, len(cands))
+	for _, c := range cands {
+		out = append(out, s.SummarizeCandidate(ctx, repo, c))
+	}
+	return out
 }
 
 // cap enforces summaryMaxChars by truncating with an ellipsis rather than
@@ -243,10 +252,22 @@ func sanitize(s string) string {
 	return strings.Join(out, "\n")
 }
 
+// degradeOne is the no-model fallback for a single version: keep its own notes
+// so the version is not silently lost, trimmed to the configured cap later.
+// Formatted like degradeSummary (bold tag + its own lines) so a per-version
+// fallback reads the same as the week fallback.
+func degradeOne(c candidate) string {
+	text := sanitize(c.rel.Body)
+	if text == "" {
+		return "**" + c.tagName() + "**\n未提供变更说明"
+	}
+	return "**" + c.tagName() + "**\n" + text
+}
+
 // degradeSummary is the no-model fallback: it keeps every version's own notes
 // so the week is not silently lost, then trims to the configured budget. Notes
 // are kept on their own lines so the document stays readable when the model is
-// unavailable.
+// unavailable. Kept for callers that still summarize a batch at once.
 func degradeSummary(cands []candidate) string {
 	parts := make([]string, 0, len(cands))
 	for _, c := range cands {

@@ -419,6 +419,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		ro := releasewatch.Options{
 			Repos:              opts.Releases.Repos,
 			Trigger:            string(opts.Trigger), // "" => manual; only "schedule" enables the weekly gate
+			Force:              opts.Force,           // manual re-generate: re-summarize even already-summarized versions
 			Date:               in.Date,
 			Period:             rc.Period,
 			Timezone:           rc.Timezone,
@@ -1186,7 +1187,11 @@ func docItems(g releasedigest.RepoReleases) []releasedoc.Item {
 		if it.PublishedAt != nil {
 			date = it.PublishedAt.UTC().Format("2006-01-02")
 		}
-		items = append(items, releasedoc.Item{Tag: it.Tag, URL: it.URL, Date: date})
+		item := releasedoc.Item{Tag: it.Tag, URL: it.URL, Date: date}
+		if it.SummaryZh != nil {
+			item.SummaryZh = *it.SummaryZh
+		}
+		items = append(items, item)
 	}
 	return items
 }

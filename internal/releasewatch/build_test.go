@@ -71,7 +71,10 @@ func (failProv) Complete(context.Context, string, string) (model.Result, error) 
 }
 
 func rel(id int64, tag string) fetch.Release {
-	t := time.Unix(id, 0).UTC()
+	// Spread publish dates around the W44 test week so period attribution and
+	// ordering tests behave like real releases (id grows => later date), instead
+	// of 1970 timestamps that would (correctly) land in a 1970 week.
+	t := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC).AddDate(0, 0, int(id-1))
 	return fetch.Release{ID: id, TagName: tag, Name: tag, Body: "notes " + tag, PublishedAt: &t, HTMLURL: "https://github.com/o/r/releases/tag/" + tag}
 }
 
@@ -115,15 +118,21 @@ func TestBuildIncrement(t *testing.T) {
 		t.Fatalf("digest date=%s, want the week end 2026-11-01", d.Date)
 	}
 	g := d.Repos[0]
-	if g.SummaryZh == nil || *g.SummaryZh == "" {
-		t.Fatalf("repo summary missing: %+v", g)
+	// New model: the weekly roll-up is empty; each version carries its own summary.
+	if g.SummaryZh != nil && *g.SummaryZh != "" {
+		t.Fatalf("weekly roll-up should be empty on new data, got %q", *g.SummaryZh)
+	}
+	for _, it := range g.Releases {
+		if it.SummaryZh == nil || *it.SummaryZh == "" {
+			t.Fatalf("per-version summary missing for %s: %+v", it.Tag, it)
+		}
 	}
 	if g.PeriodStart == nil || *g.PeriodStart != "2026-10-26" || g.PeriodEnd == nil || *g.PeriodEnd != "2026-11-01" {
 		t.Fatalf("period=%v..%v, want 2026-10-26..2026-11-01", g.PeriodStart, g.PeriodEnd)
 	}
-	// One model call for the whole repo-week (design D2).
-	if rep.Calls != 1 || rep.Summarized != 1 || rep.Changed != 1 || rep.Checked != 1 {
-		t.Fatalf("report=%+v, want 1 call / 1 summarized / 1 changed", rep)
+	// One model call per new version (incremental unit): v3 and v2 => 2 calls.
+	if rep.Calls != 2 || rep.Summarized != 2 || rep.Changed != 1 || rep.Checked != 1 {
+		t.Fatalf("report=%+v, want 2 calls / 2 summarized / 1 changed", rep)
 	}
 	got, _ := state.Get("o/r")
 	if got.LastID != 3 {
@@ -355,11 +364,14 @@ func TestBuildDegradesOnModelFailure(t *testing.T) {
 	if d.Count != 2 || !d.Degraded {
 		t.Fatalf("digest=%+v, want degraded but not empty", d)
 	}
-	if rep.Degraded != 1 || rep.Summarized != 0 {
-		t.Fatalf("report=%+v, want 1 degraded", rep)
+	// Each of the two versions degraded independently.
+	if rep.Degraded != 2 || rep.Summarized != 0 {
+		t.Fatalf("report=%+v, want 2 degraded", rep)
 	}
-	if d.Repos[0].SummaryZh == nil || *d.Repos[0].SummaryZh == "" {
-		t.Fatalf("degraded summary must still be present: %+v", d.Repos[0])
+	for _, it := range d.Repos[0].Releases {
+		if it.SummaryZh == nil || *it.SummaryZh == "" {
+			t.Fatalf("degraded per-version summary must still be present for %s: %+v", it.Tag, it)
+		}
 	}
 }
 
@@ -372,7 +384,7 @@ func TestBuildTruncatesLongSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	zh := *d.Repos[0].SummaryZh
+	zh := *d.Repos[0].Releases[0].SummaryZh
 	if n := len([]rune(zh)); n != 20 {
 		t.Fatalf("summary runes=%d, want 20 (truncated with ellipsis)", n)
 	}
@@ -510,5 +522,44 @@ func TestBuildLegacyLastIDStateNoResummarize(t *testing.T) {
 	}
 	if len(tags) != 1 || tags[0] != "v3" {
 		t.Fatalf("want only v3, got %v", tags)
+	}
+}
+
+// A forced run re-summarizes versions that are already in the incremental cursor
+// (the "re-generate" button), instead of stopping at SummarizedTags. Non-forced
+// runs keep the cursor and produce nothing new.
+func TestBuildForceResummarizesSummarized(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(2, "v2"), rel(1, "v1")}}}
+	o := baseOpts(t, f)
+	o.Trigger = "manual"
+	st := NewState()
+	st.Set("o/r", RepoState{LastID: 0})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	_, firstState, _, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstState.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	// Non-forced re-run: everything already summarized -> nothing new.
+	_, _, rep, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Changed != 0 || rep.NewReleases != 0 {
+		t.Fatalf("non-forced re-run report=%+v, want no change", rep)
+	}
+	// Forced re-run: re-summarize both versions.
+	o.Force = true
+	f.calls = 0
+	_, _, repF, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repF.NewReleases != 2 || repF.Summarized != 2 {
+		t.Fatalf("forced re-run report=%+v, want 2 re-summarized", repF)
 	}
 }

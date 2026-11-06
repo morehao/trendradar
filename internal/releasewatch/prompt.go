@@ -60,6 +60,25 @@ func buildUserPrompt(repo string, batch []candidate, maxNotes, maxChars int) str
 	return b.String()
 }
 
+// buildItemPrompt encodes ONE version as delimited data, asking for a summary of
+// just that release. The <RELEASE_NOTES> fence keeps untrusted changelog text
+// visually separate from instructions. maxNotes caps the notes so a single noisy
+// changelog cannot flood the prompt.
+func buildItemPrompt(repo string, c candidate, maxNotes, maxChars int) string {
+	if maxNotes <= 0 {
+		maxNotes = 4000
+	}
+	if maxChars <= 0 {
+		maxChars = DefaultSummaryMaxChars
+	}
+	notes := truncateRunes(strings.TrimSpace(c.rel.Body), maxNotes)
+	notes = strings.ReplaceAll(notes, "\r\n", "\n")
+	var b strings.Builder
+	fmt.Fprintf(&b, "仓库：%s\n版本：%s\n请为这一个版本写一段不超过 %d 个汉字的简体中文总结（不是整周概览，只讲这个版本）。\n\n", repo, c.tagName(), maxChars)
+	fmt.Fprintf(&b, "TAG=%s\n<RELEASE_NOTES>\n%s\n</RELEASE_NOTES>\n", c.tagName(), notes)
+	return b.String()
+}
+
 func truncateRunes(s string, n int) string {
 	if n <= 0 {
 		n = 4000
