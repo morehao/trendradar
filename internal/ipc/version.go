@@ -17,7 +17,7 @@ const ContractVersion = "0.7.0"
 //	go build -ldflags "-X github.com/morehao/trendradar/internal/ipc.Version=$(git describe --tags) \
 //	                    -X github.com/morehao/trendradar/internal/ipc.Commit=$(git rev-parse --short HEAD)"
 var (
-	Version = "0.12.0"
+	Version = "0.12.1"
 	Commit  = "dev"
 )
 
