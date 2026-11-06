@@ -27,7 +27,12 @@ type Fetcher interface {
 
 // Options configures one release-watch build.
 type Options struct {
-	Repos              []string
+	Repos []string
+	// Trigger says who asked for the run. It only changes the weekly gate:
+	// schedule runs skip a repo whose week already completed (nothing to do),
+	// while manual / forced runs ignore the week gate and always run the
+	// incremental diff (current tags − SummarizedTags). Empty means manual.
+	Trigger            string
 	Date               string // run date; the digest is dated by its week end
 	Period             string // summary period; weekly is the only supported value
 	Timezone           string // IANA name; empty means Asia/Shanghai
@@ -268,10 +273,13 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 	}
 	st, hasState := b.getState(repo)
 
-	// Weekly gate: a completed check for this ISO week means "do not ask again".
-	// Nothing is fetched, summarized or written, so a duplicate run (schedule +
-	// manual) costs nothing and cannot append the week twice (A4).
-	if hasState && st.WeekKey == b.week.Key {
+	// Weekly gate: only a *scheduled* run treats a completed week as "do not ask
+	// again". A manual or forced run must ignore it and run the incremental diff,
+	// otherwise an explicit re-run is silently short-circuited to "already done"
+	// even when versions were published after the scheduled check (the exact bug
+	// that hid a rc.1 release for a whole week). Manual runs still respect
+	// SummarizedTags, so they never redo an already-summarized version.
+	if b.opts.Trigger == "schedule" && hasState && st.WeekKey == b.week.Key {
 		return repoOutcome{status: statusAlreadyDone}
 	}
 
@@ -295,7 +303,19 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 		}
 		stop := false
 		for _, r := range filterReleases(pg.Releases, b.opts) {
-			if hasState && r.ID <= st.LastID {
+			// Incremental cursor. Primary: stop at a release whose tag is already
+			// summarized (SummmarizedTags). This means a baseline page that
+			// pre-recorded a newer LastID no longer swallows the versions in
+			// between — those tags are not summarized yet, so they are still
+			// picked up.
+			//
+			// Backward compatibility: a v2 state file has no SummarizedTags. For
+			// that legacy shape only, fall back to the old LastID watermark so an
+			// upgrade does not re-summarize the entire history. A fresh baseline
+			// deliberately leaves LastID at 0, so this fallback does not fire for
+			// new subscriptions.
+			if hasState && (hasSummarized(st, r.TagName) ||
+				(len(st.SummarizedTags) == 0 && st.LastID > 0 && r.ID <= st.LastID)) {
 				stop = true
 				break
 			}
@@ -319,7 +339,10 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 	// otherwise older tags outside the baseline page reappear as "new".
 	tagMode := !sawReleases && !(hasState && st.LastID > 0)
 	if len(cands) == 0 && b.opts.FallbackToTags && tagMode {
-		tags, capHit := b.fetchNewTags(ctx, owner, name, st.SeenTags)
+		// Diff against SummarizedTags (the incremental cursor), not SeenTags: a
+		// baseline page records seen tags without summarizing them, and those must
+		// still be picked up on the first real run.
+		tags, capHit := b.fetchNewTags(ctx, owner, name, st.SummarizedTags)
 		if capHit {
 			hitCap = true
 		}
@@ -338,6 +361,10 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 
 	// cands are newest-first. Render newest-first too, but advance the cursor
 	// from the oldest item so a future run can never skip an unprocessed version.
+	// Each summarized candidate also enters SummarizedTags: the incremental cursor
+	// that later runs diff against. Build never saves the state itself (the caller
+	// persists it only after the document publishes), so marking here is safe:
+	// a failed publish discards this in-memory state and nothing is lost.
 	next := st
 	for i := len(cands) - 1; i >= 0; i-- {
 		c := cands[i]
@@ -349,6 +376,7 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 		}
 		next.LastTag = c.tagName()
 		AddSeenTag(&next, c.tagName())
+		AddSummarizedTag(&next, c.tagName())
 	}
 	next.WeekKey = b.week.Key
 	next.Status = StatusOK
@@ -380,7 +408,10 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 	var pool []candidate
 	if len(rels) > 0 {
 		latest := rels[0]
-		st.LastID = latest.ID
+		// Deliberately do NOT advance LastID past the baseline page: LastID is a
+		// legacy watermark only. Leaving it at 0 means the first regular run diffs
+		// by SummarizedTags (empty here) and summarizes every version in the page,
+		// instead of the baseline silently swallowing the versions in between.
 		st.LastTag = latest.TagName
 		st.LastPublishedAt = latest.PublishedAt
 		for _, r := range rels {
@@ -398,6 +429,11 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 		st.LastTag = tags[0].Name
 		for _, t := range tags {
 			AddSeenTag(&st, t.Name)
+			// Tag fallback has no reliable "newness" (tag dates/ids are weak) and
+			// a repo may carry dozens of pre-subscription tags. A tag baseline is
+			// therefore the starting point: record these tags as summarized so
+			// the first regular run does NOT dump the whole tag history as "new".
+			AddSummarizedTag(&st, t.Name)
 			pool = append(pool, b.tagCandidate(ctx, repo, owner, name, t))
 		}
 	} else {
@@ -420,6 +456,12 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 		n = len(pool)
 	}
 	group, summarized, degraded, truncated := b.summarizeRepo(ctx, repo, pool[:n])
+	// Backfilled versions are summarized into the document now, so they enter the
+	// incremental cursor too — otherwise the first regular run would redo them.
+	for _, c := range pool[:n] {
+		AddSummarizedTag(&st, c.tagName())
+	}
+	b.putState(repo, st)
 	return repoOutcome{
 		group:       group,
 		status:      StatusOK,

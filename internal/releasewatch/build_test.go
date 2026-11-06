@@ -137,6 +137,7 @@ func TestBuildIncrement(t *testing.T) {
 func TestBuildWeeklyGateSkipsSecondRun(t *testing.T) {
 	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(2, "v2"), rel(1, "v1")}}}
 	o := baseOpts(t, f)
+	o.Trigger = "schedule" // the weekly gate applies to scheduled runs only
 	st := NewState()
 	st.Set("o/r", RepoState{LastID: 0})
 	if err := st.Save(o.StatePath); err != nil {
@@ -155,7 +156,8 @@ func TestBuildWeeklyGateSkipsSecondRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	callsAfterFirst := f.calls
-	// Same ISO week, different day: the gate must skip before any GitHub call.
+	// Same ISO week, different day: the scheduled gate must skip before any
+	// GitHub call.
 	o.Date = "2026-10-30"
 	d, _, rep, err := Build(context.Background(), f, o)
 	if err != nil {
@@ -169,6 +171,42 @@ func TestBuildWeeklyGateSkipsSecondRun(t *testing.T) {
 	}
 	if f.calls != callsAfterFirst {
 		t.Fatalf("second run hit GitHub (%d -> %d calls)", callsAfterFirst, f.calls)
+	}
+}
+
+// A manual run must NOT be short-circuited by the weekly gate: it re-runs the
+// incremental diff. With everything already summarized there is nothing new, so
+// it reports checked>0 / changed=0 rather than being silently skipped.
+func TestBuildManualIgnoresWeeklyGate(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(2, "v2"), rel(1, "v1")}}}
+	o := baseOpts(t, f)
+	o.Trigger = "manual"
+	st := NewState()
+	st.Set("o/r", RepoState{LastID: 0})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	_, firstState, _, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstState.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	// Same week, manual re-run: must still check the repo (not already_done).
+	o.Date = "2026-10-30"
+	d, _, rep, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Checked != 1 {
+		t.Fatalf("manual re-run report=%+v, want checked=1 (must not be gated)", rep)
+	}
+	if d.Count != 0 {
+		t.Fatalf("manual re-run count=%d, want 0 (nothing new to summarize)", d.Count)
+	}
+	if rep.Changed != 0 {
+		t.Fatalf("manual re-run changed=%d, want 0 (already summarized)", rep.Changed)
 	}
 }
 
@@ -204,8 +242,11 @@ func TestBuildBaseline(t *testing.T) {
 		t.Fatalf("baseline report=%+v, want checked=1", rep)
 	}
 	got, _ := state.Get("o/r")
-	if got.LastID != 2 || len(got.SeenTags) != 2 {
-		t.Fatalf("baseline state=%+v", got)
+	// Baseline deliberately leaves LastID at 0 and records no summarized tag: the
+	// first regular run then diffs by SummarizedTags and summarizes the baseline
+	// page instead of silently swallowing the versions in between (the rc.1 bug).
+	if got.LastID != 0 || len(got.SeenTags) != 2 || len(got.SummarizedTags) != 0 {
+		t.Fatalf("baseline state=%+v, want LastID=0, 2 seen, 0 summarized", got)
 	}
 	if got.Status != StatusBaseline || got.WeekKey != "2026-W44" {
 		t.Fatalf("baseline status=%q week=%q, want baseline + gate week", got.Status, got.WeekKey)
@@ -394,4 +435,80 @@ func (e *errFetcher) GetCommit(ctx context.Context, owner, repo, sha string) (fe
 
 func (e *errFetcher) ListTagsPage(ctx context.Context, owner, repo string, page, size int) (fetch.TagPage, error) {
 	return e.base.ListTagsPage(ctx, owner, repo, page, size)
+}
+
+// Regression: a baseline must not swallow versions published after it. Before
+// the fix, baseline set LastID to the newest page release, so a version released
+// afterwards (rc.1) was permanently hidden by the `r.ID <= LastID` cursor.
+func TestBuildBaselineDoesNotSwallowLaterRelease(t *testing.T) {
+	// Baseline sees alpha.3 (id 100) only.
+	f1 := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(100, "dsh-v0.2.2-alpha.3")}}}
+	o := baseOpts(t, f1)
+	o.BaselineOnFirstRun = true
+	_, baseState, _, err := Build(context.Background(), f1, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := baseState.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	// Later, rc.1 (id 200) is published.
+	f2 := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(200, "dsh-v0.2.2-rc.1"), rel(100, "dsh-v0.2.2-alpha.3")}}}
+	d, st, rep, err := Build(context.Background(), f2, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tags []string
+	for _, r := range d.Repos {
+		for _, x := range r.Releases {
+			tags = append(tags, x.Tag)
+		}
+	}
+	found := false
+	for _, tg := range tags {
+		if tg == "dsh-v0.2.2-rc.1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("rc.1 not picked up after baseline; got tags=%v", tags)
+	}
+	if rep.Checked != 1 || d.Count == 0 {
+		t.Fatalf("report=%+v count=%d, want the later release summarized", rep, d.Count)
+	}
+	got, _ := st.Get("o/r")
+	if !hasSummarized(got, "dsh-v0.2.2-rc.1") {
+		t.Fatalf("rc.1 not recorded in SummarizedTags: %+v", got.SummarizedTags)
+	}
+}
+
+// Backward compatibility: a v2 state file has only LastID (no SummarizedTags).
+// An upgrade must not re-summarize the whole history — the legacy LastID
+// watermark still bounds the diff.
+func TestBuildLegacyLastIDStateNoResummarize(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(3, "v3"), rel(2, "v2"), rel(1, "v1")}}}
+	o := baseOpts(t, f)
+	st := NewState()
+	// Legacy shape: watermark at v2, empty SummarizedTags.
+	st.Set("o/r", RepoState{LastID: 2, LastTag: "v2"})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	d, _, rep, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only v3 (id 3 > LastID 2) should be new; v1/v2 must not be re-summarized.
+	if d.Count != 1 || rep.Changed != 1 {
+		t.Fatalf("legacy state re-summarized history: count=%d report=%+v", d.Count, rep)
+	}
+	var tags []string
+	for _, r := range d.Repos {
+		for _, x := range r.Releases {
+			tags = append(tags, x.Tag)
+		}
+	}
+	if len(tags) != 1 || tags[0] != "v3" {
+		t.Fatalf("want only v3, got %v", tags)
+	}
 }

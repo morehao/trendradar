@@ -418,6 +418,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		relStart := time.Now()
 		ro := releasewatch.Options{
 			Repos:              opts.Releases.Repos,
+			Trigger:            string(opts.Trigger), // "" => manual; only "schedule" enables the weekly gate
 			Date:               in.Date,
 			Period:             rc.Period,
 			Timezone:           rc.Timezone,
