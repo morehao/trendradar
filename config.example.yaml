@@ -22,6 +22,11 @@ trending:
   languages: [all, go, python, rust, typescript]
   since: daily
 
+# 摘要/文档输出的自然语言（榜单与发版订阅共用）。空=中文（zh）。
+# 支持集：zh、en。BCP47 标签可带地区/脚本（如 zh-CN、en-US），按主标签归一。
+language:
+  outputLanguage: ""     # ""（默认，中文）| zh | en
+
 output:
   dir: digests
   branchPrefix: trending/

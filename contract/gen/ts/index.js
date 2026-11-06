@@ -2,7 +2,7 @@
 import Ajv from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 
-export const contractVersion = "0.6.0"
+export const contractVersion = "0.7.0"
 
 export const errorCatalog = {
   "INTERNAL": {
@@ -77,7 +77,7 @@ export const errorCatalog = {
 
 export const fixtures = {
   "normal": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-10-30",
     "period": "daily",
     "languages": [
@@ -88,7 +88,7 @@ export const fixtures = {
     ],
     "count": 6,
     "degraded": false,
-    "contentHash": "sha256:a4769ff29cd41f2f85703c20faf9104a7f8b34500295d991f0b87786719544b2",
+    "contentHash": "sha256:23a470aa53d1e26ec722d3bbef3d33e7fcd330ba71b331afd8f2d9e433cb22c2",
     "contentHashAlgo": "jcs-sha256-v1",
     "coreVersion": "0.1.0",
     "generatedAt": "2026-10-30T00:05:00Z",
@@ -103,8 +103,9 @@ export const fixtures = {
         "forks": 17800,
         "rank": 1,
         "source": "trending-html",
-        "summaryZh": "Go 官方仓库，今日新增 star 位居榜单前列。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "Go 官方仓库，今日新增 star 位居榜单前列。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "gin-gonic/gin",
@@ -116,8 +117,9 @@ export const fixtures = {
         "forks": 8100,
         "rank": 2,
         "source": "trending-html",
-        "summaryZh": "流行的 Go Web 框架，热度持续。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "流行的 Go Web 框架，热度持续。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "python/cpython",
@@ -129,8 +131,9 @@ export const fixtures = {
         "forks": 30500,
         "rank": 3,
         "source": "trending-html",
-        "summaryZh": "CPython 官方实现，今日关注度上升。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "CPython 官方实现，今日关注度上升。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "psf/requests",
@@ -142,8 +145,9 @@ export const fixtures = {
         "forks": 9400,
         "rank": 4,
         "source": "trending-html",
-        "summaryZh": "经典 Python HTTP 库，稳居热榜。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "经典 Python HTTP 库，稳居热榜。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "rust-lang/rust",
@@ -155,8 +159,9 @@ export const fixtures = {
         "forks": 13200,
         "rank": 5,
         "source": "trending-html",
-        "summaryZh": "Rust 语言主仓库，社区活跃。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "Rust 语言主仓库，社区活跃。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "tokio-rs/tokio",
@@ -168,13 +173,14 @@ export const fixtures = {
         "forks": 2650,
         "rank": 6,
         "source": "trending-html",
-        "summaryZh": "Rust 异步运行时，性能方向关注度高。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "Rust 异步运行时，性能方向关注度高。",
+        "summaryLang": "zh"
       }
     ]
   },
   "degraded": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-10-30",
     "period": "daily",
     "languages": [
@@ -183,7 +189,7 @@ export const fixtures = {
     ],
     "count": 2,
     "degraded": true,
-    "contentHash": "sha256:a21dfa56cbd2fe611c9e7b9844d672b3608922156bf8e998f49f4293ab5ce3e3",
+    "contentHash": "sha256:67501a6f9b03d663dfa379c005d146d912ba2aa32a40f5ba0800b2cf62588701",
     "contentHashAlgo": "jcs-sha256-v1",
     "coreVersion": "0.1.0",
     "generatedAt": "2026-10-30T00:05:00Z",
@@ -198,8 +204,9 @@ export const fixtures = {
         "forks": 17800,
         "rank": 1,
         "source": "search-api",
-        "summaryZh": "[原文] The Go programming language",
-        "summarySource": "original"
+        "summarySource": "original",
+        "summary": "[原文] The Go programming language",
+        "summaryLang": "zh"
       },
       {
         "fullName": "gin-gonic/gin",
@@ -211,13 +218,14 @@ export const fixtures = {
         "forks": 8100,
         "rank": 2,
         "source": "search-api",
-        "summaryZh": "[原文] HTTP web framework written in Go",
-        "summarySource": "original"
+        "summarySource": "original",
+        "summary": "[原文] HTTP web framework written in Go",
+        "summaryLang": "zh"
       }
     ]
   },
   "emptyLang": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-10-30",
     "period": "daily",
     "languages": [
@@ -226,7 +234,7 @@ export const fixtures = {
     ],
     "count": 2,
     "degraded": false,
-    "contentHash": "sha256:84a5ef479995ae104544dfc0869227442f3d8968c0d27b5f76410040d4c8b2e4",
+    "contentHash": "sha256:202e26aa26c1b1463e1d24274880a22a4d7c0531793cc4f6644e8e9d18a2383e",
     "contentHashAlgo": "jcs-sha256-v1",
     "coreVersion": "0.1.0",
     "generatedAt": "2026-10-30T00:05:00Z",
@@ -241,8 +249,9 @@ export const fixtures = {
         "forks": 30,
         "rank": 1,
         "source": "trending-html",
-        "summaryZh": "语言未知的仓库，热度进入榜单。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "语言未知的仓库，热度进入榜单。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "someorg/aggregate-only",
@@ -254,13 +263,14 @@ export const fixtures = {
         "forks": 12,
         "rank": 2,
         "source": "trending-html",
-        "summaryZh": "仅在全局榜单出现的仓库。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "仅在全局榜单出现的仓库。",
+        "summaryLang": "zh"
       }
     ]
   },
   "missingOptional": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-10-30",
     "period": "daily",
     "languages": [
@@ -271,7 +281,7 @@ export const fixtures = {
     ],
     "count": 2,
     "degraded": false,
-    "contentHash": "sha256:38c38188602424014a7fdd8a3bfd0408690ce8a5db21be9c8559ac3ca85b2b4c",
+    "contentHash": "sha256:e4fd1d2d84cfaf9e6d97e4fe68297a7eac6f5e749fae50583050d1949b4bd80b",
     "contentHashAlgo": "jcs-sha256-v1",
     "coreVersion": "0.1.0",
     "generatedAt": "2026-10-30T00:05:00Z",
@@ -284,8 +294,9 @@ export const fixtures = {
         "starsInPeriod": 320,
         "rank": 1,
         "source": "trending-html",
-        "summaryZh": "Go 官方仓库，今日新增 star 位居榜单前列。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "Go 官方仓库，今日新增 star 位居榜单前列。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "gin-gonic/gin",
@@ -295,16 +306,120 @@ export const fixtures = {
         "starsInPeriod": 210,
         "rank": 2,
         "source": "trending-html",
-        "summaryZh": "流行的 Go Web 框架，热度持续。",
-        "summarySource": "model"
+        "summarySource": "model",
+        "summary": "流行的 Go Web 框架，热度持续。",
+        "summaryLang": "zh"
+      }
+    ]
+  },
+  "en": {
+    "schema": 3,
+    "date": "2026-10-30",
+    "period": "daily",
+    "languages": [
+      "all",
+      "go",
+      "python",
+      "rust"
+    ],
+    "count": 6,
+    "degraded": false,
+    "contentHash": "sha256:6ac1eb001cba7559551d5884e4164ad6eeb52a7865fd96048dcc1153e17d3bc3",
+    "contentHashAlgo": "jcs-sha256-v1",
+    "coreVersion": "0.1.0",
+    "generatedAt": "2026-10-30T00:05:00Z",
+    "repos": [
+      {
+        "fullName": "golang/go",
+        "url": "https://github.com/golang/go",
+        "description": "The Go programming language",
+        "language": "go",
+        "stars": 126000,
+        "starsInPeriod": 320,
+        "forks": 17800,
+        "rank": 1,
+        "source": "trending-html",
+        "summarySource": "model",
+        "summary": "The official Go repository, among the top gainers today.",
+        "summaryLang": "en"
+      },
+      {
+        "fullName": "gin-gonic/gin",
+        "url": "https://github.com/gin-gonic/gin",
+        "description": "HTTP web framework written in Go",
+        "language": "go",
+        "stars": 80200,
+        "starsInPeriod": 210,
+        "forks": 8100,
+        "rank": 2,
+        "source": "trending-html",
+        "summarySource": "model",
+        "summary": "A popular Go web framework that keeps trending.",
+        "summaryLang": "en"
+      },
+      {
+        "fullName": "python/cpython",
+        "url": "https://github.com/python/cpython",
+        "description": "The Python programming language",
+        "language": "python",
+        "stars": 64500,
+        "starsInPeriod": 180,
+        "forks": 30500,
+        "rank": 3,
+        "source": "trending-html",
+        "summarySource": "model",
+        "summary": "The official CPython implementation, drawing more attention today.",
+        "summaryLang": "en"
+      },
+      {
+        "fullName": "psf/requests",
+        "url": "https://github.com/psf/requests",
+        "description": "A simple, yet elegant HTTP library",
+        "language": "python",
+        "stars": 52500,
+        "starsInPeriod": 95,
+        "forks": 9400,
+        "rank": 4,
+        "source": "trending-html",
+        "summarySource": "model",
+        "summary": "The classic Python HTTP library, a steady fixture on the charts.",
+        "summaryLang": "en"
+      },
+      {
+        "fullName": "rust-lang/rust",
+        "url": "https://github.com/rust-lang/rust",
+        "description": "Empowering everyone to build reliable and efficient software",
+        "language": "rust",
+        "stars": 102000,
+        "starsInPeriod": 260,
+        "forks": 13200,
+        "rank": 5,
+        "source": "trending-html",
+        "summarySource": "model",
+        "summary": "The main Rust repository, with an active community.",
+        "summaryLang": "en"
+      },
+      {
+        "fullName": "tokio-rs/tokio",
+        "url": "https://github.com/tokio-rs/tokio",
+        "description": "A runtime for writing reliable asynchronous applications with Rust",
+        "language": "rust",
+        "stars": 28600,
+        "starsInPeriod": 120,
+        "forks": 2650,
+        "rank": 6,
+        "source": "trending-html",
+        "summarySource": "model",
+        "summary": "The Rust async runtime, drawing strong interest for performance.",
+        "summaryLang": "en"
       }
     ]
   },
   "releaseNormal": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-10-31",
     "period": "weekly",
-    "contentHash": "sha256:87fe3cf94463a7011dbebfbeae9d77544a613751fdd0ba194a6e4534c1bb02ba",
+    "contentHash": "sha256:bfbcf9cb9ff94b3452f79b2950ff6b84ae05b054247eeb4d116f6d0dbc8e5c7f",
     "contentHashAlgo": "jcs-sha256-v1",
     "coreVersion": "0.5.0",
     "generatedAt": "2026-10-31T13:04:00Z",
@@ -327,13 +442,14 @@ export const fixtures = {
             "prerelease": false,
             "draft": false,
             "bodyExcerpt": "1.0.0-rc3 fixes several issues found in rc2.",
-            "summaryZh": "新增证据充分性决策模型与 Categorize 组件，兼容 rc2 schema，可直接升级。",
-            "summarySource": "model"
+            "summarySource": "model",
+            "summary": "新增证据充分性决策模型与 Categorize 组件，兼容 rc2 schema，可直接升级。"
           }
         ],
         "periodStart": "2026-10-26",
         "periodEnd": "2026-11-01",
-        "summaryZh": "本周 1 个版本：v1.0.0-rc3。"
+        "summary": "本周 1 个版本：v1.0.0-rc3。",
+        "summaryLang": "zh"
       },
       {
         "fullName": "deepseek-ai/deepseek-harness",
@@ -349,21 +465,22 @@ export const fixtures = {
             "url": "https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.2.2-alpha.2",
             "prerelease": false,
             "draft": false,
-            "summaryZh": "发布说明缺失，已回退到 commit 信息。",
-            "summarySource": "model"
+            "summarySource": "model",
+            "summary": "发布说明缺失，已回退到 commit 信息。"
           }
         ],
         "periodStart": "2026-10-26",
         "periodEnd": "2026-11-01",
-        "summaryZh": "本周 1 个版本：dsh-v0.2.2-alpha.2。"
+        "summary": "本周 1 个版本：dsh-v0.2.2-alpha.2。",
+        "summaryLang": "zh"
       }
     ]
   },
   "releaseDegraded": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-10-31",
     "period": "weekly",
-    "contentHash": "sha256:5f34a40370d022ed06a995e32917a0299a121973ef13eee0e2f1a747a0a6aecb",
+    "contentHash": "sha256:8a2789f6f865e03bf4a1423d12e88bf99e992d9672f796bcebd874282ca8740d",
     "contentHashAlgo": "jcs-sha256-v1",
     "count": 1,
     "degraded": true,
@@ -382,31 +499,32 @@ export const fixtures = {
             "url": "https://github.com/acme/widget/releases/tag/v2.0.0",
             "prerelease": false,
             "draft": false,
-            "summaryZh": "版本 v2.0.0（未获取到变更说明）",
-            "summarySource": "original"
+            "summarySource": "original",
+            "summary": "版本 v2.0.0（未获取到变更说明）"
           }
         ],
         "periodStart": "2026-10-26",
         "periodEnd": "2026-11-01",
-        "summaryZh": "本周 1 个版本：v2.0.0。"
+        "summary": "本周 1 个版本：v2.0.0。",
+        "summaryLang": "zh"
       }
     ]
   },
   "releaseEmpty": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-10-31",
     "period": "weekly",
-    "contentHash": "sha256:e9cd2c19bcaf079d832114be1dff9ce81351d1643c5c6e8efd5da781ef18d5e4",
+    "contentHash": "sha256:73ca07a4b446a21356ebcbc1cb31281494b36c4bab1f9285106e37eddb71571b",
     "contentHashAlgo": "jcs-sha256-v1",
     "count": 0,
     "degraded": false,
     "repos": []
   },
   "releaseWeekly": {
-    "schema": 2,
+    "schema": 3,
     "date": "2026-11-01",
     "period": "weekly",
-    "contentHash": "sha256:0e93b38ea1e36f475161528332375d6e48a7fef1bad6125f96b27358d79b838e",
+    "contentHash": "sha256:f3cf704e70c6e869200778198226db50c9f7827d6f1371a3bf436b3e11ac0c2e",
     "contentHashAlgo": "jcs-sha256-v1",
     "coreVersion": "0.7.0",
     "generatedAt": "2026-11-01T00:30:00Z",
@@ -420,7 +538,6 @@ export const fixtures = {
         "newCount": 2,
         "periodStart": "2026-10-26",
         "periodEnd": "2026-11-01",
-        "summaryZh": "本周发布 v15.2.0 与 v15.1.9：构建缓存命中率提升，修复 App Router 下动态段预渲染的回归。",
         "releases": [
           {
             "id": 428974490,
@@ -445,7 +562,9 @@ export const fixtures = {
             "draft": false,
             "summarySource": "model"
           }
-        ]
+        ],
+        "summary": "本周发布 v15.2.0 与 v15.1.9：构建缓存命中率提升，修复 App Router 下动态段预渲染的回归。",
+        "summaryLang": "zh"
       }
     ]
   },
@@ -890,8 +1009,8 @@ export const fixtures = {
 
 const model = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/morehao/trendradar/contract/schema/model.v2.json",
-  "title": "trendradar model v2",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/model.v3.json",
+  "title": "trendradar model v3",
   "description": "Domain model: a scraped repository snapshot (RepoSnapshot) and its digested form (RepoDigest). RepoDigest composes RepoSnapshot via allOf instead of flattening.",
   "$ref": "#/$defs/RepoDigest",
   "$defs": {
@@ -957,11 +1076,15 @@ const model = {
           "type": "object",
           "additionalProperties": true,
           "required": [
-            "summaryZh",
+            "summary",
+            "summaryLang",
             "summarySource"
           ],
           "properties": {
-            "summaryZh": {
+            "summary": {
+              "type": "string"
+            },
+            "summaryLang": {
               "type": "string"
             },
             "summarySource": {
@@ -979,9 +1102,9 @@ const model = {
 }
 const ipc = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/morehao/trendradar/contract/schema/ipc.v3.json",
-  "title": "trendradar ipc v3",
-  "description": "Envelope exchanged between the trendradar core binary and the DSH plugin. Only RunRequest forbids extra fields. ipcSchema is const 3.",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/ipc.v4.json",
+  "title": "trendradar ipc v4",
+  "description": "Envelope exchanged between the trendradar core binary and the DSH plugin. Only RunRequest forbids extra fields. ipcSchema is const 4.",
   "oneOf": [
     {
       "$ref": "#/$defs/RunRequest"
@@ -1096,7 +1219,7 @@ const ipc = {
       ],
       "properties": {
         "ipcSchema": {
-          "const": 3
+          "const": 4
         },
         "command": {
           "type": "string",
@@ -1382,7 +1505,7 @@ const ipc = {
       ],
       "properties": {
         "ipcSchema": {
-          "const": 3
+          "const": 4
         },
         "ok": {
           "type": "boolean"
@@ -1444,13 +1567,13 @@ const ipc = {
           "$ref": "#/$defs/Usage"
         },
         "releases": {
-          "$ref": "releases.v2.json#/$defs/ReleasesReport"
+          "$ref": "releases.v3.json#/$defs/ReleasesReport"
         },
         "subscriptions": {
-          "$ref": "releases.v2.json#/$defs/SubscriptionList"
+          "$ref": "releases.v3.json#/$defs/SubscriptionList"
         },
         "subscriptionDoc": {
-          "$ref": "releases.v2.json#/$defs/SubscriptionDoc"
+          "$ref": "releases.v3.json#/$defs/SubscriptionDoc"
         }
       }
     },
@@ -1540,7 +1663,7 @@ const ipc = {
       ],
       "properties": {
         "ipcSchema": {
-          "const": 3
+          "const": 4
         },
         "stateSchema": {
           "const": 3
@@ -1554,8 +1677,8 @@ const ipc = {
 }
 const digest = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/morehao/trendradar/contract/schema/digest.v2.json",
-  "title": "trendradar digest v2",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/digest.v3.json",
+  "title": "trendradar digest v3",
   "description": "One day's rendered digest document. contentHash is stable across runs (generatedAt/coreVersion excluded); contentHashAlgo records which algorithm produced it.",
   "type": "object",
   "additionalProperties": true,
@@ -1572,7 +1695,7 @@ const digest = {
   ],
   "properties": {
     "schema": {
-      "const": 2
+      "const": 3
     },
     "date": {
       "type": "string",
@@ -1621,16 +1744,16 @@ const digest = {
     "repos": {
       "type": "array",
       "items": {
-        "$ref": "https://github.com/morehao/trendradar/contract/schema/model.v2.json#/$defs/RepoDigest"
+        "$ref": "https://github.com/morehao/trendradar/contract/schema/model.v3.json#/$defs/RepoDigest"
       }
     }
   }
 }
 const releases = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v2.json",
-  "title": "trendradar releases v2",
-  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. schema=2 originally put one weekly summary per repo (repos[].summaryZh); schema 2 cores now write a per-version summary on each repos[].releases[].summaryZh instead, and leave repos[].summaryZh empty on new data. Both fields stay optional (readable old + new documents): consumers should prefer the per-item summaryZh and fall back to the repo-level one for older documents.",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v3.json",
+  "title": "trendradar releases v3",
+  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. Older documents put one weekly summary per repo (repos[].summary); schema 3 cores write a per-version summary on each repos[].releases[].summary instead, and leave repos[].summary empty on new data (carrying summaryLang when non-empty). Both fields stay optional (readable old + new documents): consumers should prefer the per-item summary and fall back to the repo-level one for older documents.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -1645,7 +1768,7 @@ const releases = {
   ],
   "properties": {
     "schema": {
-      "const": 2
+      "const": 3
     },
     "date": {
       "type": "string",
@@ -1694,7 +1817,7 @@ const releases = {
     "ReleaseItem": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summaryZh is this version's own Chinese summary, written per version by current cores (incremental). It stays optional so old documents (which only carry the repo-level RepoReleases.summaryZh) remain valid; consumers should prefer this field and fall back to RepoReleases.summaryZh.",
+      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summary is this version's own summary in the configured output language, written per version by current cores (incremental). It stays optional so old documents (which only carry the repo-level RepoReleases.summary) remain valid; consumers should prefer this field and fall back to RepoReleases.summary.",
       "required": [
         "id",
         "tag",
@@ -1742,9 +1865,9 @@ const releases = {
           "type": "string",
           "description": "Truncated raw release notes. Untrusted text: display only, never execute."
         },
-        "summaryZh": {
+        "summary": {
           "type": "string",
-          "description": "Legacy per-item summary. Still accepted so documents written before schema 2 stay readable; schema 2 writers leave it empty."
+          "description": "This version's own summary in the configured output language (model or original text). Optional: older documents only carry the repo-level summary, and consumers should prefer this field and fall back to RepoReleases.summary."
         },
         "summarySource": {
           "type": "string",
@@ -1758,7 +1881,7 @@ const releases = {
     "RepoReleases": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One repo's release batch for one summary period. periodStart/periodEnd bound the period (attributed to the versions' publish dates) so a consumer can label it without parsing dates. summaryZh (repo-level, whole-week) is kept for backward compatibility: current cores summarize per version (releases[].summaryZh) and leave this empty on new data.",
+      "description": "One repo's release batch for one summary period. periodStart/periodEnd bound the period (attributed to the versions' publish dates) so a consumer can label it without parsing dates. summary (repo-level, whole-week) plus optional summaryLang is kept for backward compatibility: current cores summarize per version (releases[].summary) and usually leave this empty on new data.",
       "required": [
         "fullName",
         "url",
@@ -1790,9 +1913,13 @@ const releases = {
           "type": "string",
           "format": "date"
         },
-        "summaryZh": {
+        "summary": {
           "type": "string",
-          "description": "Legacy: one Chinese summary for the whole period. Current cores leave this empty and put a per-version summary in releases[].summaryZh. Kept optional for older documents."
+          "description": "Optional repo-level summary for the whole period. Current cores summarize per version (releases[].summary) and usually leave this empty. Kept optional for older documents; consumers should prefer releases[].summary and fall back to this."
+        },
+        "summaryLang": {
+          "type": "string",
+          "description": "BCP47 language of the repo-level summary above; present only when summary is. Item-level summaries inherit this / the configured output language."
         },
         "releases": {
           "type": "array",
@@ -1868,7 +1995,7 @@ const releases = {
           "minimum": 0
         },
         "usage": {
-          "$ref": "https://github.com/morehao/trendradar/contract/schema/ipc.v3.json#/$defs/Usage"
+          "$ref": "https://github.com/morehao/trendradar/contract/schema/ipc.v4.json#/$defs/Usage"
         }
       }
     },
@@ -2046,7 +2173,7 @@ const versionInfo = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/morehao/trendradar/contract/schema/version-info.v2.json",
   "title": "trendradar version info v2",
-  "description": "Handshake payload returned by `trendradar version --json`. The plugin requires ipcSchema===3 && digestSchema===2 && contractVersion major===0.",
+  "description": "Handshake payload returned by `trendradar version --json`. The plugin requires ipcSchema===4 && digestSchema===3 && contractVersion major===0.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -2065,10 +2192,10 @@ const versionInfo = {
       "type": "string"
     },
     "ipcSchema": {
-      "const": 3
+      "const": 4
     },
     "digestSchema": {
-      "const": 2
+      "const": 3
     },
     "contractVersion": {
       "type": "string"
@@ -2422,7 +2549,7 @@ const errors = {
     }
   }
 }
-const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.6.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    contract schemas, so the plugin and any web UI consume the same shapes\n    whether data comes from the filesystem or over HTTP. Historical v1 digests\n    read from disk are normalized to the v2 shape with\n    contentHashAlgo=legacy-struct-marshal-v1.\n\n    Release endpoints are read-only. Token cost for a releases run is NOT part of\n    a stored document (it describes one run and cannot be reproduced); it is\n    reported in `releases.usage` of `trendradar run --json` and appended to\n    `<repo>/.git/trendradar-usage.jsonl` with stage=\"releases\".\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /api/v2/releases:\n    get:\n      operationId: listReleases\n      summary: List available release digests (newest first)\n      description: |\n        Returns an empty array (not 404) when no release digest exists yet.\n        Entries carry no token cost because stored documents do not record it.\n      parameters:\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: Manifest of release digests\n          content:\n            application/json:\n              schema:\n                type: array\n                items:\n                  $ref: \"./releases.v2.json#/$defs/ReleaseManifestEntry\"\n  /api/v2/releases/{date}:\n    get:\n      operationId: getReleases\n      summary: Fetch one period's release digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: The release digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json\"\n        \"404\":\n          description: No release digest for that date\n  /api/v2/subscriptions:\n    get:\n      operationId: listSubscriptions\n      summary: List the repo subscriptions the core will poll\n      description: |\n        Read-only mirror of the IPC `subscribe list` command: both return the\n        same SubscriptionList. `repos` is the legacy field; `items` adds the\n        per-repo row detail (latest tag, last summary date, check status) and is\n        optional, so an older core still satisfies this schema. Writing\n        subscriptions stays on the CLI / IPC subscribe command and is never\n        exposed over HTTP.\n      responses:\n        \"200\":\n          description: Current subscription list\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionList\"\n  /api/v2/repos/{owner}/{repo}/releases:\n    get:\n      operationId: getSubscriptionDoc\n      summary: Read one repo's release document\n      description: |\n        Read-only mirror of the IPC `subscribe releases` command. Returns the\n        exact markdown file content (plus the volume index) so a client renders\n        what the data repo stores instead of re-summarizing it. `volume`\n        defaults to the newest volume. Only repos matching\n        ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ are served: the path is resolved\n        inside the releases document root and never escapes it.\n      parameters:\n        - name: owner\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: repo\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: volume\n          in: query\n          required: false\n          schema:\n            type: integer\n            minimum: 1\n      responses:\n        \"200\":\n          description: The repo's release document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionDoc\"\n        \"400\":\n          description: Malformed owner/repo or non-positive volume\n        \"404\":\n          description: The repo has no release document, or that volume is absent\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
+const api = "openapi: 3.1.0\ninfo:\n  title: trendradar serve API\n  version: 0.7.0\n  description: |\n    Read-only HTTP surface exposed by `trendradar serve`. All payloads reuse the\n    contract schemas, so the plugin and any web UI consume the same shapes\n    whether data comes from the filesystem or over HTTP. Historical v1 digests\n    read from disk are normalized to the v2 shape with\n    contentHashAlgo=legacy-struct-marshal-v1.\n\n    Release endpoints are read-only. Token cost for a releases run is NOT part of\n    a stored document (it describes one run and cannot be reproduced); it is\n    reported in `releases.usage` of `trendradar run --json` and appended to\n    `<repo>/.git/trendradar-usage.jsonl` with stage=\"releases\".\nservers:\n  - url: http://127.0.0.1:8787\npaths:\n  /api/v2/digests/{date}:\n    get:\n      operationId: getDigest\n      summary: Fetch one day's digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n      responses:\n        \"200\":\n          description: The digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./digest.v2.json\"\n        \"404\":\n          description: No digest for that date\n  /api/v2/manifest:\n    get:\n      operationId: getManifest\n      summary: List available dates and their content identity\n      responses:\n        \"200\":\n          description: Manifest of available digests\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [entries]\n                properties:\n                  coreVersion:\n                    type: string\n                  entries:\n                    type: array\n                    items:\n                      type: object\n                      required: [date, contentHash, schema, contentHashAlgo]\n                      properties:\n                        date:\n                          type: string\n                          format: date\n                        contentHash:\n                          type: string\n                        schema:\n                          type: integer\n                        contentHashAlgo:\n                          type: string\n                          enum: [jcs-sha256-v1, legacy-struct-marshal-v1]\n                        degraded:\n                          type: boolean\n  /api/v2/releases:\n    get:\n      operationId: listReleases\n      summary: List available release digests (newest first)\n      description: |\n        Returns an empty array (not 404) when no release digest exists yet.\n        Entries carry no token cost because stored documents do not record it.\n      parameters:\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: Manifest of release digests\n          content:\n            application/json:\n              schema:\n                type: array\n                items:\n                  $ref: \"./releases.v2.json#/$defs/ReleaseManifestEntry\"\n  /api/v2/releases/{date}:\n    get:\n      operationId: getReleases\n      summary: Fetch one period's release digest\n      parameters:\n        - name: date\n          in: path\n          required: true\n          schema:\n            type: string\n            format: date\n        - name: period\n          in: query\n          required: false\n          schema:\n            type: string\n            enum: [daily, weekly, monthly]\n      responses:\n        \"200\":\n          description: The release digest document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json\"\n        \"404\":\n          description: No release digest for that date\n  /api/v2/subscriptions:\n    get:\n      operationId: listSubscriptions\n      summary: List the repo subscriptions the core will poll\n      description: |\n        Read-only mirror of the IPC `subscribe list` command: both return the\n        same SubscriptionList. `repos` is the legacy field; `items` adds the\n        per-repo row detail (latest tag, last summary date, check status) and is\n        optional, so an older core still satisfies this schema. Writing\n        subscriptions stays on the CLI / IPC subscribe command and is never\n        exposed over HTTP.\n      responses:\n        \"200\":\n          description: Current subscription list\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionList\"\n  /api/v2/repos/{owner}/{repo}/releases:\n    get:\n      operationId: getSubscriptionDoc\n      summary: Read one repo's release document\n      description: |\n        Read-only mirror of the IPC `subscribe releases` command. Returns the\n        exact markdown file content (plus the volume index) so a client renders\n        what the data repo stores instead of re-summarizing it. `volume`\n        defaults to the newest volume. Only repos matching\n        ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ are served: the path is resolved\n        inside the releases document root and never escapes it.\n      parameters:\n        - name: owner\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: repo\n          in: path\n          required: true\n          schema:\n            type: string\n            pattern: \"^[A-Za-z0-9_.-]+$\"\n        - name: volume\n          in: query\n          required: false\n          schema:\n            type: integer\n            minimum: 1\n      responses:\n        \"200\":\n          description: The repo's release document\n          content:\n            application/json:\n              schema:\n                $ref: \"./releases.v2.json#/$defs/SubscriptionDoc\"\n        \"400\":\n          description: Malformed owner/repo or non-positive volume\n        \"404\":\n          description: The repo has no release document, or that volume is absent\n  /feed.xml:\n    get:\n      operationId: getFeed\n      summary: RSS feed of the most recent digests\n      responses:\n        \"200\":\n          description: RSS 2.0 feed\n          content:\n            application/rss+xml:\n              schema:\n                type: string\n"
 
 export const rawSchema = { model, ipc, digest, releases, errors, versionInfo, api }
 

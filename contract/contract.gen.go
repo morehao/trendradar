@@ -52,7 +52,8 @@ type RepoSnapshot struct {
 // RepoDigest composes RepoSnapshot with the digest-only summary fields.
 type RepoDigest struct {
 	RepoSnapshot
-	SummaryZh     string `json:"summaryZh"`
+	Summary       string `json:"summary"`
+	SummaryLang   string `json:"summaryLang"`
 	SummarySource string `json:"summarySource"`
 }
 
@@ -145,7 +146,7 @@ type ReleaseItem struct {
 	Prerelease    bool       `json:"prerelease"`
 	Draft         bool       `json:"draft"`
 	BodyExcerpt   *string    `json:"bodyExcerpt,omitempty"`
-	SummaryZh     *string    `json:"summaryZh,omitempty"`
+	Summary       *string    `json:"summary,omitempty"`
 	SummarySource string     `json:"summarySource"`
 }
 
@@ -156,7 +157,8 @@ type RepoReleases struct {
 	NewCount    int           `json:"newCount"`
 	PeriodStart *string       `json:"periodStart,omitempty"`
 	PeriodEnd   *string       `json:"periodEnd,omitempty"`
-	SummaryZh   *string       `json:"summaryZh,omitempty"`
+	Summary     *string       `json:"summary,omitempty"`
+	SummaryLang *string       `json:"summaryLang,omitempty"`
 	Releases    []ReleaseItem `json:"releases"`
 }
 

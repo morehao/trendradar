@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/morehao/trendradar/contract/schema/ipc.v3.json",
-  "title": "trendradar ipc v3",
-  "description": "Envelope exchanged between the trendradar core binary and the DSH plugin. Only RunRequest forbids extra fields. ipcSchema is const 3.",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/ipc.v4.json",
+  "title": "trendradar ipc v4",
+  "description": "Envelope exchanged between the trendradar core binary and the DSH plugin. Only RunRequest forbids extra fields. ipcSchema is const 4.",
   "oneOf": [
     {
       "$ref": "#/$defs/RunRequest"
@@ -117,7 +117,7 @@
       ],
       "properties": {
         "ipcSchema": {
-          "const": 3
+          "const": 4
         },
         "command": {
           "type": "string",
@@ -403,7 +403,7 @@
       ],
       "properties": {
         "ipcSchema": {
-          "const": 3
+          "const": 4
         },
         "ok": {
           "type": "boolean"
@@ -465,13 +465,13 @@
           "$ref": "#/$defs/Usage"
         },
         "releases": {
-          "$ref": "releases.v2.json#/$defs/ReleasesReport"
+          "$ref": "releases.v3.json#/$defs/ReleasesReport"
         },
         "subscriptions": {
-          "$ref": "releases.v2.json#/$defs/SubscriptionList"
+          "$ref": "releases.v3.json#/$defs/SubscriptionList"
         },
         "subscriptionDoc": {
-          "$ref": "releases.v2.json#/$defs/SubscriptionDoc"
+          "$ref": "releases.v3.json#/$defs/SubscriptionDoc"
         }
       }
     },
@@ -561,7 +561,7 @@
       ],
       "properties": {
         "ipcSchema": {
-          "const": 3
+          "const": 4
         },
         "stateSchema": {
           "const": 3

@@ -119,3 +119,27 @@ func TestListReleaseDigestsReadsBothWeeklyDirs(t *testing.T) {
 		t.Fatalf("order=%s,%s; want newest first", ds[0].Date, ds[1].Date)
 	}
 }
+
+func TestReleaseMarkdownEn(t *testing.T) {
+	summary := "This week brings a fix."
+	d := releasedigest.ReleaseDigest{
+		Schema: 2, Date: "2026-10-31", Period: "daily", Count: 1,
+		Repos: []releasedigest.RepoReleases{{
+			FullName: "o/r", URL: "https://github.com/o/r", LatestTag: "v1", NewCount: 1,
+			Releases: []releasedigest.ReleaseItem{{Tag: "v1", Name: "v1", Kind: "release", URL: "https://github.com/o/r/releases/tag/v1", SummarySource: "model", Summary: &summary}},
+		}},
+	}
+	md := string(ReleaseMarkdownLang(d, "en"))
+	for _, want := range []string{"Release Digest", "Link: https://github.com/o/r"} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("en release markdown missing %q:\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "发版摘要") || strings.Contains(md, "链接:") {
+		t.Fatalf("en release markdown still has zh fixed strings:\n%s", md)
+	}
+	idx := string(ReleaseIndexLang([]releasedigest.ReleaseDigest{d}, map[string]int{"daily": 90}, "digests", "en"))
+	if !strings.Contains(idx, "Release Index") || !strings.Contains(idx, "Daily") {
+		t.Fatalf("en release index missing fixed strings:\n%s", idx)
+	}
+}

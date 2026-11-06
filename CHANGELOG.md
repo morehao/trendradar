@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.12.0
+
+### Breaking — 摘要输出语言可配置（outputLanguage），wire 变更 `summaryZh` → `summary`(+`summaryLang`)
+
+- **新能力**：新增顶层配置 `language.outputLanguage`（BCP47；空=中文 `zh`，支持集首期
+  `{zh, en}`）。榜单与发版订阅两条摘要链路、以及文档里的固定文案（标题、表头、降级横幅、
+  索引/周段标签）都跟随该语言。非中英语言在插件侧回落中文（核心只接受支持集）。
+- **wire 破坏性变更**：
+  - `digest.repos[].summaryZh` → `digest.repos[].summary`，并新增 `digest.repos[].summaryLang`
+    （必填，标记该摘要实际语言）。
+  - `releases.repos[].summaryZh` → `releases.repos[].summary`，新增可选
+    `releases.repos[].summaryLang`；`releases.repos[].releases[].summaryZh` → `...summary`
+    （item 级不带 lang）。
+  - wire 版本：`digestSchema` 2→3、`ipcSchema` 3→4、`contractVersion` 0.6.0→0.7.0
+    （契约包 `@morehao/trendradar-contract` 0.7.0）。
+- **提示词/缓存**：两条链路的系统提示词按语言生成（`internal/i18n`），输出键统一为 `summary`。
+  摘要缓存 `PromptVersion` 各 bump（`v2`→`v3`、`release-v3`→`release-v4`），缓存 namespace
+  追加语言维度，切换语言不会命中旧缓存、也不会跨语言串用。
+- **回归红线**：`outputLanguage=zh`（默认）时，渲染出的中文文档正文与旧版**逐字节一致**
+  （唯一差异是内部字段名与随之变化的 contentHash）。
+- 新增 `internal/i18n` 语言注册表（zh/en 提示词 + `RenderTexts` 固定文案、`Resolve`/`Supported`）。
+
 ## 0.11.0
 
 ### Changed — 发版订阅改为 tag 级增量总结，每条 Release 独立成段（含 0.10.0 全部内容）

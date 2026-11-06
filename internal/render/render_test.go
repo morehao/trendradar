@@ -17,7 +17,7 @@ var update = flag.Bool("update", false, "rewrite golden files")
 
 func fixtureDigest() digest.Digest {
 	d := digest.Digest{
-		Schema:          2,
+		Schema:          3,
 		Date:            "2026-10-30",
 		Period:          "daily",
 		Languages:       []string{"all", "go", "python"},
@@ -29,11 +29,11 @@ func fixtureDigest() digest.Digest {
 		Repos: []digest.RepoDigest{
 			{
 				RepoSnapshot: digest.RepoSnapshot{FullName: "golang/go", URL: "https://github.com/golang/go", Description: digest.StrPtr("The Go programming language"), Language: "go", Stars: 126000, StarsInPeriod: 320, Forks: digest.IntPtr(17800), Rank: 1, Source: digest.SourceTrendingHTML},
-				SummaryZh:    "Go 官方仓库，今日热度上升。", SummarySource: "model",
+				Summary:      "Go 官方仓库，今日热度上升。", SummarySource: "model",
 			},
 			{
 				RepoSnapshot: digest.RepoSnapshot{FullName: "python/cpython", URL: "https://github.com/python/cpython", Description: digest.StrPtr("The Python programming language"), Language: "python", Stars: 64500, StarsInPeriod: 180, Forks: digest.IntPtr(30500), Rank: 2, Source: digest.SourceTrendingHTML},
-				SummaryZh:    "CPython 官方实现，关注度上升。", SummarySource: "model",
+				Summary:      "CPython 官方实现，关注度上升。", SummarySource: "model",
 			},
 		},
 	}
@@ -51,7 +51,7 @@ func TestContentHashStable(t *testing.T) {
 		t.Fatal("hash should ignore generatedAt and coreVersion")
 	}
 	d3 := fixtureDigest()
-	d3.Repos[0].SummaryZh = "different summary"
+	d3.Repos[0].Summary = "different summary"
 	if ContentHash(d1) == ContentHash(d3) {
 		t.Fatal("hash should change when repo summary changes")
 	}
@@ -221,7 +221,7 @@ func TestMarkdownTableAndDegradedNotice(t *testing.T) {
 	d := fixtureDigest()
 	d.Degraded = true
 	d.Repos[0].SummarySource = "original"
-	d.Repos[0].SummaryZh = "[原文] The Go programming language | with a pipe"
+	d.Repos[0].Summary = "[原文] The Go programming language | with a pipe"
 	md := string(Markdown(d))
 	if !strings.Contains(md, "降级") {
 		t.Fatalf("degraded notice missing:\n%s", md)
@@ -247,8 +247,8 @@ func TestJSONV2ShapeAndOptionalOmission(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m["schema"].(float64) != 2 {
-		t.Fatalf("schema = %v, want 2", m["schema"])
+	if m["schema"].(float64) != 3 {
+		t.Fatalf("schema = %v, want 3", m["schema"])
 	}
 	if m["contentHashAlgo"] != "jcs-sha256-v1" {
 		t.Fatalf("contentHashAlgo = %v", m["contentHashAlgo"])
@@ -315,7 +315,7 @@ func perPageDigest() (digest.Digest, map[string][]digest.RepoDigest) {
 	rd := func(name, repoLang string, rank int, summary string) digest.RepoDigest {
 		return digest.RepoDigest{
 			RepoSnapshot: digest.RepoSnapshot{FullName: name, URL: "https://github.com/" + name, Language: repoLang, Stars: 100, StarsInPeriod: 10, Rank: rank, Source: digest.SourceTrendingHTML},
-			SummaryZh:    summary, SummarySource: "model",
+			Summary:      summary, SummarySource: "model",
 		}
 	}
 	// Repo own languages: the C++ and Go repos came from the global "all" page;
@@ -325,7 +325,7 @@ func perPageDigest() (digest.Digest, map[string][]digest.RepoDigest) {
 	py := rd("acme/reqs", "python", 1, "python 页的仓库")
 
 	d := digest.Digest{
-		Schema:      2,
+		Schema:      3,
 		Date:        "2026-11-03",
 		Period:      "daily",
 		Languages:   []string{"all", "python", "rust"},
@@ -415,5 +415,41 @@ func TestMarkdownNilByPageFallsBackToRepoLanguage(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("legacy layout missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestMarkdownEnGolden renders the same fixture in English; the prose summaries
+// are replaced by the fixture's English text and the fixed strings come from the
+// en RenderTexts.
+func enFixtureDigest() digest.Digest {
+	d := fixtureDigest()
+	d.Repos[0].Summary = "The official Go repository; trending up today."
+	d.Repos[1].Summary = "The official CPython implementation; gaining attention."
+	d.ContentHash = ContentHash(d)
+	return d
+}
+
+func TestMarkdownEnGolden(t *testing.T) {
+	d := enFixtureDigest()
+	got := MarkdownLang(d, "en")
+	goldenPath := filepath.Join("testdata", "digest.en.md")
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(goldenPath, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden (use -update): %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("en markdown mismatch\ngot:\n%s\nwant:\n%s", got, string(want))
+	}
+	// The en fixed strings must be present (title + table header).
+	if !strings.Contains(string(got), "Trending Digest") || !strings.Contains(string(got), "| Repository | Stars | Stars today | Summary |") {
+		t.Fatalf("en fixed strings missing:\n%s", got)
 	}
 }

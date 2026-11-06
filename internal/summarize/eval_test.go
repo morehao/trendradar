@@ -131,18 +131,18 @@ func TestEvalSummaries(t *testing.T) {
 		} else {
 			rep.Degraded++
 		}
-		runes := utf8.RuneCountInString(d.SummaryZh)
+		runes := utf8.RuneCountInString(d.Summary)
 		if runes <= 60 {
 			rep.LengthOK++
 		}
-		if utf8.RuneCountInString(d.SummaryZh) > 0 && float64(countHan(d.SummaryZh))/float64(utf8.RuneCountInString(d.SummaryZh)) >= 0.4 {
+		if utf8.RuneCountInString(d.Summary) > 0 && float64(countHan(d.Summary))/float64(utf8.RuneCountInString(d.Summary)) >= 0.4 {
 			rep.ChineseOK++
 		}
-		if strings.TrimSpace(d.SummaryZh) == strings.TrimSpace(digest.Str(d.Description)) {
+		if strings.TrimSpace(d.Summary) == strings.TrimSpace(digest.Str(d.Description)) {
 			rep.RepeatDesc++
 		}
 		for _, bad := range []string{"这是一个", "该项目", "旨在"} {
-			if strings.HasPrefix(strings.TrimSpace(d.SummaryZh), bad) {
+			if strings.HasPrefix(strings.TrimSpace(d.Summary), bad) {
 				rep.EmptyPhrase++
 				break
 			}

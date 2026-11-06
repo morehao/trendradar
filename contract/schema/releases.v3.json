@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v2.json",
-  "title": "trendradar releases v2",
-  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. schema=2 originally put one weekly summary per repo (repos[].summaryZh); schema 2 cores now write a per-version summary on each repos[].releases[].summaryZh instead, and leave repos[].summaryZh empty on new data. Both fields stay optional (readable old + new documents): consumers should prefer the per-item summaryZh and fall back to the repo-level one for older documents.",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v3.json",
+  "title": "trendradar releases v3",
+  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. Older documents put one weekly summary per repo (repos[].summary); schema 3 cores write a per-version summary on each repos[].releases[].summary instead, and leave repos[].summary empty on new data (carrying summaryLang when non-empty). Both fields stay optional (readable old + new documents): consumers should prefer the per-item summary and fall back to the repo-level one for older documents.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -17,7 +17,7 @@
   ],
   "properties": {
     "schema": {
-      "const": 2
+      "const": 3
     },
     "date": {
       "type": "string",
@@ -66,7 +66,7 @@
     "ReleaseItem": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summaryZh is this version's own Chinese summary, written per version by current cores (incremental). It stays optional so old documents (which only carry the repo-level RepoReleases.summaryZh) remain valid; consumers should prefer this field and fall back to RepoReleases.summaryZh.",
+      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summary is this version's own summary in the configured output language, written per version by current cores (incremental). It stays optional so old documents (which only carry the repo-level RepoReleases.summary) remain valid; consumers should prefer this field and fall back to RepoReleases.summary.",
       "required": [
         "id",
         "tag",
@@ -114,9 +114,9 @@
           "type": "string",
           "description": "Truncated raw release notes. Untrusted text: display only, never execute."
         },
-        "summaryZh": {
+        "summary": {
           "type": "string",
-          "description": "Legacy per-item summary. Still accepted so documents written before schema 2 stay readable; schema 2 writers leave it empty."
+          "description": "This version's own summary in the configured output language (model or original text). Optional: older documents only carry the repo-level summary, and consumers should prefer this field and fall back to RepoReleases.summary."
         },
         "summarySource": {
           "type": "string",
@@ -130,7 +130,7 @@
     "RepoReleases": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One repo's release batch for one summary period. periodStart/periodEnd bound the period (attributed to the versions' publish dates) so a consumer can label it without parsing dates. summaryZh (repo-level, whole-week) is kept for backward compatibility: current cores summarize per version (releases[].summaryZh) and leave this empty on new data.",
+      "description": "One repo's release batch for one summary period. periodStart/periodEnd bound the period (attributed to the versions' publish dates) so a consumer can label it without parsing dates. summary (repo-level, whole-week) plus optional summaryLang is kept for backward compatibility: current cores summarize per version (releases[].summary) and usually leave this empty on new data.",
       "required": [
         "fullName",
         "url",
@@ -162,9 +162,13 @@
           "type": "string",
           "format": "date"
         },
-        "summaryZh": {
+        "summary": {
           "type": "string",
-          "description": "Legacy: one Chinese summary for the whole period. Current cores leave this empty and put a per-version summary in releases[].summaryZh. Kept optional for older documents."
+          "description": "Optional repo-level summary for the whole period. Current cores summarize per version (releases[].summary) and usually leave this empty. Kept optional for older documents; consumers should prefer releases[].summary and fall back to this."
+        },
+        "summaryLang": {
+          "type": "string",
+          "description": "BCP47 language of the repo-level summary above; present only when summary is. Item-level summaries inherit this / the configured output language."
         },
         "releases": {
           "type": "array",
@@ -240,7 +244,7 @@
           "minimum": 0
         },
         "usage": {
-          "$ref": "ipc.v3.json#/$defs/Usage"
+          "$ref": "ipc.v4.json#/$defs/Usage"
         }
       }
     },

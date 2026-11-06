@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/morehao/trendradar/internal/digest"
+	"github.com/morehao/trendradar/internal/i18n"
 	"github.com/morehao/trendradar/internal/model"
 )
 
@@ -35,6 +36,10 @@ type Summarizer struct {
 	batchSize  int
 	maxRetries int
 	cache      *Cache
+	// lang is the output language; it drives the prompt and the "is this written
+	// in the right language" validation gate. Zero value is invalid; New resolves
+	// a language always (default zh).
+	lang i18n.OutputLanguage
 
 	mu    sync.Mutex
 	stats Stats
@@ -66,9 +71,20 @@ func WithMaxRetries(n int) Option {
 // WithCache attaches a cache.
 func WithCache(c *Cache) Option { return func(s *Summarizer) { s.cache = c } }
 
+// WithLanguage sets the output language id (empty means zh). It resolves through
+// i18n so an empty or region-tagged value lands on a supported language; an
+// unsupported id falls back to the default.
+func WithLanguage(id string) Option {
+	return func(s *Summarizer) {
+		if lang, err := i18n.Resolve(id); err == nil {
+			s.lang = lang
+		}
+	}
+}
+
 // New builds a Summarizer.
 func New(chat model.Provider, opts ...Option) *Summarizer {
-	s := &Summarizer{chat: chat, batchSize: 10, maxRetries: 1}
+	s := &Summarizer{chat: chat, batchSize: 10, maxRetries: 1, lang: i18n.MustResolve(i18n.DefaultLanguage)}
 	for _, o := range opts {
 		o(s)
 	}
@@ -102,9 +118,9 @@ func (s *Summarizer) SummarizeWithContext(ctx context.Context, repos []digest.Re
 		sums := s.summarizeBatch(ctx, batch, byRepo)
 		for _, r := range batch {
 			if sum, ok := sums[r.FullName]; ok && sum != "" {
-				out = append(out, digest.RepoDigest{RepoSnapshot: r, SummaryZh: sum, SummarySource: "model"})
+				out = append(out, digest.RepoDigest{RepoSnapshot: r, Summary: sum, SummaryLang: s.lang.ID, SummarySource: "model"})
 			} else {
-				out = append(out, original(r))
+				out = append(out, s.original(r))
 			}
 		}
 	}
@@ -151,7 +167,7 @@ func (s *Summarizer) requestPending(ctx context.Context, pending []digest.RepoSn
 		if ctx.Err() != nil {
 			return
 		}
-		system, user := SystemPrompt, buildUserPrompt(pending, byRepo)
+		system, user := systemPromptFor(s.lang), userPromptFor(s.lang, pending, byRepo)
 		res, err := s.chat.Complete(ctx, system, user)
 		// Count the attempt even when it errors or later fails to parse: a real
 		// request was made and billed.
@@ -159,7 +175,7 @@ func (s *Summarizer) requestPending(ctx context.Context, pending []digest.RepoSn
 		if err != nil {
 			continue
 		}
-		sums, invalid, perr := parseAndValidate(res.Text, pending)
+		sums, invalid, perr := parseAndValidateLang(res.Text, pending, s.lang)
 		if perr != nil {
 			// Whole response was undecodable: retry the same set (attempt+1).
 			continue
@@ -226,10 +242,14 @@ func (s *Summarizer) addCall(u model.Usage, retry bool) {
 	s.stats.Usage.CachedTokens += u.CachedTokens
 }
 
-func original(r digest.RepoSnapshot) digest.RepoDigest {
+func (s *Summarizer) original(r digest.RepoSnapshot) digest.RepoDigest {
 	desc := digest.Str(r.Description)
 	if desc == "" {
-		desc = "(无描述)"
+		desc = noneDescription(s.lang)
 	}
-	return digest.RepoDigest{RepoSnapshot: r, SummaryZh: "[原文] " + desc, SummarySource: "original"}
+	prefix := "[原文] "
+	if s.lang.ID == "en" {
+		prefix = "[original] "
+	}
+	return digest.RepoDigest{RepoSnapshot: r, Summary: prefix + desc, SummaryLang: s.lang.ID, SummarySource: "original"}
 }

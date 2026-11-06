@@ -19,15 +19,15 @@ func (f *Fake) Name() string { return "fake" }
 var repoLineRe = regexp.MustCompile(`(?m)^REPO=(\S+)\tDESC=(.*)$`)
 
 type fakeItem struct {
-	FullName  string `json:"fullName"`
-	SummaryZh string `json:"summaryZh"`
+	FullName string `json:"fullName"`
+	Summary  string `json:"summary"`
 }
 
 func (f *Fake) Complete(_ context.Context, _, user string) (Result, error) {
 	var items []fakeItem
 	for _, m := range repoLineRe.FindAllStringSubmatch(user, -1) {
 		// Emit Chinese prose so the summary validator accepts offline output.
-		items = append(items, fakeItem{FullName: m[1], SummaryZh: "[fake] 这是离线测试生成的中文示例摘要，仅用于验证流程。"})
+		items = append(items, fakeItem{FullName: m[1], Summary: "[fake] 这是离线测试生成的中文示例摘要，仅用于验证流程。"})
 	}
 	b, err := json.Marshal(map[string]any{"summaries": items})
 	if err != nil {

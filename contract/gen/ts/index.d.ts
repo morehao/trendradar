@@ -14,7 +14,8 @@ export interface RepoSnapshot {
 }
 
 export type RepoDigest = RepoSnapshot & {
-  "summaryZh": string;
+  "summary": string;
+  "summaryLang": string;
   "summarySource": "model" | "original";
   [k: string]: unknown;
 };
@@ -45,7 +46,7 @@ export interface DigestArtifact {
 }
 
 export interface RunRequest {
-  "ipcSchema": 3;
+  "ipcSchema": 4;
   "command": "run" | "serve" | "config" | "version" | "subscribe";
   "configPath"?: string;
   "date"?: string;
@@ -58,7 +59,7 @@ export interface RunRequest {
 }
 
 export interface RunResult {
-  "ipcSchema": 3;
+  "ipcSchema": 4;
   "ok": boolean;
   "command": "run" | "serve" | "config" | "version" | "subscribe";
   "startedAt": string;
@@ -101,7 +102,7 @@ export interface StateRun {
 }
 
 export interface State {
-  "ipcSchema": 3;
+  "ipcSchema": 4;
   "stateSchema": 3;
   "lastRun"?: StateRun;
   [k: string]: unknown;
@@ -117,7 +118,7 @@ export interface ReleaseItem {
   "prerelease": boolean;
   "draft": boolean;
   "bodyExcerpt"?: string;
-  "summaryZh"?: string;
+  "summary"?: string;
   "summarySource": "model" | "original";
   [k: string]: unknown;
 }
@@ -129,7 +130,8 @@ export interface RepoReleases {
   "newCount": number;
   "periodStart"?: string;
   "periodEnd"?: string;
-  "summaryZh"?: string;
+  "summary"?: string;
+  "summaryLang"?: string;
   "releases": Array<ReleaseItem>;
   [k: string]: unknown;
 }
@@ -203,7 +205,7 @@ export interface ErrorMeta {
 }
 
 export interface Digest {
-  "schema": 2;
+  "schema": 3;
   "date": string;
   "period": "daily" | "weekly" | "monthly";
   "languages": Array<string>;
@@ -218,7 +220,7 @@ export interface Digest {
 }
 
 export interface ReleaseDigest {
-  "schema": 2;
+  "schema": 3;
   "date": string;
   "period": "daily" | "weekly" | "monthly";
   "contentHash": string;
@@ -234,8 +236,8 @@ export interface ReleaseDigest {
 export interface VersionInfo {
   "version": string;
   "commit": string;
-  "ipcSchema": 3;
-  "digestSchema": 2;
+  "ipcSchema": 4;
+  "digestSchema": 3;
   "contractVersion": string;
   "supportedProviders": Array<string>;
   [k: string]: unknown;
@@ -248,6 +250,7 @@ export declare const fixtures: {
   degraded: Digest;
   emptyLang: Digest;
   missingOptional: Digest;
+  en: Digest;
   releaseNormal: ReleaseDigest;
   releaseDegraded: ReleaseDigest;
   releaseEmpty: ReleaseDigest;

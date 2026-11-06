@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/morehao/trendradar/internal/i18n"
 	"github.com/morehao/trendradar/internal/releasedigest"
 )
 
@@ -66,6 +67,12 @@ func ReleaseRoot(outDir, subdir string) string {
 // at <outDir>/<subdir>/index.md. Paths are repository-relative so the same
 // g.AddAll(ctx, outDir) that stages trending also stages these.
 func BuildReleases(d releasedigest.ReleaseDigest, history []releasedigest.ReleaseDigest, limits map[string]int, outDir, subdir string) ([]File, error) {
+	return BuildReleasesLang(d, history, limits, outDir, subdir, "")
+}
+
+// BuildReleasesLang is BuildReleases in an explicit output language (empty means
+// zh). The language drives the markdown/document/index fixed strings.
+func BuildReleasesLang(d releasedigest.ReleaseDigest, history []releasedigest.ReleaseDigest, limits map[string]int, outDir, subdir, lang string) ([]File, error) {
 	root := ReleaseRoot(outDir, subdir)
 	period := releasePeriod(d.Period)
 	dir := path.Join(root, ReleaseDir(period), BucketOf(period, d.Date))
@@ -76,14 +83,21 @@ func BuildReleases(d releasedigest.ReleaseDigest, history []releasedigest.Releas
 	}
 	js = append(js, '\n')
 	return []File{
-		{Path: path.Join(dir, name+".md"), Data: ReleaseMarkdown(d)},
+		{Path: path.Join(dir, name+".md"), Data: ReleaseMarkdownLang(d, lang)},
 		{Path: path.Join(dir, name+".json"), Data: js},
-		{Path: path.Join(root, "index.md"), Data: ReleaseIndex(history, limits, root)},
+		{Path: path.Join(root, "index.md"), Data: ReleaseIndexLang(history, limits, root, lang)},
 	}, nil
 }
 
-// ReleaseMarkdown renders one period's release digest.
+// ReleaseMarkdown renders one period's release digest in the default language.
 func ReleaseMarkdown(d releasedigest.ReleaseDigest) []byte {
+	return ReleaseMarkdownLang(d, "")
+}
+
+// ReleaseMarkdownLang renders one period's release digest in an explicit output
+// language (empty means zh).
+func ReleaseMarkdownLang(d releasedigest.ReleaseDigest, lang string) []byte {
+	rt := i18n.MustResolve(lang).Render
 	var b strings.Builder
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "date: %s\nperiod: %s\ncount: %d\ndegraded: %t\n", d.Date, d.Period, d.Count, d.Degraded)
@@ -98,12 +112,12 @@ func ReleaseMarkdown(d releasedigest.ReleaseDigest) []byte {
 		gen = d.GeneratedAt.UTC().Format(time.RFC3339)
 	}
 	fmt.Fprintf(&b, "generatedAt: %s\n---\n\n", gen)
-	fmt.Fprintf(&b, "# %s 发版摘要\n\n", d.Date)
+	fmt.Fprintf(&b, "# %s %s\n\n", d.Date, rt.ReleasesTitle)
 	if d.Degraded {
-		b.WriteString("> ⚠️ 部分版本未获取到有效变更说明，已降级为原文摘要（summarySource=original）。\n\n")
+		b.WriteString(rt.ReleasesDegradedBanner + "\n\n")
 	}
 	if len(d.Repos) == 0 {
-		b.WriteString("_本次没有订阅仓库的新版本。_\n")
+		b.WriteString(rt.NoReleases + "\n")
 	}
 	for _, r := range d.Repos {
 		period := ""
@@ -111,8 +125,8 @@ func ReleaseMarkdown(d releasedigest.ReleaseDigest) []byte {
 			period = " · " + *r.PeriodStart + " ~ " + *r.PeriodEnd
 		}
 		fmt.Fprintf(&b, "## [%s](%s) · %s%s\n\n", r.FullName, r.URL, r.LatestTag, period)
-		if r.SummaryZh != nil && *r.SummaryZh != "" {
-			fmt.Fprintf(&b, "%s\n\n", *r.SummaryZh)
+		if r.Summary != nil && *r.Summary != "" {
+			fmt.Fprintf(&b, "%s\n\n", *r.Summary)
 		}
 		for _, it := range r.Releases {
 			date := ""
@@ -120,14 +134,14 @@ func ReleaseMarkdown(d releasedigest.ReleaseDigest) []byte {
 				date = it.PublishedAt.Format("2006-01-02")
 			}
 			fmt.Fprintf(&b, "- **%s**%s", it.Tag, dateSuffix(date))
-			// Schema 2 leaves per-item summaries empty (the summary is one per
-			// repo-week); old documents keep their per-item prose readable.
-			if it.SummaryZh != nil && *it.SummaryZh != "" {
-				fmt.Fprintf(&b, " — %s", *it.SummaryZh)
+			// Per-item summaries carry each version's own prose; old documents
+			// with only a repo-level summary leave these empty.
+			if it.Summary != nil && *it.Summary != "" {
+				fmt.Fprintf(&b, " — %s", *it.Summary)
 			}
 			b.WriteString("\n")
 			if it.URL != "" {
-				fmt.Fprintf(&b, "  链接: %s\n", it.URL)
+				fmt.Fprintf(&b, "  %s: %s\n", rt.ReleaseLinkLabel, it.URL)
 			}
 		}
 		b.WriteString("\n")
@@ -144,13 +158,19 @@ func dateSuffix(date string) string {
 
 // ReleaseIndex renders the releases index grouped by period, newest first.
 func ReleaseIndex(digests []releasedigest.ReleaseDigest, limits map[string]int, root string) []byte {
+	return ReleaseIndexLang(digests, limits, root, "")
+}
+
+// ReleaseIndexLang is ReleaseIndex in an explicit output language (empty means zh).
+func ReleaseIndexLang(digests []releasedigest.ReleaseDigest, limits map[string]int, root string, lang string) []byte {
+	rt := i18n.MustResolve(lang).Render
 	byPeriod := map[string][]releasedigest.ReleaseDigest{}
 	for _, d := range digests {
 		p := releasePeriod(d.Period)
 		byPeriod[p] = append(byPeriod[p], d)
 	}
 	var b strings.Builder
-	b.WriteString("# 发版索引\n")
+	b.WriteString("# " + rt.ReleasesIndexTitle + "\n")
 	for _, period := range []string{PeriodDaily, PeriodWeekly, PeriodMonthly} {
 		ds := byPeriod[period]
 		if len(ds) == 0 {
@@ -160,8 +180,8 @@ func ReleaseIndex(digests []releasedigest.ReleaseDigest, limits map[string]int, 
 		if limit := limits[period]; limit > 0 && len(ds) > limit {
 			ds = ds[:limit]
 		}
-		fmt.Fprintf(&b, "\n## %s\n\n", periodTitle(period))
-		b.WriteString("| 日期 | 数量 | 降级 | 摘要 |\n|---|---|---|---|\n")
+		fmt.Fprintf(&b, "\n## %s\n\n", periodTitleLang(rt, period))
+		b.WriteString(indexTableHeaderLang(rt))
 		for _, d := range ds {
 			name := NameOf(period, d.Date)
 			link := path.Join(root, ReleaseDir(period), BucketOf(period, d.Date), name+".md")
@@ -169,6 +189,23 @@ func ReleaseIndex(digests []releasedigest.ReleaseDigest, limits map[string]int, 
 		}
 	}
 	return []byte(b.String())
+}
+
+// periodTitleLang returns the index section title for period in lang. The zh form
+// is byte-identical to the pre-i18n periodTitle output (日榜/周榜/月榜).
+func periodTitleLang(rt i18n.RenderTexts, period string) string {
+	if t, ok := rt.Periods[period]; ok {
+		return t
+	}
+	return period
+}
+
+// indexTableHeaderLang returns the index table header for lang.
+func indexTableHeaderLang(rt i18n.RenderTexts) string {
+	if rt.ReleasesIndexTitle == "Release Index" {
+		return "| Date | Count | Degraded | Summary |\n|---|---|---|---|\n"
+	}
+	return "| 日期 | 数量 | 降级 | 摘要 |\n|---|---|---|---|\n"
 }
 
 // ListReleaseDigests scans <root>/<subdir>/<period>/<bucket>/ for release

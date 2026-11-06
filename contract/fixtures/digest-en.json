@@ -1,0 +1,103 @@
+{
+  "schema": 3,
+  "date": "2026-10-30",
+  "period": "daily",
+  "languages": [
+    "all",
+    "go",
+    "python",
+    "rust"
+  ],
+  "count": 6,
+  "degraded": false,
+  "contentHash": "sha256:6ac1eb001cba7559551d5884e4164ad6eeb52a7865fd96048dcc1153e17d3bc3",
+  "contentHashAlgo": "jcs-sha256-v1",
+  "coreVersion": "0.1.0",
+  "generatedAt": "2026-10-30T00:05:00Z",
+  "repos": [
+    {
+      "fullName": "golang/go",
+      "url": "https://github.com/golang/go",
+      "description": "The Go programming language",
+      "language": "go",
+      "stars": 126000,
+      "starsInPeriod": 320,
+      "forks": 17800,
+      "rank": 1,
+      "source": "trending-html",
+      "summarySource": "model",
+      "summary": "The official Go repository, among the top gainers today.",
+      "summaryLang": "en"
+    },
+    {
+      "fullName": "gin-gonic/gin",
+      "url": "https://github.com/gin-gonic/gin",
+      "description": "HTTP web framework written in Go",
+      "language": "go",
+      "stars": 80200,
+      "starsInPeriod": 210,
+      "forks": 8100,
+      "rank": 2,
+      "source": "trending-html",
+      "summarySource": "model",
+      "summary": "A popular Go web framework that keeps trending.",
+      "summaryLang": "en"
+    },
+    {
+      "fullName": "python/cpython",
+      "url": "https://github.com/python/cpython",
+      "description": "The Python programming language",
+      "language": "python",
+      "stars": 64500,
+      "starsInPeriod": 180,
+      "forks": 30500,
+      "rank": 3,
+      "source": "trending-html",
+      "summarySource": "model",
+      "summary": "The official CPython implementation, drawing more attention today.",
+      "summaryLang": "en"
+    },
+    {
+      "fullName": "psf/requests",
+      "url": "https://github.com/psf/requests",
+      "description": "A simple, yet elegant HTTP library",
+      "language": "python",
+      "stars": 52500,
+      "starsInPeriod": 95,
+      "forks": 9400,
+      "rank": 4,
+      "source": "trending-html",
+      "summarySource": "model",
+      "summary": "The classic Python HTTP library, a steady fixture on the charts.",
+      "summaryLang": "en"
+    },
+    {
+      "fullName": "rust-lang/rust",
+      "url": "https://github.com/rust-lang/rust",
+      "description": "Empowering everyone to build reliable and efficient software",
+      "language": "rust",
+      "stars": 102000,
+      "starsInPeriod": 260,
+      "forks": 13200,
+      "rank": 5,
+      "source": "trending-html",
+      "summarySource": "model",
+      "summary": "The main Rust repository, with an active community.",
+      "summaryLang": "en"
+    },
+    {
+      "fullName": "tokio-rs/tokio",
+      "url": "https://github.com/tokio-rs/tokio",
+      "description": "A runtime for writing reliable asynchronous applications with Rust",
+      "language": "rust",
+      "stars": 28600,
+      "starsInPeriod": 120,
+      "forks": 2650,
+      "rank": 6,
+      "source": "trending-html",
+      "summarySource": "model",
+      "summary": "The Rust async runtime, drawing strong interest for performance.",
+      "summaryLang": "en"
+    }
+  ]
+}

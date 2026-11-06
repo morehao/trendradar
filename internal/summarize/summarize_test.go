@@ -58,8 +58,8 @@ func TestSummarizeUsesModel(t *testing.T) {
 		if d.SummarySource != "model" {
 			t.Fatalf("%s source = %s, want model", d.FullName, d.SummarySource)
 		}
-		if !strings.HasPrefix(d.SummaryZh, "[fake]") {
-			t.Fatalf("%s summary = %q", d.FullName, d.SummaryZh)
+		if !strings.HasPrefix(d.Summary, "[fake]") {
+			t.Fatalf("%s summary = %q", d.FullName, d.Summary)
 		}
 	}
 }
@@ -80,8 +80,8 @@ func TestSummarizeDegradesOnBadOutput(t *testing.T) {
 		if d.SummarySource != "original" {
 			t.Fatalf("%s source = %s, want original", d.FullName, d.SummarySource)
 		}
-		if !strings.HasPrefix(d.SummaryZh, "[原文]") {
-			t.Fatalf("%s summary = %q", d.FullName, d.SummaryZh)
+		if !strings.HasPrefix(d.Summary, "[原文]") {
+			t.Fatalf("%s summary = %q", d.FullName, d.Summary)
 		}
 	}
 }

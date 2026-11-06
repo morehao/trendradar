@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/morehao/trendradar/internal/digest"
+	"github.com/morehao/trendradar/internal/i18n"
 )
 
 // ErrBadOutput marks model output that could not be decoded into valid summaries.
@@ -25,8 +26,8 @@ var (
 
 type response struct {
 	Summaries []struct {
-		FullName  string `json:"fullName"`
-		SummaryZh string `json:"summaryZh"`
+		FullName string `json:"fullName"`
+		Summary  string `json:"summary"`
 	} `json:"summaries"`
 }
 
@@ -46,8 +47,16 @@ func parseResponse(raw string, batch []digest.RepoSnapshot) (map[string]string, 
 
 // parseAndValidate decodes model output, sanitises every summary, and returns
 // the accepted map plus the list of batch repos still missing/invalid (which
-// drives the repair pass).
+// drives the repair pass). It validates against the default (Chinese) language;
+// parseAndValidateLang is the language-aware form the pipeline uses.
 func parseAndValidate(raw string, batch []digest.RepoSnapshot) (map[string]string, []string, error) {
+	return parseAndValidateLang(raw, batch, i18n.MustResolve(i18n.DefaultLanguage))
+}
+
+// parseAndValidateLang is parseAndValidate with an explicit output language, so
+// the "is this actually written in <lang>" gate matches what the prompt asked
+// for (Han characters for zh, letters for en).
+func parseAndValidateLang(raw string, batch []digest.RepoSnapshot, lang i18n.OutputLanguage) (map[string]string, []string, error) {
 	raw = stripFence(strings.TrimSpace(raw))
 	var resp response
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
@@ -61,8 +70,8 @@ func parseAndValidate(raw string, batch []digest.RepoSnapshot) (map[string]strin
 	}
 	out := make(map[string]string, len(resp.Summaries))
 	for _, s := range resp.Summaries {
-		sum := sanitizeSummary(s.SummaryZh)
-		if allowed[s.FullName] && validSummary(sum, descByName[s.FullName]) {
+		sum := sanitizeSummary(s.Summary)
+		if allowed[s.FullName] && validSummaryLang(sum, descByName[s.FullName], lang) {
 			out[s.FullName] = sum
 		}
 	}
@@ -95,13 +104,28 @@ func sanitizeSummary(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// validSummary is the default-language (Chinese) validity gate, kept for tests.
 func validSummary(s, desc string) bool {
+	return validSummaryLang(s, desc, i18n.MustResolve(i18n.DefaultLanguage))
+}
+
+// validSummaryLang is the language-aware validity gate. For zh it requires at
+// least one Han character (see the long comment below); for en it requires at
+// least one Latin letter. Both reject empty output, over-long output, and a
+// verbatim copy of the description.
+func validSummaryLang(s, desc string, lang i18n.OutputLanguage) bool {
 	if s == "" {
 		return false
 	}
 	total := utf8.RuneCountInString(s)
 	if total > maxSummaryRunes {
 		return false
+	}
+	if strings.TrimSpace(s) == strings.TrimSpace(desc) {
+		return false
+	}
+	if lang.ID == "en" {
+		return hasLatinLetter(s)
 	}
 	// 只要求「是中文」——即至少含一个汉字——而不是要求汉字占比达到某个比例。
 	// 早先用「汉字占比 ≥ 40%」当门槛，本意是拦截「模型把英文原文照抄回来，
@@ -110,10 +134,19 @@ func validSummary(s, desc string) bool {
 	// 即便模型写出通顺的简体中文摘要，汉字占比也远低于 40%，于是被判定为无效、
 	// 重试也救不回，最终降级为 [原文]。英文占比高本身不是问题——只要摘要确实是
 	// 中文（含汉字）且不是照抄原文描述，就应接受。
-	if !hasHan(s) {
-		return false
+	return hasHan(s)
+}
+
+// hasLatinLetter reports whether s contains at least one Unicode Latin letter.
+// It is the en counterpart of hasHan: pure-CJK or pure-symbol output from the
+// model is rejected when English was requested.
+func hasLatinLetter(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Latin, r) {
+			return true
+		}
 	}
-	return strings.TrimSpace(s) != strings.TrimSpace(desc)
+	return false
 }
 
 // hasHan reports whether s contains at least one Han character. It is the
