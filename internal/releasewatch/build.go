@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -467,6 +468,25 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 			AddSeenTag(&st, r.TagName)
 			pool = append(pool, candidate{repoFull: repo, repoURL: repoURL(repo), rel: r, kind: "release"})
 		}
+		// Backfill picks the newest N versions by *publication date*, not by the
+		// API's list position. /releases is ordered by created_at, so a rolling
+		// prerelease that is re-published regularly (fresh created_at, stale
+		// publishedAt — e.g. ragflow's "nightly") sits at the head while carrying
+		// a year-old publish date. Taken positionally it would displace a real
+		// version and pull the document's newest week back to that old date.
+		// Releases without a publish date sort last; the tag fallback below is
+		// left untouched because tag dates are not reliable enough to order by.
+		sort.SliceStable(pool, func(i, j int) bool {
+			pi, pj := pool[i].rel.PublishedAt, pool[j].rel.PublishedAt
+			switch {
+			case pi == nil:
+				return false
+			case pj == nil:
+				return true
+			default:
+				return pi.After(*pj)
+			}
+		})
 	} else if b.opts.FallbackToTags {
 		tags, _ := b.fetchAllTags(ctx, owner, name)
 		if len(tags) == 0 {
