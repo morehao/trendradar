@@ -3,6 +3,22 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
+## Unreleased
+
+Release summaries move from one-per-repo-per-week to one-per-version.
+**No wire change** (`digestSchema` stays 2): only optional-field semantics and
+descriptions change, so old and new docs both validate.
+
+### Changed
+- `ReleaseItem.summaryZh` now documented as *this version's* summary, written by
+  current cores (per-version incremental). Still optional.
+- `RepoReleases.summaryZh` documented as legacy/backward-compatible (whole-week
+  roll-up); current cores leave it empty and put summaries on each
+  `releases[].summaryZh`. Consumers should prefer the per-item summary and fall
+  back to the repo-level one for older documents.
+- `RepoReleases.periodStart/periodEnd` documented as attributed to the versions'
+  publish dates (not the run day).
+
 ## 0.6.0
 
 Digest inlined in `RunResult`. **Breaking wire bump**: `ipcSchema` 2 → 3
