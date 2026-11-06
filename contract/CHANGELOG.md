@@ -3,21 +3,33 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
-## Unreleased
+## 0.7.0
 
-Release summaries move from one-per-repo-per-week to one-per-version.
-**No wire change** (`digestSchema` stays 2): only optional-field semantics and
-descriptions change, so old and new docs both validate.
+Language-neutral summaries. **Breaking wire bump**: `ipcSchema` 3 → 4,
+`digestSchema` 2 → 3, `contractVersion` 0.6.0 → 0.7.0. A core/plugin pair must
+both move to this contract line; the plugin's handshake hard-rejects the
+mismatch.
 
-### Changed
-- `ReleaseItem.summaryZh` now documented as *this version's* summary, written by
-  current cores (per-version incremental). Still optional.
-- `RepoReleases.summaryZh` documented as legacy/backward-compatible (whole-week
-  roll-up); current cores leave it empty and put summaries on each
-  `releases[].summaryZh`. Consumers should prefer the per-item summary and fall
-  back to the repo-level one for older documents.
-- `RepoReleases.periodStart/periodEnd` documented as attributed to the versions'
-  publish dates (not the run day).
+### Changed (breaking)
+- `RepoDigest.summaryZh` → `summary` (string, **required**); added
+  `summaryLang` (BCP47 string, **required**) recording the language of `summary`.
+  `summarySource` (enum `model` / `original`) is unchanged and still required.
+- `RepoReleases.summaryZh` → `summary` (string, optional) plus a new optional
+  `summaryLang`; present only when the repo-level summary is.
+- `ReleaseItem.summaryZh` → `summary` (string, optional). Item-level summaries
+  carry no `summaryLang` (they inherit the repo-level / configured language).
+- Summary text is no longer assumed to be Chinese: `summary` holds whichever
+  configured output language produced it, and `summaryLang` tags the language.
+- Schema files renamed: `model.v2.json` → `model.v3.json`,
+  `digest.v2.json` → `digest.v3.json`, `releases.v2.json` → `releases.v3.json`,
+  `ipc.v3.json` → `ipc.v4.json`. `version-info.v2.json` / `errors.v2.json` keep
+  their filenames (wire constant / catalog unchanged).
+- `State.stateSchema` stays 3 (state-document layout is unchanged).
+
+### Fixtures
+- All digest/release fixtures moved to `schema: 3` with `summary` +
+  `summaryLang`; `contentHash` recomputed (JCS).
+- Added `digest-en.json`: a `summaryLang: "en"` digest sample.
 
 ## 0.6.0
 

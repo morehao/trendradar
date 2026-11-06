@@ -1,8 +1,8 @@
 {
-  "schema": 2,
+  "schema": 3,
   "date": "2026-10-31",
   "period": "weekly",
-  "contentHash": "sha256:e9cd2c19bcaf079d832114be1dff9ce81351d1643c5c6e8efd5da781ef18d5e4",
+  "contentHash": "sha256:73ca07a4b446a21356ebcbc1cb31281494b36c4bab1f9285106e37eddb71571b",
   "contentHashAlgo": "jcs-sha256-v1",
   "count": 0,
   "degraded": false,

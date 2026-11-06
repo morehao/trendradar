@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	contract "github.com/morehao/trendradar/contract"
+	"github.com/morehao/trendradar/internal/i18n"
 )
 
 // DefaultMaxLines is the write-before line budget. A volume is rolled over only
@@ -91,10 +92,10 @@ func volumeName(repo string, index int) string {
 
 // Item is one version listed in a week section.
 type Item struct {
-	Tag       string
-	URL       string
-	Date      string // YYYY-MM-DD, empty when unknown
-	SummaryZh string // this version's own summary (append-only v3 documents)
+	Tag     string
+	URL     string
+	Date    string // YYYY-MM-DD, empty when unknown
+	Summary string // this version's own summary (append-only v3 documents)
 }
 
 // Section is one week of a repo's release history.
@@ -102,11 +103,15 @@ type Section struct {
 	Repo      string
 	WeekStart string
 	WeekEnd   string
-	SummaryZh string
+	Summary   string
 	Degraded  bool
 	Items     []Item
 	// MaxListed overrides MaxListedTags when > 0.
 	MaxListed int
+	// Lang is the output language id (empty means zh). It drives the fixed
+	// document strings (rest-label, degraded banner, header freshness line). The
+	// zh strings are byte-identical to the pre-i18n output.
+	Lang string
 }
 
 // Heading is the exact line that identifies the section inside a volume.
@@ -149,36 +154,49 @@ func (s Section) Render() string {
 		// Per-version summary (append-only v3): each release carries its own
 		// prose under the bullet. Older documents have no per-item summary and
 		// fall back to the single week summary at the end (below).
-		if zh := strings.TrimSpace(it.SummaryZh); zh != "" {
+		if sum := strings.TrimSpace(it.Summary); sum != "" {
 			b.WriteString("\n")
-			b.WriteString(indentWrap(zh))
+			b.WriteString(indentWrap(sum))
 			b.WriteString("\n")
 		}
 	}
 	if rest > 0 {
-		fmt.Fprintf(&b, "- 其余 %d 个\n", rest)
+		fmt.Fprintf(&b, "- %s\n", restLabel(s.Lang, rest))
 	}
 	// Legacy fallback: only when no item carried its own summary do we render the
 	// weekly roll-up, so old documents stay readable and new ones are not
 	// duplicated by a second "week" paragraph.
 	anyItemSummary := false
 	for _, it := range listed {
-		if strings.TrimSpace(it.SummaryZh) != "" {
+		if strings.TrimSpace(it.Summary) != "" {
 			anyItemSummary = true
 			break
 		}
 	}
-	summary := strings.TrimSpace(s.SummaryZh)
+	summary := strings.TrimSpace(s.Summary)
 	if summary != "" && !anyItemSummary {
 		b.WriteString("\n")
 		if s.Degraded {
-			b.WriteString("> ⚠️ 本周模型摘要不可用，以下为原文摘录。\n\n")
+			if i18n.MustResolve(s.Lang).ID == "en" {
+				b.WriteString("> ⚠️ This week's model summary is unavailable; the original notes are shown below.\n\n")
+			} else {
+				b.WriteString("> ⚠️ 本周模型摘要不可用，以下为原文摘录。\n\n")
+			}
 		}
 		b.WriteString(summary)
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 	return b.String()
+}
+
+// restLabel renders the "其余 N 个" / "N more" line in lang. The zh form is
+// byte-identical to the pre-i18n output.
+func restLabel(lang string, n int) string {
+	if i18n.MustResolve(lang).ID == "en" {
+		return fmt.Sprintf("%d more", n)
+	}
+	return fmt.Sprintf("其余 %d 个", n)
 }
 
 // indentWrap puts a version summary on its own lines, indented two spaces so it
@@ -206,16 +224,34 @@ func escapeLinkText(s string) string {
 
 // header renders the volume header. Volume 1 carries only the repo title and the
 // freshness line; later volumes add a link to the previous volume so a reader
-// can walk the whole history.
-func header(repo string, index int, prevFile, updatedAt string) string {
+// can walk the whole history. The zh strings are byte-identical to the pre-i18n
+// output; lang only swaps the human-visible wording.
+func header(repo string, index int, prevFile, updatedAt, lang string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", repo)
+	en := i18n.MustResolve(lang).ID == "en"
 	if index > 1 && prevFile != "" {
-		fmt.Fprintf(&b, "> 上一册：[第 %d 册](%s)\n", index-1, prevFile)
+		if en {
+			fmt.Fprintf(&b, "> Previous: [volume %d](%s)\n", index-1, prevFile)
+		} else {
+			fmt.Fprintf(&b, "> 上一册：[第 %d 册](%s)\n", index-1, prevFile)
+		}
 	}
-	fmt.Fprintf(&b, "> 发版记录 · 每周一次 · 最近更新 %s\n\n", updatedAt)
+	if en {
+		fmt.Fprintf(&b, "> %s %s\n\n", enFreshnessPrefix, updatedAt)
+	} else {
+		fmt.Fprintf(&b, "> %s %s\n\n", zhFreshnessPrefix, updatedAt)
+	}
 	return b.String()
 }
+
+// Freshness-line prefixes. They are matched (not just rendered) by updatedOf and
+// prepend, so both languages' forms must be recognised there. zh is byte-
+// identical to the pre-i18n output.
+const (
+	zhFreshnessPrefix = "发版记录 · 每周一次 · 最近更新"
+	enFreshnessPrefix = "Release log · weekly · last updated"
+)
 
 // Index lists the volumes that exist for repo, oldest index first. Volume files
 // are contiguous by construction (the writer only ever appends the next index),
@@ -324,7 +360,7 @@ func Plan(repoRoot, root, repo string, sec Section, maxLines int) (file string, 
 		return "", nil, false, err
 	}
 	if len(vols) == 0 {
-		content := header(repo, 1, "", sec.Date()) + sec.Render()
+		content := header(repo, 1, "", sec.Date(), sec.Lang) + sec.Render()
 		return Path(root, repo, 1), []byte(content), true, nil
 	}
 
@@ -354,7 +390,7 @@ func Plan(repoRoot, root, repo string, sec Section, maxLines int) (file string, 
 	if lineCount(content) > maxLines {
 		index := current.Index + 1
 		prev := volumeName(repo, current.Index)
-		body := header(repo, index, prev, sec.Date()) + sec.Render()
+		body := header(repo, index, prev, sec.Date(), sec.Lang) + sec.Render()
 		return Path(root, repo, index), []byte(body), true, nil
 	}
 	return currentRel, []byte(prepend(content, sec)), true, nil
@@ -373,10 +409,17 @@ func prepend(content string, sec Section) string {
 			break
 		}
 	}
-	// Keep the "最近更新" line in step with the section we are adding.
+	// Keep the freshness line in step with the section we are adding. Match the
+	// prefix in either language so a document written before/after a language
+	// switch still gets its line refreshed (rather than duplicated).
 	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "> 发版记录") {
-			lines[i] = "> 发版记录 · 每周一次 · 最近更新 " + sec.Date()
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "> "+zhFreshnessPrefix) || strings.HasPrefix(trimmed, "> "+enFreshnessPrefix) {
+			if i18n.MustResolve(sec.Lang).ID == "en" {
+				lines[i] = "> " + enFreshnessPrefix + " " + sec.Date()
+			} else {
+				lines[i] = "> " + zhFreshnessPrefix + " " + sec.Date()
+			}
 			break
 		}
 	}
@@ -416,11 +459,11 @@ func firstLine(content string) string {
 	return ""
 }
 
-// updatedOf extracts the date from the freshness line.
+// updatedOf extracts the date from the freshness line (either language).
 func updatedOf(content string) string {
 	for _, line := range strings.Split(content, "\n") {
 		s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), ">"))
-		if strings.HasPrefix(s, "发版记录") {
+		if strings.HasPrefix(s, zhFreshnessPrefix) || strings.HasPrefix(s, enFreshnessPrefix) {
 			if i := strings.LastIndex(s, " "); i >= 0 {
 				return strings.TrimSpace(s[i+1:])
 			}

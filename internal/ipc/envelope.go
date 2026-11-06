@@ -5,9 +5,9 @@ package ipc
 
 import contract "github.com/morehao/trendradar/contract"
 
-// SchemaVersion is the IPC envelope version (third generation: RunResult
-// inlines the rendered digest so consumers never read the output repository).
-const SchemaVersion = 3
+// SchemaVersion is the IPC envelope version (fourth generation: outputLanguage
+// adds summary/summaryLang to the digest and release wire types).
+const SchemaVersion = 4
 
 // Command enumerates the sub-commands the core exposes over IPC.
 type Command string

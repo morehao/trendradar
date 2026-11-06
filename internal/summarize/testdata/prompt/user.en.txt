@@ -1,0 +1,7 @@
+Write an English summary for each of the following repositories:
+REPO=acme/cache	DESC=fast cache for services
+META=lang=go; stars=1234; starsPeriod=56; rank=3
+TOPICS=ai,llm
+README_EXCERPT=line one line two
+REPO=acme/ui	DESC=ui components
+META=lang=typescript; stars=900; starsPeriod=12; rank=7

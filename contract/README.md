@@ -1,4 +1,4 @@
-# @morehao/trendradar-contract (0.6.0)
+# @morehao/trendradar-contract (0.7.0)
 
 The single source of truth for the data shapes shared by the **trendradar Go
 core** (`github.com/morehao/trendradar`) and the **DSH plugin**
@@ -12,31 +12,31 @@ artifacts from one tag:
 
 Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 
-> Version model: the **package** is `0.6.0`, while the
-> **wire format** it carries is the third generation — `ipcSchema=3`,
-> `digestSchema=2`. The integers distinguish this contract from the legacy
-> in-repo v1 and the pre-inline `ipcSchema=2`; they are intentionally decoupled
-> from the package semver.
+> Version model: the **package** is `0.7.0`, while the
+> **wire format** it carries is the fourth generation — `ipcSchema=4`,
+> `digestSchema=3`. The integers distinguish this contract from the legacy
+> in-repo v1, the pre-inline `ipcSchema=2`, and the pre-language `ipcSchema=3`;
+> they are intentionally decoupled from the package semver.
 
 ## Install
 
 ```bash
-npm i @morehao/trendradar-contract@0.6.0
-go get github.com/morehao/trendradar/contract@v0.6.0   # resolves tag contract/v0.6.0
+npm i @morehao/trendradar-contract@0.7.0
+go get github.com/morehao/trendradar/contract@v0.7.0   # resolves tag contract/v0.7.0
 ```
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
-| `schema/model.v2.json` | `RepoSnapshot`; `RepoDigest` composes it via `allOf` |
-| `schema/ipc.v3.json` | `RunRequest` (strict), `RunResult` (incl. inlined `DigestArtifact`), `ErrorInfo`, `State`, `FileArtifact` |
-| `schema/digest.v2.json` | rendered digest document, incl. `contentHashAlgo` |
-| `schema/releases.v2.json` | release-subscription document + `ReleasesReport` (run cost) |
+| `schema/model.v3.json` | `RepoSnapshot`; `RepoDigest` composes it via `allOf` |
+| `schema/ipc.v4.json` | `RunRequest` (strict), `RunResult` (incl. inlined `DigestArtifact`), `ErrorInfo`, `State`, `FileArtifact` |
+| `schema/digest.v3.json` | rendered digest document, incl. `contentHashAlgo` |
+| `schema/releases.v3.json` | release-subscription document + `ReleasesReport` (run cost) |
 | `schema/errors.v2.json` | 17 error codes with `retriable`/`description` (single source of truth) |
 | `schema/version-info.v2.json` | `trendradar version --json` handshake |
 | `schema/api.v2.yaml` | `trendradar serve` OpenAPI (`/api/v2`, incl. releases) |
-| `fixtures/*.json` | golden v2 digests + release documents |
+| `fixtures/*.json` | golden v3 digests + release documents |
 | `version-map.json` | schema file → version carrier → propagation |
 | `contract.gen.go` | generated Go structs + `ErrorCode` + `ErrorCatalog` + `SchemaFS` |
 | `gen/ts/index.{js,d.ts}` | generated TS types + runtime (`validators`, `errorCatalog`, `fixtures`, `rawSchema`) |
@@ -62,8 +62,8 @@ contract.SchemaFS // embedded schema/* files
 
 ## Versioning & compatibility
 
-- `ipcSchema` (const 2) and `digestSchema` (const 2) are the wire integers;
-  `contractVersion` (`"0.4.0"`) is the package handshake.
+- `ipcSchema` (const 4) and `digestSchema` (const 3) are the wire integers;
+  `contractVersion` (`"0.7.0"`) is the package handshake.
 - Adding an **optional** field is a minor change. Removing/renaming a field,
   changing a type, or tightening validation is **breaking**: bump the affected
   wire integer and/or the package version, declared in `version-map.json`.
@@ -73,10 +73,13 @@ contract.SchemaFS // embedded schema/* files
   `list` takes no `repo`/`volume`, `add`/`remove` require a `repo` and no
   `volume`, `releases` requires a `repo` and may name a `volume`; other commands
   must not carry any of them. `stages` is run-only.
-- `ReleaseDigest.schema` is `2`: the summary moved from per-tag
-  (`ReleaseItem.summaryZh`, now optional and no longer written) to one per repo
-  per week (`RepoReleases.summaryZh` + `periodStart`/`periodEnd`). Old documents
-  still parse; new writers leave the per-item field empty.
+- `ReleaseDigest.schema` is `3`: summaries are language-neutral — each entry
+  carries `summary` in the configured output language (plus `summaryLang` at the
+  repo level). Per-tag summaries live in `releases[].summary`; a repo-level
+  `summary`/`summaryLang` remains optional for older documents. Old v2 documents
+  still parse (both summary fields stay optional).
+- `RepoDigest` (trending) now requires `summary` + `summaryLang` (the language of
+  `summary`); `summarySource` (`model`/`original`) is unchanged.
 - `ReleasesReport.checked` / `changed` are **required** so `0` ("checked nothing")
   is distinguishable from "not reported".
 - Token cost for releases lives in `ReleasesReport.usage` (always present) and

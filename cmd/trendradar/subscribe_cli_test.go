@@ -134,7 +134,7 @@ func TestSubscribeListReturnsItems(t *testing.T) {
 	docRoot := filepath.Join(work, "digests", "releases")
 	rel, data, need, err := releasedoc.Plan(work, docRoot, "o/r", releasedoc.Section{
 		Repo: "o/r", WeekStart: "2026-10-26", WeekEnd: "2026-11-01",
-		SummaryZh: "本周发布 v1。", Items: []releasedoc.Item{{Tag: "v1", URL: "https://github.com/o/r/releases/tag/v1", Date: "2026-10-29"}},
+		Summary: "本周发布 v1。", Items: []releasedoc.Item{{Tag: "v1", URL: "https://github.com/o/r/releases/tag/v1", Date: "2026-10-29"}},
 	}, 600)
 	if err != nil || !need {
 		t.Fatalf("plan: need=%v err=%v", need, err)
@@ -177,7 +177,7 @@ func TestSubscribeReleasesReturnsDocument(t *testing.T) {
 	cfgPath, work := setupSubscribeRepo(t)
 	docRoot := filepath.Join(work, "digests", "releases")
 	rel, data, _, err := releasedoc.Plan(work, docRoot, "o/r", releasedoc.Section{
-		Repo: "o/r", WeekStart: "2026-10-26", WeekEnd: "2026-11-01", SummaryZh: "本周发布 v1。",
+		Repo: "o/r", WeekStart: "2026-10-26", WeekEnd: "2026-11-01", Summary: "本周发布 v1。",
 		Items: []releasedoc.Item{{Tag: "v1", URL: "https://github.com/o/r/releases/tag/v1", Date: "2026-10-29"}},
 	}, 600)
 	if err != nil {

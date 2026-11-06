@@ -53,12 +53,12 @@ func TestSanitizeSummaryStripsMarkup(t *testing.T) {
 func TestParseAndValidateRejectsLongAndRepeatsDescription(t *testing.T) {
 	batch := []digest.RepoSnapshot{{FullName: "acme/x", Description: digest.StrPtr("some description")}}
 	long := strings.Repeat("中", 81)
-	raw := fmt.Sprintf(`{"summaries":[{"fullName":"acme/x","summaryZh":%q}]}`, long)
+	raw := fmt.Sprintf(`{"summaries":[{"fullName":"acme/x","summary":%q}]}`, long)
 	if _, invalid, err := parseAndValidate(raw, batch); err != nil || len(invalid) != 1 {
 		t.Fatalf("long summary should be invalid: err=%v invalid=%v", err, invalid)
 	}
 
-	raw = `{"summaries":[{"fullName":"acme/x","summaryZh":"some description"}]}`
+	raw = `{"summaries":[{"fullName":"acme/x","summary":"some description"}]}`
 	if _, invalid, err := parseAndValidate(raw, batch); err != nil || len(invalid) != 1 {
 		t.Fatalf("repeat-description should be invalid: err=%v invalid=%v", err, invalid)
 	}
@@ -76,7 +76,7 @@ func TestParseAndValidateAcceptsLatinHeavyChineseSummary(t *testing.T) {
 	}}
 	// Genuine Chinese summary, but dominated by Latin brand names (Han ratio ~0.14).
 	summary := "把 AI Studio Playground 与 Build 反代为 OpenAI、Anthropic、Gemini 兼容 API 的服务。"
-	raw := fmt.Sprintf(`{"summaries":[{"fullName":"Mag1cFall/AIStudio2API","summaryZh":%q}]}`, summary)
+	raw := fmt.Sprintf(`{"summaries":[{"fullName":"Mag1cFall/AIStudio2API","summary":%q}]}`, summary)
 	got, invalid, err := parseAndValidate(raw, batch)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -93,7 +93,7 @@ func TestParseAndValidateAcceptsLatinHeavyChineseSummary(t *testing.T) {
 // must still be rejected: it contains no Han characters.
 func TestParseAndValidateRejectsPureEnglishSummary(t *testing.T) {
 	batch := []digest.RepoSnapshot{{FullName: "acme/cache", Description: digest.StrPtr("A fast cache for services")}}
-	raw := `{"summaries":[{"fullName":"acme/cache","summaryZh":"A cache library for high concurrency services"}]}`
+	raw := `{"summaries":[{"fullName":"acme/cache","summary":"A cache library for high concurrency services"}]}`
 	if _, invalid, err := parseAndValidate(raw, batch); err != nil || len(invalid) != 1 {
 		t.Fatalf("pure-English summary should be invalid: err=%v invalid=%v", err, invalid)
 	}
@@ -106,8 +106,8 @@ type repairProvider struct {
 }
 
 type summaryItem struct {
-	FullName  string `json:"fullName"`
-	SummaryZh string `json:"summaryZh"`
+	FullName string `json:"fullName"`
+	Summary  string `json:"summary"`
 }
 
 func (p *repairProvider) Name() string { return "repair" }
@@ -125,7 +125,7 @@ func (p *repairProvider) Complete(_ context.Context, _, user string) (model.Resu
 		if call == 1 && i == len(names)-1 {
 			continue
 		}
-		items = append(items, summaryItem{FullName: m[1], SummaryZh: "这是用于测试的中文摘要，说明该仓库的用途。"})
+		items = append(items, summaryItem{FullName: m[1], Summary: "这是用于测试的中文摘要，说明该仓库的用途。"})
 	}
 	b, _ := json.Marshal(map[string]any{"summaries": items})
 	return model.Result{Text: string(b)}, nil
@@ -158,7 +158,7 @@ func TestFormattingFakeOutputPassesValidation(t *testing.T) {
 	s := New(model.NewFake())
 	for _, d := range s.Summarize(context.Background(), snaps(2)) {
 		if d.SummarySource != "model" {
-			t.Fatalf("%s degraded: %q", d.FullName, d.SummaryZh)
+			t.Fatalf("%s degraded: %q", d.FullName, d.Summary)
 		}
 	}
 }

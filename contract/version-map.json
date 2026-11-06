@@ -1,15 +1,15 @@
 {
-  "digest.v2.json": {
+  "digest.v3.json": {
     "wireKey": "digestSchema",
-    "current": 2,
+    "current": 3,
     "breakingBump": [
       "digestSchema",
       "packageMajor"
     ]
   },
-  "model.v2.json": {
+  "model.v3.json": {
     "wireKey": null,
-    "current": 2,
+    "current": 3,
     "propagatesTo": [
       "digestSchema"
     ],
@@ -26,29 +26,29 @@
   },
   "version-info.v2.json": {
     "wireKey": "contractVersion",
-    "current": "0.6.0",
+    "current": "0.7.0",
     "breakingBump": [
       "packageMajor"
     ]
   },
   "api.v2.yaml": {
     "wireKey": "info.version",
-    "current": "0.6.0",
+    "current": "0.7.0",
     "breakingBump": [
       "packageMajor"
     ]
   },
-  "releases.v2.json": {
+  "releases.v3.json": {
     "wireKey": null,
-    "current": 2,
+    "current": 3,
     "propagatesTo": [],
     "breakingBump": [
       "packageMajor"
     ]
   },
-  "ipc.v3.json": {
+  "ipc.v4.json": {
     "wireKey": "ipcSchema",
-    "current": 3,
+    "current": 4,
     "breakingBump": [
       "ipcSchema",
       "packageMajor"

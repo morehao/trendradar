@@ -27,7 +27,7 @@ func section(weekStart, weekEnd string, tags ...string) Section {
 		Repo:      "o/r",
 		WeekStart: weekStart,
 		WeekEnd:   weekEnd,
-		SummaryZh: "本周发布 " + strings.Join(tags, "、") + "，修复若干问题。",
+		Summary:   "本周发布 " + strings.Join(tags, "、") + "，修复若干问题。",
 		Items:     items,
 	}
 }
@@ -128,7 +128,7 @@ func TestPlanRollsVolumeOnlyAfterExceedingBudget(t *testing.T) {
 	}
 
 	week1 := section("2026-10-26", "2026-11-01", "v2", "v1")
-	week1.SummaryZh = strings.Repeat("总结内容。", 8)
+	week1.Summary = strings.Repeat("总结内容。", 8)
 	file, data, need, err := Plan(root, "digests/releases", "o/r", week1, 600)
 	if err != nil || !need {
 		t.Fatalf("plan: need=%v err=%v", need, err)
@@ -240,7 +240,7 @@ func TestSectionRendersStructuredSummary(t *testing.T) {
 		Repo:      "o/r",
 		WeekStart: "2026-10-26",
 		WeekEnd:   "2026-11-01",
-		SummaryZh: "本周要点一句话。\n\n**主要变更**\n- 新增 A\n- 修复 B\n\n**升级建议**\n- 建议升级",
+		Summary:   "本周要点一句话。\n\n**主要变更**\n- 新增 A\n- 修复 B\n\n**升级建议**\n- 建议升级",
 		Items:     []Item{{Tag: "v1.0.0", URL: "https://github.com/o/r/releases/tag/v1.0.0", Date: "2026-11-01"}},
 	}
 	text := sec.Render()
@@ -302,5 +302,42 @@ func TestPlanSeesWeekInOlderVolume(t *testing.T) {
 	}
 	if need {
 		t.Fatal("week present in the newest volume must not be written again")
+	}
+}
+
+func TestPlanEnLanguage(t *testing.T) {
+	root := t.TempDir()
+	sec := section("2026-10-26", "2026-11-01", "v2", "v1")
+	sec.Lang = "en"
+	// Give items their own summaries so the week fallback is not rendered.
+	for i := range sec.Items {
+		sec.Items[i].Summary = "English per-version summary."
+	}
+	file, data, need, err := Plan(root, "digests/releases", "o/r", sec, 600)
+	if err != nil || !need {
+		t.Fatalf("plan: need=%v err=%v", need, err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "> Release log · weekly · last updated 2026-11-01") {
+		t.Fatalf("en freshness line missing:\n%s", text)
+	}
+	if strings.Contains(text, "发版记录") {
+		t.Fatalf("en document leaked zh freshness line:\n%s", text)
+	}
+	if file != "digests/releases/o/r-01.md" {
+		t.Fatalf("file=%q", file)
+	}
+	// updatedOf must still parse the en freshness line.
+	if got := updatedOf(text); got != "2026-11-01" {
+		t.Fatalf("updatedOf = %q, want 2026-11-01", got)
+	}
+}
+
+func TestSectionRestLabelEn(t *testing.T) {
+	sec := Section{Repo: "o/r", WeekStart: "2026-10-26", WeekEnd: "2026-11-01", Lang: "en", MaxListed: 1}
+	sec.Items = []Item{{Tag: "v3", Date: "2026-11-01"}, {Tag: "v2", Date: "2026-10-30"}, {Tag: "v1", Date: "2026-10-29"}}
+	out := sec.Render()
+	if !strings.Contains(out, "- 2 more") {
+		t.Fatalf("en rest label missing:\n%s", out)
 	}
 }

@@ -1,8 +1,8 @@
 {
-  "schema": 2,
+  "schema": 3,
   "date": "2026-11-01",
   "period": "weekly",
-  "contentHash": "sha256:0e93b38ea1e36f475161528332375d6e48a7fef1bad6125f96b27358d79b838e",
+  "contentHash": "sha256:f3cf704e70c6e869200778198226db50c9f7827d6f1371a3bf436b3e11ac0c2e",
   "contentHashAlgo": "jcs-sha256-v1",
   "coreVersion": "0.7.0",
   "generatedAt": "2026-11-01T00:30:00Z",
@@ -16,7 +16,6 @@
       "newCount": 2,
       "periodStart": "2026-10-26",
       "periodEnd": "2026-11-01",
-      "summaryZh": "本周发布 v15.2.0 与 v15.1.9：构建缓存命中率提升，修复 App Router 下动态段预渲染的回归。",
       "releases": [
         {
           "id": 428974490,
@@ -41,7 +40,9 @@
           "draft": false,
           "summarySource": "model"
         }
-      ]
+      ],
+      "summary": "本周发布 v15.2.0 与 v15.1.9：构建缓存命中率提升，修复 App Router 下动态段预渲染的回归。",
+      "summaryLang": "zh"
     }
   ]
 }

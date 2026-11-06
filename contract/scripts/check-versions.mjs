@@ -16,11 +16,11 @@ const check = (cond, msg) => { if (!cond) fail.push(msg) }
 
 const vm = readJson(path.join(ROOT, 'version-map.json'))
 const pkg = readJson(path.join(ROOT, 'package.json'))
-const ipc = readJson(path.join(SCHEMA, 'ipc.v3.json'))
-const digest = readJson(path.join(SCHEMA, 'digest.v2.json'))
+const ipc = readJson(path.join(SCHEMA, 'ipc.v4.json'))
+const digest = readJson(path.join(SCHEMA, 'digest.v3.json'))
 const vinfo = readJson(path.join(SCHEMA, 'version-info.v2.json'))
 const errors = readJson(path.join(SCHEMA, 'errors.v2.json'))
-const releasesS = readJson(path.join(SCHEMA, 'releases.v2.json'))
+const releasesS = readJson(path.join(SCHEMA, 'releases.v3.json'))
 const api = fs.readFileSync(path.join(SCHEMA, 'api.v2.yaml'), 'utf8')
 
 const ipcConst = ipc.$defs.RunRequest.properties.ipcSchema.const
@@ -29,18 +29,19 @@ const vinfoIpc = vinfo.properties.ipcSchema.const
 const vinfoDigest = vinfo.properties.digestSchema.const
 const apiVer = (api.match(/^\s*version:\s*(\S+)\s*$/m) || [])[1]
 
-check(ipcConst === 3, `ipcSchema const = ${ipcConst}, want 3`)
-check(digestConst === 2, `digest schema const = ${digestConst}, want 2`)
-check(vinfoIpc === 3 && vinfoDigest === 2, `version-info ipcSchema/digestSchema = ${vinfoIpc}/${vinfoDigest}, want 3/2`)
-check(vm['ipc.v3.json'].current === ipcConst, 'version-map ipc current != ipcSchema const')
-check(vm['digest.v2.json'].current === digestConst, 'version-map digest current != schema const')
-check(vm['releases.v2.json'].current === releasesS.properties.schema.const, 'version-map releases current != releases schema const')
-check(vm['version-info.v2.json'].current === '0.6.0', 'version-map version-info current != 0.6.0')
+check(ipcConst === 4, `ipcSchema const = ${ipcConst}, want 4`)
+check(digestConst === 3, `digest schema const = ${digestConst}, want 3`)
+check(vinfoIpc === 4 && vinfoDigest === 3, `version-info ipcSchema/digestSchema = ${vinfoIpc}/${vinfoDigest}, want 4/3`)
+check(vm['ipc.v4.json'].current === ipcConst, 'version-map ipc current != ipcSchema const')
+check(vm['digest.v3.json'].current === digestConst, 'version-map digest current != schema const')
+check(vm['releases.v3.json'].current === releasesS.properties.schema.const, 'version-map releases current != releases schema const')
+check(vm['version-info.v2.json'].current === '0.7.0', 'version-map version-info current != 0.7.0')
 check(vm['api.v2.yaml'].current === apiVer, `version-map api current != api.v2.yaml info.version (${apiVer})`)
-check(pkg.version === '0.6.0', `package.json version = ${pkg.version}, want 0.6.0`)
+check(pkg.version === '0.7.0', `package.json version = ${pkg.version}, want 0.7.0`)
 // Package semver major is decoupled from the wire integer on purpose:
 // package 0.2.0 carries the second-generation wire format (ipcSchema=2);
-// package 0.6.0 carries the third (ipcSchema=3, digest inlined in RunResult).
+// package 0.6.0 carries the third (ipcSchema=3, digest inlined in RunResult);
+// package 0.7.0 carries the fourth (ipcSchema=4, digestSchema=3: summary+summaryLang).
 check(pkg.version.split('.')[0] === '0', `expected 0.x package version, got ${pkg.version}`)
 
 // error code catalogs must agree everywhere
@@ -53,7 +54,7 @@ check(errCodes.length === errors.$defs.ErrorCode.enum.length, 'errors codes coun
 // fixture sanity
 for (const f of ['digest-normal.json','digest-degraded.json','digest-empty-lang.json','digest-missing-optional.json']) {
   const d = readJson(path.join(ROOT, 'fixtures', f))
-  check(d.schema === 2, `${f}: schema != 2`)
+  check(d.schema === 3, `${f}: schema != 3`)
   check(typeof d.contentHashAlgo === 'string', `${f}: missing contentHashAlgo`)
 }
 
@@ -75,9 +76,9 @@ if (BASE) {
     for (const k of bReq) if (!hReq.has(k)) problems.push(`dropped required ${k}`)
     return problems
   }
-  for (const f of ['ipc.v3.json','digest.v2.json','version-info.v2.json']) {
+  for (const f of ['ipc.v4.json','digest.v3.json','version-info.v2.json']) {
     // ipc v3 renames the file: compare against the newest base ipc schema.
-    const baseTxt = gitShow(`schema/${f}`) ?? (f === 'ipc.v3.json' ? gitShow('schema/ipc.v2.json') : null)
+    const baseTxt = gitShow(`schema/${f}`) ?? (f === 'ipc.v4.json' ? (gitShow('schema/ipc.v3.json') ?? gitShow('schema/ipc.v2.json')) : f === 'digest.v3.json' ? gitShow('schema/digest.v2.json') : null)
     if (!baseTxt) continue
     const baseS = JSON.parse(baseTxt), headS = readJson(path.join(SCHEMA, f))
     const problems = []
@@ -88,7 +89,7 @@ if (BASE) {
     }
     if (problems.length) {
       const baseConst = f.startsWith('ipc.') ? baseS.$defs.RunRequest.properties.ipcSchema.const
-        : f === 'digest.v2.json' ? baseS.properties.schema.const : null
+        : f === 'digest.v3.json' ? baseS.properties.schema.const : null
       const headConst = f.startsWith('ipc.') ? ipcConst : digestConst
       const bumped = baseConst !== headConst
       if (!bumped) fail.push(`${f}: breaking changes without version bump -> ${problems.join('; ')}`)

@@ -58,7 +58,7 @@ type fakeProv struct{ calls int }
 func (f *fakeProv) Name() string { return "fake-prov" }
 
 func (f *fakeProv) Complete(_ context.Context, _, _ string) (model.Result, error) {
-	return model.Result{Text: `{"repo":"o/r","summaryZh":"本周发布多个版本，修复若干问题，建议升级。"}`}, nil
+	return model.Result{Text: `{"repo":"o/r","summary":"本周发布多个版本，修复若干问题，建议升级。"}`}, nil
 }
 
 // failProv always fails, so callers exercise the degradation path.
@@ -119,11 +119,11 @@ func TestBuildIncrement(t *testing.T) {
 	}
 	g := d.Repos[0]
 	// New model: the weekly roll-up is empty; each version carries its own summary.
-	if g.SummaryZh != nil && *g.SummaryZh != "" {
-		t.Fatalf("weekly roll-up should be empty on new data, got %q", *g.SummaryZh)
+	if g.Summary != nil && *g.Summary != "" {
+		t.Fatalf("weekly roll-up should be empty on new data, got %q", *g.Summary)
 	}
 	for _, it := range g.Releases {
-		if it.SummaryZh == nil || *it.SummaryZh == "" {
+		if it.Summary == nil || *it.Summary == "" {
 			t.Fatalf("per-version summary missing for %s: %+v", it.Tag, it)
 		}
 	}
@@ -369,7 +369,7 @@ func TestBuildDegradesOnModelFailure(t *testing.T) {
 		t.Fatalf("report=%+v, want 2 degraded", rep)
 	}
 	for _, it := range d.Repos[0].Releases {
-		if it.SummaryZh == nil || *it.SummaryZh == "" {
+		if it.Summary == nil || *it.Summary == "" {
 			t.Fatalf("degraded per-version summary must still be present for %s: %+v", it.Tag, it)
 		}
 	}
@@ -384,7 +384,7 @@ func TestBuildTruncatesLongSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	zh := *d.Repos[0].Releases[0].SummaryZh
+	zh := *d.Repos[0].Releases[0].Summary
 	if n := len([]rune(zh)); n != 20 {
 		t.Fatalf("summary runes=%d, want 20 (truncated with ellipsis)", n)
 	}
@@ -398,7 +398,7 @@ type longProv struct{}
 func (longProv) Name() string { return "long-prov" }
 
 func (longProv) Complete(context.Context, string, string) (model.Result, error) {
-	b, _ := json.Marshal(map[string]any{"repo": "o/r", "summaryZh": "这是一段非常非常长的总结文本，用来验证截断逻辑不会把整段摘要丢掉而是加上省略号。"})
+	b, _ := json.Marshal(map[string]any{"repo": "o/r", "summary": "这是一段非常非常长的总结文本，用来验证截断逻辑不会把整段摘要丢掉而是加上省略号。"})
 	return model.Result{Text: string(b)}, nil
 }
 

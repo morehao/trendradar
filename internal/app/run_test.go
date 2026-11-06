@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -828,14 +830,14 @@ func TestDigestByPageCarriesSummaries(t *testing.T) {
 		"all": {{FullName: "a/one", Language: "c++"}, {FullName: "a/two", Language: "go"}},
 	}
 	digests := []digest.RepoDigest{
-		{RepoSnapshot: digest.RepoSnapshot{FullName: "a/one"}, SummaryZh: "S1"},
-		{RepoSnapshot: digest.RepoSnapshot{FullName: "a/two"}, SummaryZh: "S2"},
+		{RepoSnapshot: digest.RepoSnapshot{FullName: "a/one"}, Summary: "S1"},
+		{RepoSnapshot: digest.RepoSnapshot{FullName: "a/two"}, Summary: "S2"},
 	}
 	got := digestByPage(byPage, digests)
 	if got == nil {
 		t.Fatal("digestByPage returned nil for non-nil input")
 	}
-	if len(got["all"]) != 2 || got["all"][0].SummaryZh != "S1" || got["all"][1].SummaryZh != "S2" {
+	if len(got["all"]) != 2 || got["all"][0].Summary != "S1" || got["all"][1].Summary != "S2" {
 		t.Fatalf("digestByPage did not carry summaries: %+v", got["all"])
 	}
 	if digestByPage(nil, digests) != nil {
@@ -1230,5 +1232,49 @@ func TestOpenPRExistingNotMergeableLeftOpen(t *testing.T) {
 	var ei *ipc.ErrorInfo
 	if !errors.As(err, &ei) || ei.Code != ipc.CodeNotMergeable {
 		t.Fatalf("err = %v, want NOT_MERGEABLE warning", err)
+	}
+}
+
+// enProvider answers the trending prompt with English summaries so an
+// outputLanguage=en run exercises the full pipeline in English.
+type enProvider struct{}
+
+func (enProvider) Name() string { return "en" }
+func (enProvider) Complete(_ context.Context, _, user string) (model.Result, error) {
+	items := []map[string]string{}
+	for _, m := range regexp.MustCompile(`(?m)^REPO=(\S+)\tDESC=`).FindAllStringSubmatch(user, -1) {
+		items = append(items, map[string]string{"fullName": m[1], "summary": "An English summary of this repository."})
+	}
+	b, _ := json.Marshal(map[string]any{"summaries": items})
+	return model.Result{Text: string(b)}, nil
+}
+
+// TestE2EOutputLanguageEn proves the top-level language.outputLanguage reaches
+// the whole pipeline: an en run renders English fixed strings and English
+// summaries, while the default (zh) run stays Chinese.
+func TestE2EOutputLanguageEn(t *testing.T) {
+	_, _, cfg := setupRepo(t)
+	cfg.Language.OutputLanguage = "en"
+
+	r, err := Run(context.Background(), cfg, fixtureInputs(), Options{DryRun: true, Provider: enProvider{}})
+	if err != nil {
+		t.Fatalf("en dry run: %v", err)
+	}
+	var md string
+	for _, f := range r.Files {
+		if strings.HasSuffix(f.Path, "2026-10-30.md") {
+			md = string(f.Data)
+		}
+	}
+	if !strings.Contains(md, "Trending Digest") || !strings.Contains(md, "| Repository | Stars | Stars today | Summary |") {
+		t.Fatalf("en run should render English fixed strings:\n%s", md)
+	}
+	if !strings.Contains(md, "An English summary of this repository.") {
+		t.Fatalf("en run should carry English summaries:\n%s", md)
+	}
+	for _, d := range r.Digest.Repos {
+		if d.SummaryLang != "en" {
+			t.Fatalf("%s SummaryLang = %q, want en", d.FullName, d.SummaryLang)
+		}
 	}
 }

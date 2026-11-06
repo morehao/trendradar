@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/morehao/trendradar/internal/i18n"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,6 +27,20 @@ type Config struct {
 	Summarize SummarizeConfig `yaml:"summarize"`
 	Releases  ReleasesConfig  `yaml:"releases"`
 	Observe   ObserveConfig   `yaml:"observe"`
+	// Language selects the natural language of the generated digest/releases
+	// content. It is a single top-level knob shared by the trending and the
+	// release-subscription pipelines.
+	Language LanguageConfig `yaml:"language"`
+}
+
+// LanguageConfig selects the output language. Both the trending digest and the
+// release documents follow it, so the whole repository stays in one language.
+type LanguageConfig struct {
+	// OutputLanguage is the BCP47 tag of the desired output language. Empty
+	// means the default (zh). Only the supported set (see i18n.Supported) is
+	// accepted; region/script variants normalized to a supported primary subtag
+	// (e.g. "zh-CN" → zh) are allowed.
+	OutputLanguage string `yaml:"outputLanguage"`
 }
 
 // ObserveConfig controls the local star observation store: a per-day snapshot
@@ -291,7 +306,41 @@ func (c *Config) Validate() error {
 	if err := c.Releases.ValidateAuto(); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
+	if err := c.validateLanguage(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
 	return nil
+}
+
+// validateLanguage checks language.outputLanguage. An empty value is valid and
+// means the default language; a non-empty value must be a syntactically valid
+// BCP47-ish tag whose primary subtag is in the supported set.
+func (c *Config) validateLanguage() error {
+	raw := strings.TrimSpace(c.Language.OutputLanguage)
+	if raw == "" {
+		return nil
+	}
+	if !i18n.ValidTag(raw) {
+		return fmt.Errorf("language.outputLanguage: %q is not a valid BCP47 tag", raw)
+	}
+	if !i18n.IsSupported(i18n.Normalize(raw)) {
+		return fmt.Errorf("language.outputLanguage: unsupported language %q (supported: %s)", raw, strings.Join(i18n.Supported(), ", "))
+	}
+	return nil
+}
+
+// EffectiveOutputLanguage returns the language id the pipeline should use: the
+// configured tag normalized to a supported primary subtag, or the default when
+// it is empty/unset. Validation has already run, so this is always supported;
+// if it is somehow not, it falls back to the default defensively.
+func (c *Config) EffectiveOutputLanguage() string {
+	if c == nil {
+		return i18n.DefaultLanguage
+	}
+	if id := i18n.Normalize(c.Language.OutputLanguage); id != "" {
+		return id
+	}
+	return i18n.DefaultLanguage
 }
 
 // expandEnv substitutes ${VAR} in string fields so secrets can live in a local
@@ -325,6 +374,9 @@ func (c *Config) withDefaults() {
 	}
 	if c.Trending.Since == "" {
 		c.Trending.Since = "daily"
+	}
+	if c.Language.OutputLanguage == "" {
+		c.Language.OutputLanguage = i18n.DefaultLanguage
 	}
 	if c.Output.BranchPrefix == "" {
 		c.Output.BranchPrefix = "trending/"

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/morehao/trendradar/internal/fetch"
+	"github.com/morehao/trendradar/internal/i18n"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
 	"github.com/morehao/trendradar/internal/releasedigest"
@@ -57,9 +58,12 @@ type Options struct {
 	Provider     model.Provider
 	ProviderName string
 	ModelName    string
-	StatePath    string
-	CachePath    string
-	ReadOnly     bool
+	// OutputLanguage is the output language id (BCP47; empty means zh). It drives
+	// both the prompt language and the release cache namespace.
+	OutputLanguage string
+	StatePath      string
+	CachePath      string
+	ReadOnly       bool
 }
 
 // Report is the per-run diagnostic for the releases stage. Checked and Changed
@@ -154,7 +158,7 @@ func Build(ctx context.Context, f Fetcher, opts Options) (releasedigest.ReleaseD
 	if cache == nil {
 		cache = summarize.NewCache()
 	}
-	cache.SetNamespace(fmt.Sprintf("%s|%s|%s", opts.ProviderName, opts.ModelName, PromptVersion))
+	cache.SetNamespace(fmt.Sprintf("%s|%s|%s|%s", opts.ProviderName, opts.ModelName, PromptVersion, langOrDefault(opts.OutputLanguage)))
 	// A forced run must re-ask the model for every version, so it gets no cache
 	// (SummarizeCandidate treats nil cache as "always miss, never store"). The
 	// on-disk cache still gets refreshed by the next non-forced run.
@@ -168,7 +172,7 @@ func Build(ctx context.Context, f Fetcher, opts Options) (releasedigest.ReleaseD
 		fet:   f,
 		state: state,
 		cache: cache,
-		sum:   NewSummarizer(opts.Provider, sumCache, opts.MaxNotesChars, opts.SummaryMaxChars),
+		sum:   NewSummarizer(opts.Provider, sumCache, opts.MaxNotesChars, opts.SummaryMaxChars, opts.OutputLanguage),
 		week:  week,
 		loc:   loc,
 	}
@@ -554,9 +558,9 @@ func (b *builder) summarizeRepo(ctx context.Context, repo string, cands []candid
 		if item.URL == "" {
 			item.URL = repoURL(repo)
 		}
-		if res.SummaryZh != "" {
-			zh := res.SummaryZh
-			item.SummaryZh = &zh
+		if res.Summary != "" {
+			sum := res.Summary
+			item.Summary = &sum
 		}
 		if c.rel.Body != "" {
 			excerpt := truncateRunes(c.rel.Body, b.opts.MaxNotesChars)
@@ -750,6 +754,15 @@ func splitRepo(repo string) (owner, name string, ok bool) {
 }
 
 func repoURL(repo string) string { return "https://github.com/" + repo }
+
+// langOrDefault normalizes an output language id for the cache namespace: empty
+// means the default (zh).
+func langOrDefault(id string) string {
+	if normalized := i18n.Normalize(id); normalized != "" {
+		return normalized
+	}
+	return i18n.DefaultLanguage
+}
 
 func contains(list []string, s string) bool {
 	for _, v := range list {

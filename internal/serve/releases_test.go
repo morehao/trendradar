@@ -92,7 +92,7 @@ func TestGetReleases(t *testing.T) {
 				"id": 0, "tag": "v1", "name": "v1", "kind": "tag",
 				"url":        "https://github.com/o/r/tree/v1",
 				"prerelease": false, "draft": false,
-				"summaryZh": "x", "summarySource": "model",
+				"summary": "x", "summarySource": "model",
 			}},
 		}},
 	})

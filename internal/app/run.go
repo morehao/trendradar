@@ -17,6 +17,7 @@ import (
 	"github.com/morehao/trendradar/internal/digest"
 	"github.com/morehao/trendradar/internal/enrich"
 	"github.com/morehao/trendradar/internal/gitx"
+	"github.com/morehao/trendradar/internal/i18n"
 	"github.com/morehao/trendradar/internal/ingest"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
@@ -164,6 +165,15 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	var res Result
 	rep := Report{}
 
+	// Output language: one top-level knob drives both the trending and release
+	// pipelines and the rendered fixed strings. Empty/unset resolves to the
+	// default (zh). cfg is nil on some dry-run paths, where we fall back to zh.
+	outLang := i18n.DefaultLanguage
+	if cfg != nil {
+		outLang = cfg.EffectiveOutputLanguage()
+	}
+	lang := i18n.MustResolve(outLang)
+
 	provider := opts.Provider
 	if provider == nil {
 		provider = model.NewFake()
@@ -267,7 +277,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 			enrichMode = opts.Enricher.Mode()
 		}
 		if cfg != nil {
-			summaryCache.SetNamespace(summarize.NamespaceForMode(cfg.Model.Provider, cfg.Model.Name, string(enrichMode)))
+			summaryCache.SetNamespace(summarize.NamespaceForLang(cfg.Model.Provider, cfg.Model.Name, string(enrichMode), outLang))
 		}
 		batchSize, maxRetries := 10, 1
 		if cfg != nil {
@@ -282,6 +292,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 			summarize.WithCache(summaryCache),
 			summarize.WithBatchSize(batchSize),
 			summarize.WithMaxRetries(maxRetries),
+			summarize.WithLanguage(outLang),
 		)
 
 		// Optional external context. Only repos whose summary is not cached are
@@ -353,7 +364,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		// degraded so it is never shown as if it were a clean trending result.
 		var banners []string
 		if summaryDegraded {
-			banners = append(banners, "> ⚠️ 本次摘要有降级：模型不可用或返回了无效结果，部分条目为英文原文（summarySource=original）。\n")
+			banners = append(banners, lang.Render.DegradedBanner+"\n")
 			rep.Warnings = append(rep.Warnings, fmt.Sprintf(
 				"%d/%d 仓库摘要降级为英文原文（模型不可用或返回无效结果）", degradedCount, len(repoDigests)))
 		}
@@ -368,7 +379,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		coreV := ipc.Version
 		genAt := time.Now().UTC()
 		d = digest.Digest{
-			Schema:          2,
+			Schema:          ipc.DigestSchemaVersion,
 			Date:            in.Date,
 			Period:          period,
 			Languages:       digestLanguages(in),
@@ -392,7 +403,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		history, _ := render.ListDigests(historyRoot, limits)
 		merged := mergeDigests(history, d)
 
-		built, berr := render.BuildWithBanners(d, byPage, merged, limits, outDir, banners)
+		built, berr := render.BuildWithBannersLang(d, byPage, merged, limits, outDir, banners, outLang)
 		if berr != nil {
 			return res, berr
 		}
@@ -434,14 +445,15 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 			MaxPages:           rc.MaxPages,
 			// Auto resolves from the polled repo count, not from a cached number:
 			// the same config then adapts as the subscription list grows (A13).
-			Concurrency:   rc.Concurrency.Resolve(len(opts.Releases.Repos), 4, 8),
-			BudgetSeconds: rc.BudgetSeconds.ResolveBudget(len(opts.Releases.Repos), 300),
-			Provider:      provider,
-			ProviderName:  cfg.Model.Provider,
-			ModelName:     cfg.Model.Name,
-			StatePath:     opts.Releases.StatePath,
-			CachePath:     opts.Releases.CachePath,
-			ReadOnly:      opts.DryRun,
+			Concurrency:    rc.Concurrency.Resolve(len(opts.Releases.Repos), 4, 8),
+			BudgetSeconds:  rc.BudgetSeconds.ResolveBudget(len(opts.Releases.Repos), 300),
+			Provider:       provider,
+			ProviderName:   cfg.Model.Provider,
+			ModelName:      cfg.Model.Name,
+			StatePath:      opts.Releases.StatePath,
+			CachePath:      opts.Releases.CachePath,
+			OutputLanguage: outLang,
+			ReadOnly:       opts.DryRun,
 		}
 		drel, st, rrep, rerr := releasewatch.Build(ctx, opts.Releases.Fetcher, ro)
 		relState, relStatePath = st, opts.Releases.StatePath
@@ -460,7 +472,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 				drel.ContentHash = releasedigest.ContentHash(drel)
 				hist, _ := render.ListReleaseDigests(historyRoot, rc.OutputDir, limits)
 				mergedRel, todayRel := render.MergeReleaseDigests(hist, drel)
-				relFiles, berr := render.BuildReleases(todayRel, mergedRel, limits, outDir, rc.OutputDir)
+				relFiles, berr := render.BuildReleasesLang(todayRel, mergedRel, limits, outDir, rc.OutputDir, outLang)
 				if berr != nil {
 					rep.Warnings = append(rep.Warnings, "releases render: "+berr.Error())
 				} else {
@@ -469,7 +481,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 				// One markdown document per repo, week prepended, volume-split. The
 				// content is the same summaryZh the weekly digest carries, so the
 				// panel can render the file verbatim (A7).
-				docFiles, derr := buildRepoDocs(cfg, outDir, rc, drel)
+				docFiles, derr := buildRepoDocs(cfg, outDir, rc, drel, outLang)
 				if derr != nil {
 					rep.Warnings = append(rep.Warnings, "releases docs: "+derr.Error())
 				}
@@ -1137,7 +1149,7 @@ func equalStrings(a, b []string) bool {
 // buildRepoDocs plans the per-repo markdown documents for the repos that changed
 // this week. It returns only files that need writing: a week already present in
 // the document yields nothing, so a second run in the same week is a no-op (A4).
-func buildRepoDocs(cfg *config.Config, outDir string, rc config.ReleasesConfig, d releasedigest.ReleaseDigest) ([]render.File, error) {
+func buildRepoDocs(cfg *config.Config, outDir string, rc config.ReleasesConfig, d releasedigest.ReleaseDigest, outLang string) ([]render.File, error) {
 	if d.Count == 0 {
 		return nil, nil
 	}
@@ -1160,10 +1172,11 @@ func buildRepoDocs(cfg *config.Config, outDir string, rc config.ReleasesConfig, 
 			Repo:      group.FullName,
 			WeekStart: stringOf(group.PeriodStart),
 			WeekEnd:   stringOf(group.PeriodEnd),
-			SummaryZh: stringOf(group.SummaryZh),
+			Summary:   stringOf(group.Summary),
 			Degraded:  repoDegraded(group),
 			Items:     docItems(group),
 			MaxListed: listed,
+			Lang:      outLang,
 		}
 		file, data, need, err := releasedoc.Plan(repoRoot, docRoot, group.FullName, sec, maxLines)
 		if err != nil {
@@ -1188,8 +1201,8 @@ func docItems(g releasedigest.RepoReleases) []releasedoc.Item {
 			date = it.PublishedAt.UTC().Format("2006-01-02")
 		}
 		item := releasedoc.Item{Tag: it.Tag, URL: it.URL, Date: date}
-		if it.SummaryZh != nil {
-			item.SummaryZh = *it.SummaryZh
+		if it.Summary != nil {
+			item.Summary = *it.Summary
 		}
 		items = append(items, item)
 	}

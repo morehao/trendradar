@@ -13,13 +13,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/morehao/trendradar/internal/fetch"
+	"github.com/morehao/trendradar/internal/i18n"
 	"github.com/morehao/trendradar/internal/model"
 	"github.com/morehao/trendradar/internal/summarize"
 )
 
 // SummaryResult is one repo's weekly summary. Source is "model" or "original".
 type SummaryResult struct {
-	SummaryZh string
+	Summary   string
 	Source    string
 	Truncated bool
 }
@@ -56,6 +57,7 @@ type Summarizer struct {
 	cache    *summarize.Cache
 	maxNotes int
 	maxChars int
+	lang     i18n.OutputLanguage
 
 	mu    sync.Mutex
 	usage model.Usage
@@ -71,12 +73,17 @@ func (s *Summarizer) Stats() (model.Usage, int, int) {
 	return s.usage, s.calls, s.trunc
 }
 
-// NewSummarizer builds a weekly release summarizer. cache may be nil.
-func NewSummarizer(chat model.Provider, cache *summarize.Cache, maxNotes, maxChars int) *Summarizer {
+// NewSummarizer builds a weekly release summarizer. cache may be nil. langId is
+// the output language id (empty means zh); it drives the prompt and degrade text.
+func NewSummarizer(chat model.Provider, cache *summarize.Cache, maxNotes, maxChars int, langId string) *Summarizer {
 	if maxChars <= 0 {
 		maxChars = DefaultSummaryMaxChars
 	}
-	return &Summarizer{chat: chat, cache: cache, maxNotes: maxNotes, maxChars: maxChars}
+	lang, err := i18n.Resolve(langId)
+	if err != nil {
+		lang = i18n.MustResolve(i18n.DefaultLanguage)
+	}
+	return &Summarizer{chat: chat, cache: cache, maxNotes: maxNotes, maxChars: maxChars, lang: lang}
 }
 
 // SummarizeCandidate produces one Chinese summary for a single version. Each
@@ -87,12 +94,12 @@ func NewSummarizer(chat model.Provider, cache *summarize.Cache, maxNotes, maxCha
 func (s *Summarizer) SummarizeCandidate(ctx context.Context, repo string, c candidate) SummaryResult {
 	key := s.cacheKey(c)
 	if s.cache != nil {
-		if zh, ok := s.cache.Get(repo, key); ok {
-			return SummaryResult{SummaryZh: zh, Source: "model"}
+		if sum, ok := s.cache.Get(repo, key); ok {
+			return SummaryResult{Summary: sum, Source: "model"}
 		}
 	}
 	if s.chat != nil {
-		res, err := s.chat.Complete(ctx, SystemPrompt, buildItemPrompt(repo, c, s.maxNotes, s.maxChars))
+		res, err := s.chat.Complete(ctx, s.lang.ReleaseSystem, buildItemPrompt(s.lang, repo, c, s.maxNotes, s.maxChars))
 		if err == nil {
 			s.mu.Lock()
 			s.calls++
@@ -104,22 +111,22 @@ func (s *Summarizer) SummarizeCandidate(ctx context.Context, repo string, c cand
 				s.usage.Known = true
 			}
 			s.mu.Unlock()
-			if zh, ok := parseWeeklySummary(res.Text); ok {
-				zh, truncated := s.cap(zh)
+			if sum, ok := parseWeeklySummary(res.Text); ok {
+				sum, truncated := s.cap(sum)
 				if truncated {
 					s.mu.Lock()
 					s.trunc++
 					s.mu.Unlock()
 				}
 				if s.cache != nil {
-					s.cache.Put(repo, key, zh)
+					s.cache.Put(repo, key, sum)
 				}
-				return SummaryResult{SummaryZh: zh, Source: "model", Truncated: truncated}
+				return SummaryResult{Summary: sum, Source: "model", Truncated: truncated}
 			}
 		}
 	}
-	zh, truncated := s.cap(degradeOne(c))
-	return SummaryResult{SummaryZh: zh, Source: "original", Truncated: truncated}
+	sum, truncated := s.cap(degradeOne(s.lang, c))
+	return SummaryResult{Summary: sum, Source: "original", Truncated: truncated}
 }
 
 // SummarizeRepo summarizes every candidate independently and returns one result
@@ -160,20 +167,20 @@ func parseWeeklySummary(raw string) (string, bool) {
 		return "", false
 	}
 	var resp struct {
-		Repo      string `json:"repo"`
-		SummaryZh string `json:"summaryZh"`
+		Repo    string `json:"repo"`
+		Summary string `json:"summary"`
 	}
 	if err := json.Unmarshal([]byte(text), &resp); err == nil {
-		zh := sanitize(resp.SummaryZh)
-		return zh, zh != ""
+		sum := sanitize(resp.Summary)
+		return sum, sum != ""
 	}
 	// Not JSON: treat a short prose answer as the summary, anything else
 	// (an error blob, a long code block) as a failure so we degrade instead.
-	zh := sanitize(text)
-	if zh == "" || utf8.RuneCountInString(zh) > 4000 {
+	sum := sanitize(text)
+	if sum == "" || utf8.RuneCountInString(sum) > 4000 {
 		return "", false
 	}
-	return zh, true
+	return sum, true
 }
 
 var (
@@ -256,10 +263,10 @@ func sanitize(s string) string {
 // so the version is not silently lost, trimmed to the configured cap later.
 // Formatted like degradeSummary (bold tag + its own lines) so a per-version
 // fallback reads the same as the week fallback.
-func degradeOne(c candidate) string {
+func degradeOne(lang i18n.OutputLanguage, c candidate) string {
 	text := sanitize(c.rel.Body)
 	if text == "" {
-		return "**" + c.tagName() + "**\n未提供变更说明"
+		return noChangelogOne(lang, c.tagName())
 	}
 	return "**" + c.tagName() + "**\n" + text
 }

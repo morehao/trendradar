@@ -14,8 +14,8 @@ func TestFakeProducesValidJSON(t *testing.T) {
 	}
 	var parsed struct {
 		Summaries []struct {
-			FullName  string `json:"fullName"`
-			SummaryZh string `json:"summaryZh"`
+			FullName string `json:"fullName"`
+			Summary  string `json:"summary"`
 		} `json:"summaries"`
 	}
 	if err := json.Unmarshal([]byte(res.Text), &parsed); err != nil {

@@ -45,8 +45,14 @@ func Build(d digest.Digest, indexDigests []digest.Digest, limits map[string]int,
 // view (byPage) that drives how the markdown is sectioned. A nil byPage falls
 // back to the legacy per-repo-language layout.
 func BuildWithBanners(d digest.Digest, byPage map[string][]digest.RepoDigest, indexDigests []digest.Digest, limits map[string]int, outDir string, banners []string) ([]File, error) {
+	return BuildWithBannersLang(d, byPage, indexDigests, limits, outDir, banners, "")
+}
+
+// BuildWithBannersLang is BuildWithBanners in an explicit output language (empty
+// means zh). The language drives the digest markdown's fixed strings.
+func BuildWithBannersLang(d digest.Digest, byPage map[string][]digest.RepoDigest, indexDigests []digest.Digest, limits map[string]int, outDir string, banners []string, lang string) ([]File, error) {
 	root := OutputRoot(outDir)
-	md := MarkdownWithBanners(d, byPage, banners)
+	md := MarkdownWithBannersLang(d, byPage, banners, lang)
 	js, err := JSON(d)
 	if err != nil {
 		return nil, err

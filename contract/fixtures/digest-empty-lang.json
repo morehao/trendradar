@@ -1,5 +1,5 @@
 {
-  "schema": 2,
+  "schema": 3,
   "date": "2026-10-30",
   "period": "daily",
   "languages": [
@@ -8,7 +8,7 @@
   ],
   "count": 2,
   "degraded": false,
-  "contentHash": "sha256:84a5ef479995ae104544dfc0869227442f3d8968c0d27b5f76410040d4c8b2e4",
+  "contentHash": "sha256:202e26aa26c1b1463e1d24274880a22a4d7c0531793cc4f6644e8e9d18a2383e",
   "contentHashAlgo": "jcs-sha256-v1",
   "coreVersion": "0.1.0",
   "generatedAt": "2026-10-30T00:05:00Z",
@@ -23,8 +23,9 @@
       "forks": 30,
       "rank": 1,
       "source": "trending-html",
-      "summaryZh": "语言未知的仓库，热度进入榜单。",
-      "summarySource": "model"
+      "summarySource": "model",
+      "summary": "语言未知的仓库，热度进入榜单。",
+      "summaryLang": "zh"
     },
     {
       "fullName": "someorg/aggregate-only",
@@ -36,8 +37,9 @@
       "forks": 12,
       "rank": 2,
       "source": "trending-html",
-      "summaryZh": "仅在全局榜单出现的仓库。",
-      "summarySource": "model"
+      "summarySource": "model",
+      "summary": "仅在全局榜单出现的仓库。",
+      "summaryLang": "zh"
     }
   ]
 }

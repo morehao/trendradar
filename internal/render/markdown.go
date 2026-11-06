@@ -8,21 +8,31 @@ import (
 	"time"
 
 	"github.com/morehao/trendradar/internal/digest"
+	"github.com/morehao/trendradar/internal/i18n"
 )
 
 // Markdown renders a digest as a markdown document with YAML frontmatter and a
-// table per language. It keeps the legacy summary-degraded banner behavior by
-// deriving a default banner from d.Degraded, and uses the legacy per-repo-
-// language layout (no per-page information available here).
+// table per language, in the default (zh) output language. It keeps the legacy
+// summary-degraded banner behavior by deriving a default banner from d.Degraded,
+// and uses the legacy per-repo-language layout (no per-page information
+// available here).
 func Markdown(d digest.Digest) []byte {
-	var banners []string
-	if d.Degraded {
-		banners = append(banners, defaultDegradedBanner)
-	}
-	return MarkdownWithBanners(d, nil, banners)
+	return MarkdownLang(d, "")
 }
 
-const defaultDegradedBanner = "> ⚠️ 本次摘要有降级：模型不可用或返回了无效结果，部分条目为英文原文（summarySource=original）。\n"
+// MarkdownLang is Markdown in an explicit output language (empty means zh).
+func MarkdownLang(d digest.Digest, lang string) []byte {
+	l := i18n.MustResolve(lang)
+	var banners []string
+	if d.Degraded {
+		banners = append(banners, l.Render.DegradedBanner+"\n")
+	}
+	return MarkdownWithBannersLang(d, nil, banners, lang)
+}
+
+// defaultDegradedBanner is the default (zh) trending degraded banner, kept for
+// callers that predate the language parameter.
+var defaultDegradedBanner = i18n.MustResolve(i18n.DefaultLanguage).Render.DegradedBanner + "\n"
 
 // MarkdownWithBanners renders the digest and injects each banner line as a
 // blockquote right after the title. Banners let callers explain non-summary
@@ -38,6 +48,15 @@ const defaultDegradedBanner = "> ⚠️ 本次摘要有降级：模型不可用�
 // fallback, --input replay, or Markdown()) the document falls back to the
 // legacy layout: one section per repo's own primary language.
 func MarkdownWithBanners(d digest.Digest, byPage map[string][]digest.RepoDigest, banners []string) []byte {
+	return MarkdownWithBannersLang(d, byPage, banners, "")
+}
+
+// MarkdownWithBannersLang is MarkdownWithBanners in an explicit output language
+// (empty means zh). The fixed strings (title, table header) come from the
+// language's RenderTexts; per-repo summaries are read from r.Summary.
+func MarkdownWithBannersLang(d digest.Digest, byPage map[string][]digest.RepoDigest, banners []string, lang string) []byte {
+	l := i18n.MustResolve(lang)
+	rt := l.Render
 	var b strings.Builder
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "date: %s\n", d.Date)
@@ -53,7 +72,7 @@ func MarkdownWithBanners(d digest.Digest, byPage map[string][]digest.RepoDigest,
 	}
 	fmt.Fprintf(&b, "generatedAt: %s\n", gen)
 	b.WriteString("---\n\n")
-	fmt.Fprintf(&b, "# %s 趋势摘要\n\n", d.Date)
+	fmt.Fprintf(&b, "# %s %s\n\n", d.Date, rt.DigestTitle)
 	for _, banner := range banners {
 		if banner == "" {
 			continue
@@ -64,11 +83,11 @@ func MarkdownWithBanners(d digest.Digest, byPage map[string][]digest.RepoDigest,
 
 	for _, section := range buildSections(d, byPage) {
 		fmt.Fprintf(&b, "## %s\n\n", section.lang)
-		b.WriteString("| 仓库 | Stars | 今日新增 | 摘要 |\n")
-		b.WriteString("| --- | ---: | ---: | --- |\n")
+		b.WriteString(rt.TableHeader + "\n")
+		b.WriteString(rt.TableSeparator + "\n")
 		for _, r := range section.repos {
 			fmt.Fprintf(&b, "| [%s](%s) | %s | +%s | %s |\n",
-				cell(r.FullName), r.URL, thousands(r.Stars), thousands(r.StarsInPeriod), cell(r.SummaryZh))
+				cell(r.FullName), r.URL, thousands(r.Stars), thousands(r.StarsInPeriod), cell(r.Summary))
 		}
 		b.WriteString("\n")
 	}

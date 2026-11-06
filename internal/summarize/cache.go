@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
 // PromptVersion is bumped whenever SystemPrompt or the output contract changes,
-// so cached summaries from an older prompt are not silently reused.
-const PromptVersion = "v2"
+// so cached summaries from an older prompt are not silently reused. v3: output
+// key renamed summaryZh→summary and the prompt is now language-driven; the
+// language is also folded into the namespace so a language switch misses.
+const PromptVersion = "v3"
 
 // Cache stores summaries keyed by (namespace, fullName, sha256(description))
 // with a TTL. It can be persisted under .git/ so a rerun reuses the same prose
@@ -52,7 +55,18 @@ func NamespaceFor(provider, model string) string {
 // without external context is never reused when enrichment turns on (and A/B
 // modes never pollute each other).
 func NamespaceForMode(provider, model, enrichMode string) string {
-	return provider + "|" + model + "|" + PromptVersion + "|" + enrichMode
+	return NamespaceForLang(provider, model, enrichMode, "")
+}
+
+// NamespaceForLang additionally scopes by output language: a summary generated
+// in Chinese must never be reused for an English digest (and vice versa), so
+// switching language.outputLanguage misses every entry. An empty lang is the
+// default, normalized to "zh" so the default-language namespace stays stable.
+func NamespaceForLang(provider, model, enrichMode, lang string) string {
+	if strings.TrimSpace(lang) == "" {
+		lang = "zh"
+	}
+	return provider + "|" + model + "|" + PromptVersion + "|" + enrichMode + "|" + lang
 }
 
 // SetNamespace sets the cache namespace.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/morehao/trendradar/contract/schema/model.v2.json",
-  "title": "trendradar model v2",
+  "$id": "https://github.com/morehao/trendradar/contract/schema/model.v3.json",
+  "title": "trendradar model v3",
   "description": "Domain model: a scraped repository snapshot (RepoSnapshot) and its digested form (RepoDigest). RepoDigest composes RepoSnapshot via allOf instead of flattening.",
   "$ref": "#/$defs/RepoDigest",
   "$defs": {
@@ -28,9 +28,10 @@
         {
           "type": "object",
           "additionalProperties": true,
-          "required": ["summaryZh", "summarySource"],
+          "required": ["summary", "summaryLang", "summarySource"],
           "properties": {
-            "summaryZh": { "type": "string" },
+            "summary": { "type": "string" },
+            "summaryLang": { "type": "string" },
             "summarySource": { "type": "string", "enum": ["model", "original"] }
           }
         }

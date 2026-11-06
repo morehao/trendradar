@@ -25,7 +25,7 @@ func seedSubscriptions(t *testing.T) (root, subsPath, statePath string) {
 		Repo:      "o/r",
 		WeekStart: "2026-10-26",
 		WeekEnd:   "2026-11-01",
-		SummaryZh: "本周发布 v2，修复若干问题。",
+		Summary:   "本周发布 v2，修复若干问题。",
 		Items:     []releasedoc.Item{{Tag: "v2", URL: "https://github.com/o/r/releases/tag/v2", Date: "2026-10-29"}},
 	}, 600)
 	if err != nil || !need {
@@ -161,7 +161,7 @@ func TestLegacyReleaseDigestStillServed(t *testing.T) {
 			"releases": []any{map[string]any{
 				"id": 1, "tag": "v1", "name": "v1", "kind": "release",
 				"url": "https://github.com/o/r/releases/tag/v1", "prerelease": false, "draft": false,
-				"summaryZh": "旧文档里的逐条摘要", "summarySource": "model",
+				"summary": "旧文档里的逐条摘要", "summarySource": "model",
 			}},
 		}},
 	})

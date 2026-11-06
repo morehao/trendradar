@@ -17,6 +17,7 @@ var fixtures = []string{
 	"digest-degraded.json",
 	"digest-empty-lang.json",
 	"digest-missing-optional.json",
+	"digest-en.json",
 }
 
 func readFile(t *testing.T, elems ...string) []byte {
@@ -40,9 +41,9 @@ func compileDigestSchema(t *testing.T) *jsonschema.Schema {
 			t.Fatalf("add resource %s: %v", f, err)
 		}
 	}
-	add("model.v2.json")
-	add("digest.v2.json")
-	s, err := c.Compile("https://github.com/morehao/trendradar/contract/schema/digest.v2.json")
+	add("model.v3.json")
+	add("digest.v3.json")
+	s, err := c.Compile("https://github.com/morehao/trendradar/contract/schema/digest.v3.json")
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestFixturesValidate(t *testing.T) {
 			t.Fatalf("%s: unmarshal: %v", f, err)
 		}
 		if err := s.Validate(doc); err != nil {
-			t.Fatalf("%s: invalid against v2 schema: %v", f, err)
+			t.Fatalf("%s: invalid against v3 schema: %v", f, err)
 		}
 	}
 }
