@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.11.0
+
+### Changed — 发版订阅改为 tag 级增量总结，每条 Release 独立成段（含 0.10.0 全部内容）
+
+本次一次发出，涵盖 0.10.0（结构化摘要）与本次增量改造。
+
+- **真增量**：`RepoState` 新增 `summarizedTags`（增量游标：只有「已生成总结并发布」的
+  tag 才写入）。增量判定 = 当前版本 tag − 已总结 tag，不再按「整周、整仓」批量总结。
+  `--force`（手动「重新生成」）忽略摘要缓存并对当前页强制重算；调度永不 force。
+- **逐版本摘要**：每个 `releases[].summaryZh` 是该版本自己的中文摘要，文档在版本条目
+  下逐条呈现；`repos[].summaryZh`（周级段落）在新数据里置空，仅旧文档保留（向后兼容）。
+  摘要缓存键改为 per `(repo, tag)`，一周多个版本只总结新增的。
+- **按发布日归周**：文档周段按版本 `publishedAt` 归周，手动补历史版本落对周段。
+- **修两个真实 bug**：
+  - 手动「分析 / 重新生成」被周门挡住（同周 `weekKey` 命中直接 `checked=0 / skipped`，
+    `--force` 也不解）→ 周门改为**仅 `schedule` 生效**，手动一律跑增量。
+  - `baseline()` 把 `LastID` 顶到页内最新，导致订阅后发布的版本（如某个 `rc.1`）
+    被 `r.ID <= LastID` 永久跳过 → baseline 不再推进 `LastID`、不写 `summarized`，
+    首个正式运行按增量补全。
+- **兼容**：`digestSchema` 仍为 2（`summaryZh` 语义/契约 description 变更，非 wire）。
+  v2 state（只有 `LastID`、无 `summarizedTags`）升级后沿用旧水位、不重跑历史。
+  **一次性迁移**：有文档但从未记录 `summarizedTags` 的旧仓，首次运行会把 baseline
+  页历史重总结一遍（修复漏录的代价）。
+- 契约：`@morehao/trendradar-contract` 文档化逐版本 `summaryZh`（0.6.0 无 wire 变更）。
+
 ## 0.10.0
 
 ### Changed — 发版订阅摘要改为轻量结构化，面板不再是一大段密文
