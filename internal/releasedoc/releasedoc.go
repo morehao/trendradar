@@ -91,9 +91,10 @@ func volumeName(repo string, index int) string {
 
 // Item is one version listed in a week section.
 type Item struct {
-	Tag  string
-	URL  string
-	Date string // YYYY-MM-DD, empty when unknown
+	Tag       string
+	URL       string
+	Date      string // YYYY-MM-DD, empty when unknown
+	SummaryZh string // this version's own summary (append-only v3 documents)
 }
 
 // Section is one week of a repo's release history.
@@ -145,12 +146,30 @@ func (s Section) Render() string {
 			fmt.Fprintf(&b, " · %s", d)
 		}
 		b.WriteString("\n")
+		// Per-version summary (append-only v3): each release carries its own
+		// prose under the bullet. Older documents have no per-item summary and
+		// fall back to the single week summary at the end (below).
+		if zh := strings.TrimSpace(it.SummaryZh); zh != "" {
+			b.WriteString("\n")
+			b.WriteString(indentWrap(zh))
+			b.WriteString("\n")
+		}
 	}
 	if rest > 0 {
 		fmt.Fprintf(&b, "- 其余 %d 个\n", rest)
 	}
+	// Legacy fallback: only when no item carried its own summary do we render the
+	// weekly roll-up, so old documents stay readable and new ones are not
+	// duplicated by a second "week" paragraph.
+	anyItemSummary := false
+	for _, it := range listed {
+		if strings.TrimSpace(it.SummaryZh) != "" {
+			anyItemSummary = true
+			break
+		}
+	}
 	summary := strings.TrimSpace(s.SummaryZh)
-	if summary != "" {
+	if summary != "" && !anyItemSummary {
 		b.WriteString("\n")
 		if s.Degraded {
 			b.WriteString("> ⚠️ 本周模型摘要不可用，以下为原文摘录。\n\n")
@@ -160,6 +179,16 @@ func (s Section) Render() string {
 	}
 	b.WriteString("\n")
 	return b.String()
+}
+
+// indentWrap puts a version summary on its own lines, indented two spaces so it
+// reads as belonging to the bullet above it inside the markdown document.
+func indentWrap(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	for i, l := range lines {
+		lines[i] = "  " + strings.TrimSpace(l)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // shortDate renders MM-DD, the form the prototype and the section headings use.

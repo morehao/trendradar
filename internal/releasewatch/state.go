@@ -7,13 +7,19 @@ import (
 	"time"
 )
 
-// stateSchema is the on-disk cursor schema version. Version 2 adds the weekly
-// gate (weekKey) and the subscription-row fields; older files still load because
-// every new field is additive.
-const stateSchema = 2
+// stateSchema is the on-disk cursor schema version. Version 3 adds SummarizedTags
+// (tags whose summary was actually generated and published). Older files still
+// load because every new field is additive; a v2 file simply has no summarized
+// memory and will re-summarize anything not covered by the release ID cursor.
+const stateSchema = 3
 
 // maxSeenTags caps the per-repo tag memory so the state file cannot grow forever.
 const maxSeenTags = 200
+
+// maxSummarizedTags caps the summarized-tag memory. It is the incremental cursor:
+// a tag here means "already summarized and published", so it is never redone
+// unless a forced regeneration explicitly asks for it.
+const maxSummarizedTags = 200
 
 // Per-repo status values. They mirror contract SubscriptionStatus exactly; the
 // generated type cannot be used here because the state file is machine-local and
@@ -29,16 +35,25 @@ const (
 // RepoState is the per-repository cursor: the newest processed release plus the
 // bounded tag memory used when a repo has no releases and we fall back to tags.
 //
-// WeekKey is the ISO week whose check completed successfully (including
-// "nothing new"). It is the weekly gate: a second run in the same week skips the
-// repo without touching GitHub, the model or the document. A failed check does
-// NOT set it, so an explicit retry in the same week is still possible; the
-// cursor never advanced, so the next week's batch simply contains both weeks.
+// SeenTags is "tags we have ever observed" (including a baseline page) and is
+// used to tell "brand new" from "seen before" — it is NOT the incremental cursor.
+// SummarizedTags is the incremental cursor proper: a tag is added only after its
+// summary was generated and the document published. Incremental work is
+// "current tags − SummarizedTags", so a baseline page that pre-records seen tags
+// no longer swallows the versions in between.
+//
+// WeekKey is the ISO week whose *scheduled* check completed successfully
+// (including "nothing new"). It is the weekly gate for schedule runs only: a
+// second *scheduled* run in the same week skips the repo without touching GitHub.
+// Manual / forced runs ignore it (they still respect SummarizedTags), so an
+// explicit re-run can always pick up versions the week gate would otherwise hide.
+// A failed check does NOT set it.
 type RepoState struct {
 	LastID          int64      `json:"lastId"`
 	LastTag         string     `json:"lastTag,omitempty"`
 	LastPublishedAt *time.Time `json:"lastPublishedAt,omitempty"`
 	SeenTags        []string   `json:"seenTags,omitempty"`
+	SummarizedTags  []string   `json:"summarizedTags,omitempty"`
 
 	WeekKey         string     `json:"weekKey,omitempty"`
 	Status          string     `json:"status,omitempty"`
@@ -100,6 +115,9 @@ func (s *State) Set(repo string, st RepoState) {
 	if len(st.SeenTags) > maxSeenTags {
 		st.SeenTags = st.SeenTags[len(st.SeenTags)-maxSeenTags:]
 	}
+	if len(st.SummarizedTags) > maxSummarizedTags {
+		st.SummarizedTags = st.SummarizedTags[len(st.SummarizedTags)-maxSummarizedTags:]
+	}
 	s.Repos[repo] = st
 	now := time.Now().UTC()
 	s.UpdatedAt = &now
@@ -119,6 +137,33 @@ func AddSeenTag(st *RepoState, tag string) {
 	if len(st.SeenTags) > maxSeenTags {
 		st.SeenTags = st.SeenTags[len(st.SeenTags)-maxSeenTags:]
 	}
+}
+
+// AddSummarizedTag records that a tag's summary was generated and published, so
+// it becomes part of the incremental cursor and is not redone by later runs.
+func AddSummarizedTag(st *RepoState, tag string) {
+	if tag == "" {
+		return
+	}
+	for _, t := range st.SummarizedTags {
+		if t == tag {
+			return
+		}
+	}
+	st.SummarizedTags = append(st.SummarizedTags, tag)
+	if len(st.SummarizedTags) > maxSummarizedTags {
+		st.SummarizedTags = st.SummarizedTags[len(st.SummarizedTags)-maxSummarizedTags:]
+	}
+}
+
+// hasSummarized reports whether a tag is already in the incremental cursor.
+func hasSummarized(st RepoState, tag string) bool {
+	for _, t := range st.SummarizedTags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
 }
 
 // Save writes the cursor atomically with 0600 permissions.

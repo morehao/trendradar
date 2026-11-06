@@ -27,7 +27,16 @@ type Fetcher interface {
 
 // Options configures one release-watch build.
 type Options struct {
-	Repos              []string
+	Repos []string
+	// Trigger says who asked for the run. It only changes the weekly gate:
+	// schedule runs skip a repo whose week already completed (nothing to do),
+	// while manual / forced runs ignore the week gate and always run the
+	// incremental diff (current tags − SummarizedTags). Empty means manual.
+	Trigger string
+	// Force ignores the persisted summary cache and re-summarizes versions in the
+	// current page for the target repo(s), even ones already in SummarizedTags.
+	// It only applies to manual runs; a scheduled run never forces.
+	Force              bool
 	Date               string // run date; the digest is dated by its week end
 	Period             string // summary period; weekly is the only supported value
 	Timezone           string // IANA name; empty means Asia/Shanghai
@@ -102,6 +111,7 @@ type builder struct {
 	cache *summarize.Cache
 	sum   *Summarizer
 	week  Week
+	loc   *time.Location
 
 	mu      sync.Mutex
 	commits map[string]*fetch.Commit
@@ -145,14 +155,22 @@ func Build(ctx context.Context, f Fetcher, opts Options) (releasedigest.ReleaseD
 		cache = summarize.NewCache()
 	}
 	cache.SetNamespace(fmt.Sprintf("%s|%s|%s", opts.ProviderName, opts.ModelName, PromptVersion))
+	// A forced run must re-ask the model for every version, so it gets no cache
+	// (SummarizeCandidate treats nil cache as "always miss, never store"). The
+	// on-disk cache still gets refreshed by the next non-forced run.
+	var sumCache *summarize.Cache
+	if !opts.Force {
+		sumCache = cache
+	}
 
 	b := &builder{
 		opts:  opts,
 		fet:   f,
 		state: state,
 		cache: cache,
-		sum:   NewSummarizer(opts.Provider, cache, opts.MaxNotesChars, opts.SummaryMaxChars),
+		sum:   NewSummarizer(opts.Provider, sumCache, opts.MaxNotesChars, opts.SummaryMaxChars),
 		week:  week,
+		loc:   loc,
 	}
 
 	d := releasedigest.ReleaseDigest{Schema: releasedigest.Schema, Date: week.End, Period: period}
@@ -268,10 +286,13 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 	}
 	st, hasState := b.getState(repo)
 
-	// Weekly gate: a completed check for this ISO week means "do not ask again".
-	// Nothing is fetched, summarized or written, so a duplicate run (schedule +
-	// manual) costs nothing and cannot append the week twice (A4).
-	if hasState && st.WeekKey == b.week.Key {
+	// Weekly gate: only a *scheduled* run treats a completed week as "do not ask
+	// again". A manual or forced run must ignore it and run the incremental diff,
+	// otherwise an explicit re-run is silently short-circuited to "already done"
+	// even when versions were published after the scheduled check (the exact bug
+	// that hid a rc.1 release for a whole week). Manual runs still respect
+	// SummarizedTags, so they never redo an already-summarized version.
+	if b.opts.Trigger == "schedule" && hasState && st.WeekKey == b.week.Key {
 		return repoOutcome{status: statusAlreadyDone}
 	}
 
@@ -295,7 +316,19 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 		}
 		stop := false
 		for _, r := range filterReleases(pg.Releases, b.opts) {
-			if hasState && r.ID <= st.LastID {
+			// Incremental cursor. Primary: stop at a release whose tag is already
+			// summarized (SummmarizedTags). This means a baseline page that
+			// pre-recorded a newer LastID no longer swallows the versions in
+			// between — those tags are not summarized yet, so they are still
+			// picked up.
+			//
+			// Backward compatibility: a v2 state file has no SummarizedTags. For
+			// that legacy shape only, fall back to the old LastID watermark so an
+			// upgrade does not re-summarize the entire history. A fresh baseline
+			// deliberately leaves LastID at 0, so this fallback does not fire for
+			// new subscriptions.
+			if hasState && !b.opts.Force && (hasSummarized(st, r.TagName) ||
+				(len(st.SummarizedTags) == 0 && st.LastID > 0 && r.ID <= st.LastID)) {
 				stop = true
 				break
 			}
@@ -319,7 +352,10 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 	// otherwise older tags outside the baseline page reappear as "new".
 	tagMode := !sawReleases && !(hasState && st.LastID > 0)
 	if len(cands) == 0 && b.opts.FallbackToTags && tagMode {
-		tags, capHit := b.fetchNewTags(ctx, owner, name, st.SeenTags)
+		// Diff against SummarizedTags (the incremental cursor), not SeenTags: a
+		// baseline page records seen tags without summarizing them, and those must
+		// still be picked up on the first real run.
+		tags, capHit := b.fetchNewTags(ctx, owner, name, st.SummarizedTags)
 		if capHit {
 			hitCap = true
 		}
@@ -338,6 +374,10 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 
 	// cands are newest-first. Render newest-first too, but advance the cursor
 	// from the oldest item so a future run can never skip an unprocessed version.
+	// Each summarized candidate also enters SummarizedTags: the incremental cursor
+	// that later runs diff against. Build never saves the state itself (the caller
+	// persists it only after the document publishes), so marking here is safe:
+	// a failed publish discards this in-memory state and nothing is lost.
 	next := st
 	for i := len(cands) - 1; i >= 0; i-- {
 		c := cands[i]
@@ -349,6 +389,7 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 		}
 		next.LastTag = c.tagName()
 		AddSeenTag(&next, c.tagName())
+		AddSummarizedTag(&next, c.tagName())
 	}
 	next.WeekKey = b.week.Key
 	next.Status = StatusOK
@@ -380,7 +421,10 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 	var pool []candidate
 	if len(rels) > 0 {
 		latest := rels[0]
-		st.LastID = latest.ID
+		// Deliberately do NOT advance LastID past the baseline page: LastID is a
+		// legacy watermark only. Leaving it at 0 means the first regular run diffs
+		// by SummarizedTags (empty here) and summarizes every version in the page,
+		// instead of the baseline silently swallowing the versions in between.
 		st.LastTag = latest.TagName
 		st.LastPublishedAt = latest.PublishedAt
 		for _, r := range rels {
@@ -398,6 +442,11 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 		st.LastTag = tags[0].Name
 		for _, t := range tags {
 			AddSeenTag(&st, t.Name)
+			// Tag fallback has no reliable "newness" (tag dates/ids are weak) and
+			// a repo may carry dozens of pre-subscription tags. A tag baseline is
+			// therefore the starting point: record these tags as summarized so
+			// the first regular run does NOT dump the whole tag history as "new".
+			AddSummarizedTag(&st, t.Name)
 			pool = append(pool, b.tagCandidate(ctx, repo, owner, name, t))
 		}
 	} else {
@@ -420,6 +469,12 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 		n = len(pool)
 	}
 	group, summarized, degraded, truncated := b.summarizeRepo(ctx, repo, pool[:n])
+	// Backfilled versions are summarized into the document now, so they enter the
+	// incremental cursor too — otherwise the first regular run would redo them.
+	for _, c := range pool[:n] {
+		AddSummarizedTag(&st, c.tagName())
+	}
+	b.putState(repo, st)
 	return repoOutcome{
 		group:       group,
 		status:      StatusOK,
@@ -472,12 +527,16 @@ func (b *builder) putState(repo string, st RepoState) {
 	b.state.Set(repo, st)
 }
 
-// summarizeRepo makes exactly one model call for the whole week and renders the
-// digest group from its single summary.
+// summarizeRepo summarizes each version independently (incremental unit) and
+// renders the digest group from per-version summaries. The weekly roll-up
+// (RepoReleases.SummaryZh) is left empty on new data: the document is a sequence
+// of version entries, each with its own summary, not one paragraph for the week.
 func (b *builder) summarizeRepo(ctx context.Context, repo string, cands []candidate) (*releasedigest.RepoReleases, int, int, int) {
-	res := b.sum.SummarizeRepo(ctx, repo, b.week.Key, cands)
+	results := b.sum.SummarizeRepo(ctx, repo, b.week.Key, cands)
 	items := make([]releasedigest.ReleaseItem, 0, len(cands))
-	for _, c := range cands {
+	summarized, degraded, truncated := 0, 0, 0
+	for i, c := range cands {
+		res := results[i]
 		item := releasedigest.ReleaseItem{
 			ID:            c.rel.ID,
 			Tag:           c.tagName(),
@@ -495,14 +554,25 @@ func (b *builder) summarizeRepo(ctx context.Context, repo string, cands []candid
 		if item.URL == "" {
 			item.URL = repoURL(repo)
 		}
+		if res.SummaryZh != "" {
+			zh := res.SummaryZh
+			item.SummaryZh = &zh
+		}
 		if c.rel.Body != "" {
 			excerpt := truncateRunes(c.rel.Body, b.opts.MaxNotesChars)
 			item.BodyExcerpt = &excerpt
 		}
+		if res.Source == "model" {
+			summarized++
+		} else {
+			degraded++
+		}
+		if res.Truncated {
+			truncated++
+		}
 		items = append(items, item)
 	}
-	summary := res.SummaryZh
-	start, end := b.week.Start, b.week.End
+	start, end := b.periodRange(cands)
 	group := &releasedigest.RepoReleases{
 		FullName:    repo,
 		URL:         repoURL(repo),
@@ -510,19 +580,39 @@ func (b *builder) summarizeRepo(ctx context.Context, repo string, cands []candid
 		NewCount:    len(items),
 		PeriodStart: &start,
 		PeriodEnd:   &end,
-		SummaryZh:   &summary,
 		Releases:    items,
 	}
-	summarized, degraded, truncated := 0, 0, 0
-	if res.Source == "model" {
-		summarized = 1
-	} else {
-		degraded = 1
-	}
-	if res.Truncated {
-		truncated = 1
-	}
 	return group, summarized, degraded, truncated
+}
+
+// periodRange picks the week bounds for a batch of versions from their actual
+// publish dates, so a version summarized late (e.g. a manual backfill of an
+// older release) lands in the week it was published, not the day it was checked.
+// The range is the ISO week of the earliest published version; versions without a
+// publish date (tag fallback) fall back to the run week. If a batch spans several
+// weeks the document section still uses a single range — the earliest week — which
+// keeps the heading stable and monotonic.
+func (b *builder) periodRange(cands []candidate) (string, string) {
+	var earliest time.Time
+	found := false
+	for _, c := range cands {
+		if c.rel.PublishedAt == nil {
+			continue
+		}
+		t := c.rel.PublishedAt.In(b.loc)
+		if !found || t.Before(earliest) {
+			earliest = t
+			found = true
+		}
+	}
+	if !found {
+		return b.week.Start, b.week.End
+	}
+	wk, err := WeekOf(earliest.Format("2006-01-02"), b.loc)
+	if err != nil {
+		return b.week.Start, b.week.End
+	}
+	return wk.Start, wk.End
 }
 
 // tagCandidate builds a tag entry and, when the repo has no release notes, uses

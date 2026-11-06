@@ -66,7 +66,10 @@ func TestE2EReleasesStage(t *testing.T) {
 		FallbackToTags:     boolPtr(true),
 	}
 	in := fixtureInputs()
-	tm := time.Unix(1700000000, 0).UTC()
+	// Publish dates inside the fixture run week (2026-10-28 => ISO week W44) so
+	// the document section is attributed to the week the versions were published,
+	// matching the run week this test asserts on.
+	tm := time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC)
 	fetcher := &fakeReleaseFetcher{releases: map[string][]fetch.Release{
 		"o/r": {
 			{ID: 2, TagName: "v2", Name: "v2", Body: "fix bug", PublishedAt: &tm, HTMLURL: "https://github.com/o/r/releases/tag/v2"},

@@ -1630,7 +1630,7 @@ const releases = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/morehao/trendradar/contract/schema/releases.v2.json",
   "title": "trendradar releases v2",
-  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. schema=2 adds the per-repo weekly batch summary (repos[].summaryZh + periodStart/periodEnd); the per-item summaryZh stays readable for old documents but is no longer written.",
+  "description": "Repo release subscription documents. ReleaseDigest is the rendered on-disk document; ReleasesReport is the per-run diagnostic carried in RunResult.releases. Token cost lives in ReleasesReport.usage (always present), never in ReleaseDigest, because cost is a property of one run and cannot be reproduced from a stored document. schema=2 originally put one weekly summary per repo (repos[].summaryZh); schema 2 cores now write a per-version summary on each repos[].releases[].summaryZh instead, and leave repos[].summaryZh empty on new data. Both fields stay optional (readable old + new documents): consumers should prefer the per-item summaryZh and fall back to the repo-level one for older documents.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -1694,7 +1694,7 @@ const releases = {
     "ReleaseItem": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summaryZh is optional and no longer written by schema 2: the summary now lives once per repo per week in RepoReleases.summaryZh.",
+      "description": "One release or tag. kind distinguishes a GitHub release (has notes) from a tag fallback (commit message used as the summary basis). summaryZh is this version's own Chinese summary, written per version by current cores (incremental). It stays optional so old documents (which only carry the repo-level RepoReleases.summaryZh) remain valid; consumers should prefer this field and fall back to RepoReleases.summaryZh.",
       "required": [
         "id",
         "tag",
@@ -1758,7 +1758,7 @@ const releases = {
     "RepoReleases": {
       "type": "object",
       "additionalProperties": true,
-      "description": "One repo's release batch for one summary period. summaryZh covers the whole week in a single model call; periodStart/periodEnd bound that week so a consumer can label it without parsing dates.",
+      "description": "One repo's release batch for one summary period. periodStart/periodEnd bound the period (attributed to the versions' publish dates) so a consumer can label it without parsing dates. summaryZh (repo-level, whole-week) is kept for backward compatibility: current cores summarize per version (releases[].summaryZh) and leave this empty on new data.",
       "required": [
         "fullName",
         "url",
@@ -1792,7 +1792,7 @@ const releases = {
         },
         "summaryZh": {
           "type": "string",
-          "description": "One Chinese summary for every version in this period. Empty when no summary was produced."
+          "description": "Legacy: one Chinese summary for the whole period. Current cores leave this empty and put a per-version summary in releases[].summaryZh. Kept optional for older documents."
         },
         "releases": {
           "type": "array",

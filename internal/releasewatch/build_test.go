@@ -71,7 +71,10 @@ func (failProv) Complete(context.Context, string, string) (model.Result, error) 
 }
 
 func rel(id int64, tag string) fetch.Release {
-	t := time.Unix(id, 0).UTC()
+	// Spread publish dates around the W44 test week so period attribution and
+	// ordering tests behave like real releases (id grows => later date), instead
+	// of 1970 timestamps that would (correctly) land in a 1970 week.
+	t := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC).AddDate(0, 0, int(id-1))
 	return fetch.Release{ID: id, TagName: tag, Name: tag, Body: "notes " + tag, PublishedAt: &t, HTMLURL: "https://github.com/o/r/releases/tag/" + tag}
 }
 
@@ -115,15 +118,21 @@ func TestBuildIncrement(t *testing.T) {
 		t.Fatalf("digest date=%s, want the week end 2026-11-01", d.Date)
 	}
 	g := d.Repos[0]
-	if g.SummaryZh == nil || *g.SummaryZh == "" {
-		t.Fatalf("repo summary missing: %+v", g)
+	// New model: the weekly roll-up is empty; each version carries its own summary.
+	if g.SummaryZh != nil && *g.SummaryZh != "" {
+		t.Fatalf("weekly roll-up should be empty on new data, got %q", *g.SummaryZh)
+	}
+	for _, it := range g.Releases {
+		if it.SummaryZh == nil || *it.SummaryZh == "" {
+			t.Fatalf("per-version summary missing for %s: %+v", it.Tag, it)
+		}
 	}
 	if g.PeriodStart == nil || *g.PeriodStart != "2026-10-26" || g.PeriodEnd == nil || *g.PeriodEnd != "2026-11-01" {
 		t.Fatalf("period=%v..%v, want 2026-10-26..2026-11-01", g.PeriodStart, g.PeriodEnd)
 	}
-	// One model call for the whole repo-week (design D2).
-	if rep.Calls != 1 || rep.Summarized != 1 || rep.Changed != 1 || rep.Checked != 1 {
-		t.Fatalf("report=%+v, want 1 call / 1 summarized / 1 changed", rep)
+	// One model call per new version (incremental unit): v3 and v2 => 2 calls.
+	if rep.Calls != 2 || rep.Summarized != 2 || rep.Changed != 1 || rep.Checked != 1 {
+		t.Fatalf("report=%+v, want 2 calls / 2 summarized / 1 changed", rep)
 	}
 	got, _ := state.Get("o/r")
 	if got.LastID != 3 {
@@ -137,6 +146,7 @@ func TestBuildIncrement(t *testing.T) {
 func TestBuildWeeklyGateSkipsSecondRun(t *testing.T) {
 	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(2, "v2"), rel(1, "v1")}}}
 	o := baseOpts(t, f)
+	o.Trigger = "schedule" // the weekly gate applies to scheduled runs only
 	st := NewState()
 	st.Set("o/r", RepoState{LastID: 0})
 	if err := st.Save(o.StatePath); err != nil {
@@ -155,7 +165,8 @@ func TestBuildWeeklyGateSkipsSecondRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	callsAfterFirst := f.calls
-	// Same ISO week, different day: the gate must skip before any GitHub call.
+	// Same ISO week, different day: the scheduled gate must skip before any
+	// GitHub call.
 	o.Date = "2026-10-30"
 	d, _, rep, err := Build(context.Background(), f, o)
 	if err != nil {
@@ -169,6 +180,42 @@ func TestBuildWeeklyGateSkipsSecondRun(t *testing.T) {
 	}
 	if f.calls != callsAfterFirst {
 		t.Fatalf("second run hit GitHub (%d -> %d calls)", callsAfterFirst, f.calls)
+	}
+}
+
+// A manual run must NOT be short-circuited by the weekly gate: it re-runs the
+// incremental diff. With everything already summarized there is nothing new, so
+// it reports checked>0 / changed=0 rather than being silently skipped.
+func TestBuildManualIgnoresWeeklyGate(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(2, "v2"), rel(1, "v1")}}}
+	o := baseOpts(t, f)
+	o.Trigger = "manual"
+	st := NewState()
+	st.Set("o/r", RepoState{LastID: 0})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	_, firstState, _, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstState.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	// Same week, manual re-run: must still check the repo (not already_done).
+	o.Date = "2026-10-30"
+	d, _, rep, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Checked != 1 {
+		t.Fatalf("manual re-run report=%+v, want checked=1 (must not be gated)", rep)
+	}
+	if d.Count != 0 {
+		t.Fatalf("manual re-run count=%d, want 0 (nothing new to summarize)", d.Count)
+	}
+	if rep.Changed != 0 {
+		t.Fatalf("manual re-run changed=%d, want 0 (already summarized)", rep.Changed)
 	}
 }
 
@@ -204,8 +251,11 @@ func TestBuildBaseline(t *testing.T) {
 		t.Fatalf("baseline report=%+v, want checked=1", rep)
 	}
 	got, _ := state.Get("o/r")
-	if got.LastID != 2 || len(got.SeenTags) != 2 {
-		t.Fatalf("baseline state=%+v", got)
+	// Baseline deliberately leaves LastID at 0 and records no summarized tag: the
+	// first regular run then diffs by SummarizedTags and summarizes the baseline
+	// page instead of silently swallowing the versions in between (the rc.1 bug).
+	if got.LastID != 0 || len(got.SeenTags) != 2 || len(got.SummarizedTags) != 0 {
+		t.Fatalf("baseline state=%+v, want LastID=0, 2 seen, 0 summarized", got)
 	}
 	if got.Status != StatusBaseline || got.WeekKey != "2026-W44" {
 		t.Fatalf("baseline status=%q week=%q, want baseline + gate week", got.Status, got.WeekKey)
@@ -314,11 +364,14 @@ func TestBuildDegradesOnModelFailure(t *testing.T) {
 	if d.Count != 2 || !d.Degraded {
 		t.Fatalf("digest=%+v, want degraded but not empty", d)
 	}
-	if rep.Degraded != 1 || rep.Summarized != 0 {
-		t.Fatalf("report=%+v, want 1 degraded", rep)
+	// Each of the two versions degraded independently.
+	if rep.Degraded != 2 || rep.Summarized != 0 {
+		t.Fatalf("report=%+v, want 2 degraded", rep)
 	}
-	if d.Repos[0].SummaryZh == nil || *d.Repos[0].SummaryZh == "" {
-		t.Fatalf("degraded summary must still be present: %+v", d.Repos[0])
+	for _, it := range d.Repos[0].Releases {
+		if it.SummaryZh == nil || *it.SummaryZh == "" {
+			t.Fatalf("degraded per-version summary must still be present for %s: %+v", it.Tag, it)
+		}
 	}
 }
 
@@ -331,7 +384,7 @@ func TestBuildTruncatesLongSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	zh := *d.Repos[0].SummaryZh
+	zh := *d.Repos[0].Releases[0].SummaryZh
 	if n := len([]rune(zh)); n != 20 {
 		t.Fatalf("summary runes=%d, want 20 (truncated with ellipsis)", n)
 	}
@@ -394,4 +447,119 @@ func (e *errFetcher) GetCommit(ctx context.Context, owner, repo, sha string) (fe
 
 func (e *errFetcher) ListTagsPage(ctx context.Context, owner, repo string, page, size int) (fetch.TagPage, error) {
 	return e.base.ListTagsPage(ctx, owner, repo, page, size)
+}
+
+// Regression: a baseline must not swallow versions published after it. Before
+// the fix, baseline set LastID to the newest page release, so a version released
+// afterwards (rc.1) was permanently hidden by the `r.ID <= LastID` cursor.
+func TestBuildBaselineDoesNotSwallowLaterRelease(t *testing.T) {
+	// Baseline sees alpha.3 (id 100) only.
+	f1 := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(100, "dsh-v0.2.2-alpha.3")}}}
+	o := baseOpts(t, f1)
+	o.BaselineOnFirstRun = true
+	_, baseState, _, err := Build(context.Background(), f1, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := baseState.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	// Later, rc.1 (id 200) is published.
+	f2 := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(200, "dsh-v0.2.2-rc.1"), rel(100, "dsh-v0.2.2-alpha.3")}}}
+	d, st, rep, err := Build(context.Background(), f2, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tags []string
+	for _, r := range d.Repos {
+		for _, x := range r.Releases {
+			tags = append(tags, x.Tag)
+		}
+	}
+	found := false
+	for _, tg := range tags {
+		if tg == "dsh-v0.2.2-rc.1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("rc.1 not picked up after baseline; got tags=%v", tags)
+	}
+	if rep.Checked != 1 || d.Count == 0 {
+		t.Fatalf("report=%+v count=%d, want the later release summarized", rep, d.Count)
+	}
+	got, _ := st.Get("o/r")
+	if !hasSummarized(got, "dsh-v0.2.2-rc.1") {
+		t.Fatalf("rc.1 not recorded in SummarizedTags: %+v", got.SummarizedTags)
+	}
+}
+
+// Backward compatibility: a v2 state file has only LastID (no SummarizedTags).
+// An upgrade must not re-summarize the whole history — the legacy LastID
+// watermark still bounds the diff.
+func TestBuildLegacyLastIDStateNoResummarize(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(3, "v3"), rel(2, "v2"), rel(1, "v1")}}}
+	o := baseOpts(t, f)
+	st := NewState()
+	// Legacy shape: watermark at v2, empty SummarizedTags.
+	st.Set("o/r", RepoState{LastID: 2, LastTag: "v2"})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	d, _, rep, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only v3 (id 3 > LastID 2) should be new; v1/v2 must not be re-summarized.
+	if d.Count != 1 || rep.Changed != 1 {
+		t.Fatalf("legacy state re-summarized history: count=%d report=%+v", d.Count, rep)
+	}
+	var tags []string
+	for _, r := range d.Repos {
+		for _, x := range r.Releases {
+			tags = append(tags, x.Tag)
+		}
+	}
+	if len(tags) != 1 || tags[0] != "v3" {
+		t.Fatalf("want only v3, got %v", tags)
+	}
+}
+
+// A forced run re-summarizes versions that are already in the incremental cursor
+// (the "re-generate" button), instead of stopping at SummarizedTags. Non-forced
+// runs keep the cursor and produce nothing new.
+func TestBuildForceResummarizesSummarized(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {rel(2, "v2"), rel(1, "v1")}}}
+	o := baseOpts(t, f)
+	o.Trigger = "manual"
+	st := NewState()
+	st.Set("o/r", RepoState{LastID: 0})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	_, firstState, _, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstState.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+	// Non-forced re-run: everything already summarized -> nothing new.
+	_, _, rep, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Changed != 0 || rep.NewReleases != 0 {
+		t.Fatalf("non-forced re-run report=%+v, want no change", rep)
+	}
+	// Forced re-run: re-summarize both versions.
+	o.Force = true
+	f.calls = 0
+	_, _, repF, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repF.NewReleases != 2 || repF.Summarized != 2 {
+		t.Fatalf("forced re-run report=%+v, want 2 re-summarized", repF)
+	}
 }
