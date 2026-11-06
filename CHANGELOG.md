@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1
 
 ### Fixed — 发版订阅 legacy 游标卡死：滚动预发布 tag 挡住全部新版本
 
