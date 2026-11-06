@@ -300,6 +300,37 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 		return repoOutcome{status: statusAlreadyDone}
 	}
 
+	// A schema-2 cursor (core <= 0.10) has a numeric LastID but no tag memory.
+	// That shape is repaired here before the incremental diff runs:
+	//
+	//   - It never published anything (LatestSummaryAt empty) yet carries a
+	//     watermark. The watermark is whatever the baseline page head was at
+	//     subscription time; for a repo whose head is a rolling prerelease it is
+	//     an old release ID, and the legacy fallback below then stops the scan on
+	//     that very row forever — the repo can never produce its first document
+	//     (ragflow: LastID equals the "nightly" release id, which sits at the top
+	//     of /releases). Treat it as a first run: baseline + backfill, which also
+	//     replaces the poisoned cursor.
+	//   - It did publish: the tag memory can be reconstructed from SeenTags, the
+	//     same "already observed" set the baseline recorded, so the unsafe ID
+	//     watermark can be retired instead of being trusted.
+	//
+	// A v3 baseline deliberately leaves LastID at 0, so healthy repos never enter
+	// this branch. When the repair cannot run (baselineOnFirstRun disabled for a
+	// never-published state, or no SeenTags to migrate) the ID fallback below
+	// still keeps the old bounded behaviour.
+	if hasState && len(st.SummarizedTags) == 0 && st.LastID > 0 {
+		if st.LatestSummaryAt == "" && b.opts.BaselineOnFirstRun {
+			return b.baseline(ctx, repo, owner, name)
+		}
+		if st.LatestSummaryAt != "" && len(st.SeenTags) > 0 {
+			st.SummarizedTags = append([]string(nil), st.SeenTags...)
+			st.LastID = 0
+			st.LastPublishedAt = nil
+			b.putState(repo, st)
+		}
+	}
+
 	if !hasState && b.opts.BaselineOnFirstRun {
 		return b.baseline(ctx, repo, owner, name)
 	}
@@ -326,11 +357,12 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 			// between — those tags are not summarized yet, so they are still
 			// picked up.
 			//
-			// Backward compatibility: a v2 state file has no SummarizedTags. For
-			// that legacy shape only, fall back to the old LastID watermark so an
-			// upgrade does not re-summarize the entire history. A fresh baseline
-			// deliberately leaves LastID at 0, so this fallback does not fire for
-			// new subscriptions.
+			// Backward compatibility: only a v2 state file can reach this, and
+			// only when the migration above could not run (no SeenTags, or the
+			// never-published repair was disabled). It keeps the old bounded
+			// behaviour, but note it trusts that release IDs descend with the
+			// list — a rolling prerelease at the head with an old ID breaks that
+			// assumption, which is why migratable states are rewritten instead.
 			if hasState && !b.opts.Force && (hasSummarized(st, r.TagName) ||
 				(len(st.SummarizedTags) == 0 && st.LastID > 0 && r.ID <= st.LastID)) {
 				stop = true

@@ -228,10 +228,10 @@ func (c *Client) postAPI(ctx context.Context, path string, body []byte) ([]byte,
 	opt := ghttp.RequestOption{RequestBody: body, Headers: headers, ContentType: "application/json"}
 	res, err := c.api.Post(ctx, path, opt)
 	if err != nil {
-		return nil, &Error{Code: ipc.CodeFetchFailed, Message: "request failed", Err: err}
+		return nil, statusFromError(err)
 	}
 	if !res.IsSuccess() {
-		return nil, statusError(res.HttpCode)
+		return nil, statusError(res.HttpCode, res.Header, res.Response)
 	}
 	return res.Bytes(), nil
 }
