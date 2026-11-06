@@ -426,8 +426,14 @@ func (c *Config) withDefaults() {
 	if c.Releases.Concurrency.IsZero() {
 		c.Releases.Concurrency = AutoInt{Auto: true}
 	}
+	// 60s: one release-watch run makes several sequential GitHub REST calls and
+	// a single call already takes 4-7s on an ordinary link, while the client
+	// applies this timeout to the whole request (all retry attempts share one
+	// deadline). A 20s default left no headroom for a transient stall and every
+	// such stall aborted the repo for the entire run. The ceiling stays at 60 so
+	// a hung request cannot outlive the stage budget by much.
 	if c.Releases.TimeoutSeconds == 0 {
-		c.Releases.TimeoutSeconds = 20
+		c.Releases.TimeoutSeconds = 60
 	}
 	if c.Releases.BudgetSeconds.IsZero() {
 		c.Releases.BudgetSeconds = AutoInt{Auto: true}

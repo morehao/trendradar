@@ -154,3 +154,15 @@ func TestValidateBranchGrouping(t *testing.T) {
 		t.Fatalf("branchGrouping=per-day should be ErrInvalid, got %v", err)
 	}
 }
+
+// The release stage issues several sequential GitHub calls and a single
+// request routinely takes 4-7s, while the client applies this timeout to the
+// whole request including its retry attempts. 20s left no headroom for a
+// transient stall; the default is 60s (validation ceiling).
+func TestReleasesTimeoutDefault(t *testing.T) {
+	var c Config
+	c.withDefaults()
+	if c.Releases.TimeoutSeconds != 60 {
+		t.Fatalf("releases.timeoutSeconds default = %d, want 60", c.Releases.TimeoutSeconds)
+	}
+}

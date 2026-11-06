@@ -4,7 +4,9 @@
 package fetch
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -132,17 +134,51 @@ func (c *Client) getAPI(ctx context.Context, path string) ([]byte, error) {
 func (c *Client) get(ctx context.Context, hc *ghttp.Client, path string) ([]byte, error) {
 	res, err := hc.Get(ctx, path, ghttp.RequestOption{Headers: c.headers()})
 	if err != nil {
-		return nil, &Error{Code: ipc.CodeFetchFailed, Message: "request failed", Err: err}
+		return nil, statusFromError(err)
 	}
 	if !res.IsSuccess() {
-		return nil, statusError(res.HttpCode)
+		return nil, statusError(res.HttpCode, res.Header, res.Response)
 	}
 	return res.Bytes(), nil
 }
 
-func statusError(code int) *Error {
-	if code == http.StatusTooManyRequests {
+// statusFromError maps an error returned by ghttp. ghttp reports every non-2xx
+// response as *HTTPError instead of handing back a failed result, so HTTP status
+// classification (including GitHub's 403 quota reply) has to happen here;
+// transport failures keep the generic code.
+func statusFromError(err error) *Error {
+	var he *ghttp.HTTPError
+	if errors.As(err, &he) {
+		e := statusError(he.HttpCode, he.Header, he.Body)
+		// Keep the transport error attached: Summarize() derives the short
+		// user-facing reason ("status 502", "timeout") from it.
+		e.Err = err
+		return e
+	}
+	return &Error{Code: ipc.CodeFetchFailed, Message: "request failed", Err: err}
+}
+
+// statusError turns a non-2xx response into a stable IPC code. GitHub reports
+// an exhausted REST quota as 403 (not only 429), so a 403 that says "rate
+// limit" must map to ratelimited — otherwise the release stage counts it as a
+// generic failure, the panel shows "失败" instead of "限流", and callers retry
+// a request that cannot succeed until the window resets.
+func statusError(code int, header http.Header, body []byte) *Error {
+	if code == http.StatusTooManyRequests || (code == http.StatusForbidden && rateLimitExceeded(header, body)) {
 		return &Error{Code: ipc.CodeFetchRateLimited, Message: fmt.Sprintf("status %d", code)}
 	}
 	return &Error{Code: ipc.CodeFetchFailed, Message: fmt.Sprintf("unexpected status %d", code)}
+}
+
+// rateLimitExceeded reports whether a 403 is GitHub's quota-exhausted reply
+// rather than a genuine permission error. The primary limit sets
+// X-RateLimit-Remaining: 0; the secondary limit answers with Retry-After and a
+// "rate limit" message in the body.
+func rateLimitExceeded(header http.Header, body []byte) bool {
+	if header != nil {
+		if header.Get("X-RateLimit-Remaining") == "0" || header.Get("Retry-After") != "" {
+			return true
+		}
+	}
+	return bytes.Contains(bytes.ToLower(body), []byte("rate limit"))
 }

@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Fixed — 发版订阅 legacy 游标卡死：滚动预发布 tag 挡住全部新版本
+
+- **根因**：schema-2 游标（core ≤ 0.10）只有数值 `lastId`、没有 `summarizedTags`。若该仓库
+  从未发布过（`latestSummaryAt` 为空），而 `/releases` 列表头部是滚动预发布（如 ragflow 的
+  `nightly`：创建时间每天刷新，release id 却停在一年前），v2 兼容回退 `r.ID <= lastId`
+  会在第一行就停止扫描 → 永远 0 候选、从不落盘。
+- **修复**：
+  - 「有游标但从未发布」的 legacy 状态视为首次运行，重走 baseline + `backfillLatest`，
+    同时替换被污染的游标（之前 baseline 把列表头的 release id 写成水位）。
+  - 已发布过的 legacy 状态用 `seenTags` 播撒 `summarizedTags` 并清零 `lastId`，不再假设
+    release id 随列表顺序递减。
+- **超时**：`releases.timeoutSeconds` 默认 20s → 60s。客户端把该值当作「单请求含重试」的
+  总预算，一次运行要串行发多个 GitHub 请求、单请求 4-7s 属正常；20s 没有给瞬时抖动留余量，
+  抖动一次整个仓库就判失败。
+- **限流识别**：`fetch.statusError` 也把 403 配额耗尽归为 `fetch_rate_limited`。此前 ghttp
+  对非 2xx 直接返回 error，429/403 一律落到 `fetch_failed`，`fetch_rate_limited` 实际不可达，
+  面板只会显示「失败」而不是「限流」。
+
 ## 0.12.0
 
 ### Breaking — 摘要输出语言可配置（outputLanguage），wire 变更 `summaryZh` → `summary`(+`summaryLang`)
