@@ -642,29 +642,33 @@ func (b *builder) summarizeRepo(ctx context.Context, repo string, cands []candid
 }
 
 // periodRange picks the week bounds for a batch of versions from their actual
-// publish dates, so a version summarized late (e.g. a manual backfill of an
-// older release) lands in the week it was published, not the day it was checked.
-// The range is the ISO week of the earliest published version; versions without a
-// publish date (tag fallback) fall back to the run week. If a batch spans several
-// weeks the document section still uses a single range — the earliest week — which
-// keeps the heading stable and monotonic.
+// publish dates: the ISO week of the **newest** published version.
+//
+// A version summarized late (manual backfill of an older release) is normally
+// alone in its batch, so it still lands in the week it was published rather than
+// the day it was checked. A batch that spans several weeks — the first-run
+// backfill does — is labelled by its newest version instead: taking the earliest
+// week made a document whose newest entry was published on 11-06 claim
+// "最近更新 2026-10-25", and any later batch would have inserted an older heading
+// above a newer one, breaking the monotonic section order. Versions without a
+// publish date (tag fallback) fall back to the run week.
 func (b *builder) periodRange(cands []candidate) (string, string) {
-	var earliest time.Time
+	var latest time.Time
 	found := false
 	for _, c := range cands {
 		if c.rel.PublishedAt == nil {
 			continue
 		}
 		t := c.rel.PublishedAt.In(b.loc)
-		if !found || t.Before(earliest) {
-			earliest = t
+		if !found || t.After(latest) {
+			latest = t
 			found = true
 		}
 	}
 	if !found {
 		return b.week.Start, b.week.End
 	}
-	wk, err := WeekOf(earliest.Format("2006-01-02"), b.loc)
+	wk, err := WeekOf(latest.Format("2006-01-02"), b.loc)
 	if err != nil {
 		return b.week.Start, b.week.End
 	}
