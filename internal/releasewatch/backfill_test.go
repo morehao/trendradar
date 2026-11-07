@@ -74,3 +74,55 @@ func TestBuildBackfillPicksNewestByPublishDate(t *testing.T) {
 		t.Fatalf("rolling prerelease must not be backfilled: %v", got.SummarizedTags)
 	}
 }
+
+// A batch that spans several weeks (the first-run backfill) is labelled by its
+// newest version, so the document heading ("最近更新") matches the newest entry
+// and a later batch can never insert an older heading above a newer one.
+func TestBuildPeriodUsesNewestPublishedWeek(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {
+		relAt(1, "nightly", "2025-12-01T13:17:42Z", true),
+		relAt(4, "v1.1.0", "2026-11-06T12:31:31Z", false),
+		relAt(3, "v1.0.0-rc3", "2026-10-30T11:53:15Z", false),
+		relAt(2, "v0.27.3", "2026-10-23T06:34:45Z", false),
+	}}}
+	o := baseOpts(t, f)
+	o.IncludePrerelease = true
+	st := NewState()
+	st.Set("o/r", RepoState{LastID: 0})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+
+	d, _, _, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := d.Repos[0]
+	// Newest item is v1.1.0 (2026-11-06) => ISO week 2026-11-02 ~ 2026-11-08.
+	if g.PeriodStart == nil || *g.PeriodStart != "2026-11-02" || g.PeriodEnd == nil || *g.PeriodEnd != "2026-11-08" {
+		t.Fatalf("period=%v..%v, want 2026-11-02..2026-11-08 (newest version's week)", g.PeriodStart, g.PeriodEnd)
+	}
+}
+
+// A late backfill of one older version is alone in its batch, so it still lands
+// in the week it was published instead of the day it was checked.
+func TestBuildPeriodKeepsPublishedWeekForSingleOldVersion(t *testing.T) {
+	f := &fakeFetcher{releases: map[string][]fetch.Release{"o/r": {
+		relAt(2, "v0.27.3", "2026-10-23T06:34:45Z", false),
+	}}}
+	o := baseOpts(t, f)
+	st := NewState()
+	st.Set("o/r", RepoState{LastID: 0})
+	if err := st.Save(o.StatePath); err != nil {
+		t.Fatal(err)
+	}
+
+	d, _, _, err := Build(context.Background(), f, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := d.Repos[0]
+	if g.PeriodStart == nil || *g.PeriodStart != "2026-10-19" || g.PeriodEnd == nil || *g.PeriodEnd != "2026-10-25" {
+		t.Fatalf("period=%v..%v, want 2026-10-19..2026-10-25 (the version's own week)", g.PeriodStart, g.PeriodEnd)
+	}
+}
