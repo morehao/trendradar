@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.2
+
+### Fixed — 补发改按发布日期选取，滚动预发布不再混入
+
+- 补发池改为按 `publishedAt` 降序取前 N 个；无发布日期的排最后。GitHub `/releases`
+  按 `created_at` 排序，滚动预发布（如 ragflow 的 `nightly`：`created_at` 每天刷新、
+  `publishedAt` 停在一年前）长期占据列表头部，按位置取会把它当成一个「版本」补发，
+  并把文档最新周段拉回那个陈旧日期。
+- tag 回退路径不参与排序（tag 没有可靠日期）。
+
 ## 0.12.1
 
 ### Fixed — 发版订阅 legacy 游标卡死：滚动预发布 tag 挡住全部新版本
