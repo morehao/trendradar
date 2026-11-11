@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.4
+
+### Fixed — 升级 golib，恢复对 HTTP(S)_PROXY 的支持
+
+- 依赖 `github.com/morehao/golib` 由 `v1.33.0` 升至 `v1.34.3`。此前 golib 的 `ghttp`
+  构造 `http.Transport` 时未设置 `Proxy`，Go 零值表示「永不走代理」，导致注入到核心进程的
+  `HTTP_PROXY/HTTPS_PROXY` 被静默忽略、抓 GitHub 强制直连——在国内网络下表现为直连超时
+  或撞 GitHub 403 限流。`v1.34.3` 让 `Transport.Proxy` 默认 `ProxyFromEnvironment`
+  （与 `net/http.DefaultTransport`、resty 一致），并新增可选 `HttpClientConfig.ProxyURL`
+  显式覆盖。
+- 本版无其他代码改动，仅依赖升级。
+
 ## 0.12.3
 
 ### Fixed — 多周补发按最新版本所在周标注文档周段
