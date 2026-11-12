@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.12.5] - 2026-11-12
+
+### Fixes
+
+- **run**: observe/backfill fetch client must carry GITHUB_TOKEN (#63)
+
+**Full Changelog**: https://github.com/morehao/trendradar/compare/v0.12.4...v0.12.5
+
 ## 0.12.4
 
 ### Fixed — 升级 golib，恢复对 HTTP(S)_PROXY 的支持
