@@ -47,6 +47,21 @@ func TestStatusErrorClassifiesRateLimit(t *testing.T) {
 	}
 }
 
+// Options.Token must reach the outgoing request as a Bearer Authorization
+// header. Regression guard: the observe/backfill client is built from
+// Options{}, so dropping the Token field silently reverts to anonymous
+// requests (60/h) and the whole observe stage gets 403'd.
+func TestOptionsTokenSetsAuthorizationHeader(t *testing.T) {
+	with := NewClient(Options{Token: "ghp_example"}).headers()
+	if got := with["Authorization"]; got != "Bearer ghp_example" {
+		t.Fatalf("Authorization=%q, want %q", got, "Bearer ghp_example")
+	}
+	without := NewClient(Options{}).headers()
+	if _, ok := without["Authorization"]; ok {
+		t.Fatalf("anonymous client must not send Authorization, got %q", without["Authorization"])
+	}
+}
+
 // End to end: a 403 quota response on the releases endpoint must surface as a
 // ratelimited *Error so releasewatch classifies it as StatusRateLimited.
 func TestListReleasesPageRateLimited403(t *testing.T) {

@@ -162,7 +162,13 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 		if cfg == nil {
 			return fmt.Errorf("--config is required when --input is not given")
 		}
-		client := fetch.NewClient(fetch.Options{})
+		// 抓取 client 必须带 GitHub token：它不只用于 trending 列表抓取，还用于
+		// observe 阶段的 backfill / FetchStars（applyObservation）。匿名额度只有
+		// 60 次/小时，observe 一跑几十个仓库会被 403 限流，直到撞上层超时。
+		// 与下面 app.Run 的 Token 同源（插件把 token 注入到 GITHUB_TOKEN/GH_TOKEN）。
+		client := fetch.NewClient(fetch.Options{
+			Token: firstNonEmpty(os.Getenv("GITHUB_READ_TOKEN"), os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN")),
+		})
 		res, err := ingest.Ingest(context.Background(), client, cfg.Trending.Languages, cfg.Trending.Since)
 		if err != nil {
 			return err
