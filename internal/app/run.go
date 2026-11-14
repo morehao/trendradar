@@ -338,7 +338,7 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 		// so every run that reached summarization reports its usage.
 		{
 			st := summarizer.Stats()
-			rep.Usage = &contract.Usage{
+			usage := &contract.Usage{
 				PromptTokens:     st.Usage.PromptTokens,
 				CompletionTokens: st.Usage.CompletionTokens,
 				TotalTokens:      st.Usage.TotalTokens,
@@ -349,6 +349,29 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 				Batches:          st.Batches,
 				CacheHits:        st.CacheHits,
 			}
+			// Report the model that actually served this run so the plugin's run
+			// history can show it. This is deliberately best-effort and additive:
+			// usedModel/usedProvider are optional (omitempty) and empty when unknown.
+			//
+			// - With a model.fallbacks chain, *model.FallbackProvider knows which
+			//   member's Complete() last succeeded; Used() is that member's Name()
+			//   (the primary normally, a backup when it had to take over), or "" if
+			//   no completion ever succeeded (e.g. every member failed and the run
+			//   degraded to original text).
+			// - Without fallbacks the provider is a single provider whose Name()
+			//   only encodes the vendor ("gllm:<type>" / "fake"), not the model, so
+			//   we fall back to the configured primary model name (cfg.Model.Name).
+			//   If cfg is nil (some dry-run paths) we leave it empty rather than
+			//   inventing a value.
+			if fp, ok := provider.(*model.FallbackProvider); ok {
+				if used := fp.Used(); used != "" {
+					usage.UsedModel = &used
+				}
+			} else if cfg != nil && cfg.Model.Name != "" {
+				name := cfg.Model.Name
+				usage.UsedModel = &name
+			}
+			rep.Usage = usage
 		}
 		degradedCount := 0
 		for _, rd := range repoDigests {

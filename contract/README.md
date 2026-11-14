@@ -1,4 +1,4 @@
-# @morehao/trendradar-contract (0.7.0)
+# @morehao/trendradar-contract (0.7.1)
 
 The single source of truth for the data shapes shared by the **trendradar Go
 core** (`github.com/morehao/trendradar`) and the **DSH plugin**
@@ -12,7 +12,7 @@ artifacts from one tag:
 
 Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 
-> Version model: the **package** is `0.7.0`, while the
+> Version model: the **package** is `0.7.1`, while the
 > **wire format** it carries is the fourth generation — `ipcSchema=4`,
 > `digestSchema=3`. The integers distinguish this contract from the legacy
 > in-repo v1, the pre-inline `ipcSchema=2`, and the pre-language `ipcSchema=3`;
@@ -21,8 +21,8 @@ Both are released together by the tag `contract/v0.Y.Z` (see `CHANGELOG.md`).
 ## Install
 
 ```bash
-npm i @morehao/trendradar-contract@0.7.0
-go get github.com/morehao/trendradar/contract@v0.7.0   # resolves tag contract/v0.7.0
+npm i @morehao/trendradar-contract@0.7.1
+go get github.com/morehao/trendradar/contract@v0.7.1   # resolves tag contract/v0.7.1
 ```
 
 ## Layout
@@ -63,7 +63,7 @@ contract.SchemaFS // embedded schema/* files
 ## Versioning & compatibility
 
 - `ipcSchema` (const 4) and `digestSchema` (const 3) are the wire integers;
-  `contractVersion` (`"0.7.0"`) is the package handshake.
+  `contractVersion` (`"0.7.1"`) is the package handshake.
 - Adding an **optional** field is a minor change. Removing/renaming a field,
   changing a type, or tightening validation is **breaking**: bump the affected
   wire integer and/or the package version, declared in `version-map.json`.

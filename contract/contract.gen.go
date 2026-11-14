@@ -112,15 +112,17 @@ type RunResult struct {
 }
 
 type Usage struct {
-	PromptTokens     int  `json:"promptTokens"`
-	CompletionTokens int  `json:"completionTokens"`
-	TotalTokens      int  `json:"totalTokens"`
-	CachedTokens     int  `json:"cachedTokens"`
-	UsageKnown       bool `json:"usageKnown"`
-	Calls            int  `json:"calls"`
-	Retries          int  `json:"retries"`
-	Batches          int  `json:"batches"`
-	CacheHits        int  `json:"cacheHits"`
+	PromptTokens     int     `json:"promptTokens"`
+	CompletionTokens int     `json:"completionTokens"`
+	TotalTokens      int     `json:"totalTokens"`
+	CachedTokens     int     `json:"cachedTokens"`
+	UsageKnown       bool    `json:"usageKnown"`
+	Calls            int     `json:"calls"`
+	Retries          int     `json:"retries"`
+	Batches          int     `json:"batches"`
+	CacheHits        int     `json:"cacheHits"`
+	UsedModel        *string `json:"usedModel,omitempty"`
+	UsedProvider     *string `json:"usedProvider,omitempty"`
 }
 
 type StateRun struct {

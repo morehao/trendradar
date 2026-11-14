@@ -542,21 +542,57 @@ func selectProvider(cfg *config.Config) (model.Provider, error) {
 	if cfg == nil || cfg.Model.Provider == "" || cfg.Model.Provider == "fake" {
 		return model.NewFake(), nil
 	}
-	temperature := cfg.Model.Temperature
-	if temperature == nil {
-		// Stable wording matters more than creativity for one-line summaries.
-		t := float32(0.2)
-		temperature = &t
-	}
-	return model.NewGLLM(model.GLLMOptions{
-		Provider:      cfg.Model.Provider,
-		ModelName:     cfg.Model.Name,
-		BaseURL:       cfg.Model.BaseURL,
-		APIKey:        cfg.Model.APIKey,
-		Temperature:   temperature,
-		MaxTokens:     cfg.Model.MaxTokens,
+	primary, err := model.NewGLLM(model.GLLMOptions{
+		Provider:    cfg.Model.Provider,
+		ModelName:   cfg.Model.Name,
+		BaseURL:     cfg.Model.BaseURL,
+		APIKey:      cfg.Model.APIKey,
+		Temperature: resolveTemperature(cfg.Model.Temperature),
+		MaxTokens:   cfg.Model.MaxTokens,
+		// allowDegraded 的 fake 兜底由 gllm 内部处理，是链内的降级，不作为
+		// fallback 链的一个成员；只挂到主 provider 上。
 		AllowDegraded: cfg.Model.AllowDegraded,
 	})
+	if err != nil {
+		return nil, err
+	}
+	// 无 fallbacks：原样返回主 provider（零行为变化，链长=1）。
+	// 注意不能用空链包装——空链 Complete 会返回 ErrConfigInvalid。
+	if len(cfg.Model.Fallbacks) == 0 {
+		return primary, nil
+	}
+	members := make([]model.Provider, 0, len(cfg.Model.Fallbacks)+1)
+	members = append(members, primary)
+	for i := range cfg.Model.Fallbacks {
+		fb := &cfg.Model.Fallbacks[i]
+		// 每个 fallback 独立建 provider：用自己的 provider/baseURL/apiKey，
+		// modelName 用 entry.Name（不是主模型的 Name）。温度缺省同主模型（nil→0.2）。
+		// allowDegraded 不传播到 fallback：它只描述主模型的降级行为。
+		bp, err := model.NewGLLM(model.GLLMOptions{
+			Provider:    fb.Provider,
+			ModelName:   fb.Name,
+			BaseURL:     fb.BaseURL,
+			APIKey:      fb.APIKey,
+			Temperature: resolveTemperature(fb.Temperature),
+			MaxTokens:   fb.MaxTokens,
+		})
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, bp)
+	}
+	return model.NewFallback(members...), nil
+}
+
+// resolveTemperature applies the shared default for one-liner summaries: a nil
+// temperature means 0.2 (stable wording matters more than creativity). Both the
+// primary and every fallback entry go through this, so they stay consistent.
+func resolveTemperature(t *float32) *float32 {
+	if t != nil {
+		return t
+	}
+	d := float32(0.2)
+	return &d
 }
 
 func firstNonEmpty(vals ...string) string {

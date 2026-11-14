@@ -227,6 +227,23 @@ type ModelConfig struct {
 	Temperature   *float32 `yaml:"temperature" validate:"omitempty,gte=0,lte=2"`
 	MaxTokens     int      `yaml:"maxTokens" validate:"omitempty,gt=0"`
 	AllowDegraded bool     `yaml:"allowDegraded"`
+	// Fallbacks is the ordered chain of alternative models tried when the
+	// primary model is unavailable (auth/not-found/timeout/network). Empty
+	// means the behaviour is unchanged: only the primary model is used.
+	Fallbacks []ModelEntry `yaml:"fallbacks,omitempty" validate:"omitempty,dive"`
+}
+
+// ModelEntry is one link in the fallback chain. Each entry is fully
+// independent: its own provider/baseURL/apiKey are resolved separately, so a
+// dead primary credential never drags the fallbacks down with it. provider and
+// name are required; baseURL is optional but must be a valid URL when set.
+type ModelEntry struct {
+	Provider    string   `yaml:"provider" validate:"required"`
+	Name        string   `yaml:"name" validate:"required"`
+	BaseURL     string   `yaml:"baseURL" validate:"omitempty,url"`
+	APIKey      string   `yaml:"apiKey"`
+	Temperature *float32 `yaml:"temperature" validate:"omitempty,gte=0,lte=2"`
+	MaxTokens   int      `yaml:"maxTokens" validate:"omitempty,gt=0"`
 }
 
 // RepoConfig points at the target git repository the core writes into.
@@ -350,6 +367,13 @@ func (c *Config) expandEnv() {
 	c.Model.Name = os.ExpandEnv(c.Model.Name)
 	c.Model.BaseURL = os.ExpandEnv(c.Model.BaseURL)
 	c.Model.APIKey = os.ExpandEnv(c.Model.APIKey)
+	for i := range c.Model.Fallbacks {
+		fb := &c.Model.Fallbacks[i]
+		fb.Provider = os.ExpandEnv(fb.Provider)
+		fb.Name = os.ExpandEnv(fb.Name)
+		fb.BaseURL = os.ExpandEnv(fb.BaseURL)
+		fb.APIKey = os.ExpandEnv(fb.APIKey)
+	}
 	c.Repo.Path = os.ExpandEnv(c.Repo.Path)
 	c.Repo.Remote = os.ExpandEnv(c.Repo.Remote)
 	c.Repo.BaseBranch = os.ExpandEnv(c.Repo.BaseBranch)

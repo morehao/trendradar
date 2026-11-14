@@ -3,6 +3,18 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
+## 0.7.1
+
+Additive, non-breaking. `Usage` gains two optional fields so the plugin can
+show which model actually produced a run when a fallback chain is configured.
+Wire integers unchanged (`ipcSchema=4`, `digestSchema=3`).
+
+### Added
+- `Usage.usedModel?: string` — the model that produced the run's summaries
+  (the primary when it succeeded, a fallback when one took over; absent when
+  every model failed and summaries degraded to the original text).
+- `Usage.usedProvider?: string` — the vendor backing `usedModel`, when known.
+
 ## 0.7.0
 
 Language-neutral summaries. **Breaking wire bump**: `ipcSchema` 3 → 4,
