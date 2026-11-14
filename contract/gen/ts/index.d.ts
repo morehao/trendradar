@@ -90,6 +90,8 @@ export interface Usage {
   "retries": number;
   "batches": number;
   "cacheHits": number;
+  "usedModel"?: string;
+  "usedProvider"?: string;
   [k: string]: unknown;
 }
 

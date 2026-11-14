@@ -524,6 +524,14 @@
         "cacheHits": {
           "type": "integer",
           "minimum": 0
+        },
+        "usedModel": {
+          "type": "string",
+          "description": "The model that actually served this run. For a model.fallbacks chain this is the name of the member that produced the most recent successful completion (the primary when it worked, otherwise the first backup that did); empty when nothing is known (e.g. strict single-model runs that do not report it, or a run where no completion succeeded). Optional and additive: older consumers ignore it."
+        },
+        "usedProvider": {
+          "type": "string",
+          "description": "The provider (vendor) backing usedModel, when known. Optional and additive: older consumers ignore it."
         }
       }
     },
