@@ -53,6 +53,7 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	resty.dev/v3 v3.0.0-rc.4 // indirect
 )
 
 replace github.com/morehao/trendradar/contract => ./contract
