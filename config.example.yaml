@@ -79,3 +79,35 @@ releases:
   period: weekly                         # 总结周期，本版只支持 weekly
   timezone: Asia/Shanghai                # ISO 周边界按该时区计算
   weekStart: monday                      # 仅支持 monday（ISO 8601）
+
+# 推送（可选）：把本期榜单/发版摘要广播到钉钉 / 飞书 / 企业微信机器人。
+# enabled=false（默认）时整个推送阶段旁路。启用时至少要有 1 个 section 和
+# 1 个 channel 打开，且每个打开的 channel 必须配好 webhookURL。
+# webhookURL / secret 支持 ${VAR}，建议写在 .env（见 .env.example）。
+notify:
+  enabled: false
+  sections:
+    trending: true                     # 推送榜单摘要
+    releases: true                     # 推送发版摘要
+  onSkipped: false                     # 本轮被跳过（无新内容）时也推一条说明
+  onEmptyReleases: false               # 发版阶段无新版本时也推一条说明
+  strategy: broadcast                  # 目前仅支持 broadcast（所有选中的 section 发往所有打开的 channel）
+  channels:
+    dingtalk:
+      enabled: false
+      webhookURL: ${DINGTALK_WEBHOOK}  # 钉钉自定义机器人 webhook
+      secret: ${DINGTALK_SECRET}       # 加签密钥（可选）
+      msgtype: markdown                # markdown | text
+    lark:
+      enabled: false
+      webhookURL: ${LARK_WEBHOOK}      # 飞书自定义机器人 webhook
+      secret: ${LARK_SECRET}           # 签名校验密钥（可选）
+      msgtype: post                    # post | text | interactive
+    wecom:
+      enabled: false
+      webhookURL: ${WECOM_WEBHOOK}     # 企业微信群机器人 webhook
+      msgtype: markdown                # markdown | text
+  maxReposPerSection: 10               # 每个 section 消息最多列出的仓库数（1-100）
+  maxBodyChars: 0                      # 正文字符上限；0=不限制，否则 200-20000
+  timeoutSeconds: 15                   # 单次推送 HTTP 超时（1-120）
+  summaryMaxChars: 800                 # 每条消息内摘要文本的字符上限（100-4000）
