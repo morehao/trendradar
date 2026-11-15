@@ -332,16 +332,26 @@ func TestDeliver_AllSent(t *testing.T) {
 }
 
 func TestDeliver_ErrcodeNonZeroFailed(t *testing.T) {
-	// 200 HTTP but business errcode != 0 → failed (golib validates body errcode).
-	srv := fakeWebhook(t, 200, `{"errcode":310000,"errmsg":"sign not match"}`, 0)
-	opt := Options{Provider: nil, Lang: "zh", Cfg: allEnabled(srv.URL), HTTPClient: srv.Client()}
+	// 200 HTTP but a non-zero business code → failed. DingTalk/WeCom report it in
+	// "errcode"; Lark reports it in "code" (golib validates each provider's field).
+	dingSrv := fakeWebhook(t, 200, `{"errcode":310000,"errmsg":"sign not match"}`, 0)
+	larkSrv := fakeWebhook(t, 200, `{"code":9499,"msg":"bad request"}`, 0)
+	wecomSrv := fakeWebhook(t, 200, `{"errcode":93000,"errmsg":"invalid webhook"}`, 0)
+
+	cfg := baseConfig()
+	cfg.Channels = config.NotifyChannels{
+		DingTalk: config.NotifyChannel{Enabled: true, WebhookURL: dingSrv.URL, MsgType: "markdown"},
+		Lark:     config.NotifyChannel{Enabled: true, WebhookURL: larkSrv.URL, MsgType: "text"},
+		WeCom:    config.NotifyChannel{Enabled: true, WebhookURL: wecomSrv.URL, MsgType: "markdown"},
+	}
+	opt := Options{Provider: nil, Lang: "zh", Cfg: cfg, HTTPClient: dingSrv.Client()}
 	msgs := []Message{{Kind: KindTrending, Period: "daily", Subject: "S", Body: "body"}}
 
 	rep := Deliver(context.Background(), opt, msgs)
 	st := chanStatus(rep, 0)
 	for _, name := range []string{"dingtalk", "lark", "wecom"} {
 		if st[name] != "failed" {
-			t.Errorf("channel %s status = %q, want failed (errcode!=0)", name, st[name])
+			t.Errorf("channel %s status = %q, want failed (business code!=0)", name, st[name])
 		}
 	}
 	// failed must carry an error message.
@@ -437,5 +447,66 @@ func TestDeliver_UsageRecorded(t *testing.T) {
 	// JSON-serialisable (contract wire).
 	if _, err := json.Marshal(rep); err != nil {
 		t.Fatalf("report not JSON-serialisable: %v", err)
+	}
+}
+
+// recordingWebhook captures the byte length of each received body so we can
+// assert per-channel truncation actually differed across channels.
+func recordingWebhook(t *testing.T, lens *[]int) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Text *struct {
+				Content string `json:"content"`
+			} `json:"text"`
+			Markdown *struct {
+				Text string `json:"text"`
+			} `json:"markdown"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		n := 0
+		if payload.Markdown != nil {
+			n = len(payload.Markdown.Text)
+		} else if payload.Text != nil {
+			n = len(payload.Text.Content)
+		}
+		*lens = append(*lens, n)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"errcode":0,"code":0}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestDeliver_PerChannelTruncation(t *testing.T) {
+	// Body of 6000 runes (18000 bytes): fits dingtalk(18000)/lark(28000) but the
+	// wecom 4000-byte ceiling forces truncation only for wecom.
+	var wecomLens, dingLens, larkLens []int
+	wecomSrv := recordingWebhook(t, &wecomLens)
+	dingSrv := recordingWebhook(t, &dingLens)
+	larkSrv := recordingWebhook(t, &larkLens)
+
+	cfg := baseConfig()
+	cfg.Channels = config.NotifyChannels{
+		DingTalk: config.NotifyChannel{Enabled: true, WebhookURL: dingSrv.URL, MsgType: "markdown"},
+		Lark:     config.NotifyChannel{Enabled: true, WebhookURL: larkSrv.URL, MsgType: "text"},
+		WeCom:    config.NotifyChannel{Enabled: true, WebhookURL: wecomSrv.URL, MsgType: "markdown"},
+	}
+	opt := Options{Provider: nil, Lang: "zh", Cfg: cfg, HTTPClient: wecomSrv.Client()}
+	body := strings.Repeat("字", 6000)
+	msgs := []Message{{Kind: KindTrending, Period: "daily", Subject: "S", Body: body}}
+
+	rep := Deliver(context.Background(), opt, msgs)
+	if len(rep.Messages[0].Channels) != 3 {
+		t.Fatalf("got %d channel results", len(rep.Messages[0].Channels))
+	}
+	if len(wecomLens) != 1 || len(dingLens) != 1 || len(larkLens) != 1 {
+		t.Fatalf("webhook hits wecom/ding/lark = %d/%d/%d, want 1/1/1", len(wecomLens), len(dingLens), len(larkLens))
+	}
+	if wecomLens[0] > limitWecom {
+		t.Errorf("wecom received %d bytes, want <= %d (truncated)", wecomLens[0], limitWecom)
+	}
+	if dingLens[0] <= limitWecom {
+		t.Errorf("dingtalk received %d bytes, expected full (untruncated) body", dingLens[0])
 	}
 }
