@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	contract "github.com/morehao/trendradar/contract"
 	"github.com/morehao/trendradar/internal/app"
 	"github.com/morehao/trendradar/internal/config"
 	"github.com/morehao/trendradar/internal/digest"
@@ -67,6 +68,10 @@ type runEnvelope struct {
 	Stages     []app.Stage        `json:"stages,omitempty"`
 	Enrich     *app.EnrichReport  `json:"enrich,omitempty"`
 	Releases   *app.ReleaseReport `json:"releases,omitempty"`
+	// Notify shadows the embedded contract.RunResult.Notify (same json key) so
+	// the --json path can set it from app.Result. Only one "notify" key is
+	// emitted: the shallower envelope field wins.
+	Notify *contract.NotifyReport `json:"notify,omitempty"`
 }
 
 func runRunExec(args []string, started time.Time, asJSON *bool) error {
@@ -321,6 +326,7 @@ func runRunExec(args []string, started time.Time, asJSON *bool) error {
 			Stages:     result.Report.Stages,
 			Enrich:     result.Report.Enrich,
 			Releases:   result.Report.Releases,
+			Notify:     result.Notify,
 		}
 		if result.Digest.ContentHash != "" {
 			ch := result.Digest.ContentHash

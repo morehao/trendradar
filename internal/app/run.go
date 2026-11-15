@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/morehao/trendradar/internal/ingest"
 	"github.com/morehao/trendradar/internal/ipc"
 	"github.com/morehao/trendradar/internal/model"
+	"github.com/morehao/trendradar/internal/notify"
 	"github.com/morehao/trendradar/internal/pr"
 	"github.com/morehao/trendradar/internal/releasedigest"
 	"github.com/morehao/trendradar/internal/releasedoc"
@@ -90,6 +92,9 @@ type Options struct {
 	// the freshly rendered artifacts are byte-identical to the branch, the run
 	// still skips with skipReason=unchanged and creates no commit.
 	Force bool
+	// NotifyHTTPClient is injected into the notify stage's webhook delivery.
+	// Nil falls back to a per-request default (tests use httptest's client).
+	NotifyHTTPClient *http.Client
 }
 
 // stageEnabled reports whether name should run for this Options.
@@ -157,6 +162,10 @@ type Result struct {
 	Branch     string
 	Commit     string
 	PRURL      string
+	// Notify is the outcome of the optional notification stage (populated only
+	// when notifications are enabled and a delivery was attempted). Nil on
+	// dry-run and on runs where the notify stage was not reached.
+	Notify *contract.NotifyReport
 }
 
 // Run executes the pipeline.
@@ -212,6 +221,10 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	limits := map[string]int{"daily": 90, "weekly": 12, "monthly": 12}
 	var files []render.File
 	var d digest.Digest
+	// drel is the release digest built by the releases stage. It is hoisted out
+	// of the stage block so the notify epilogue at the tail can read it; it stays
+	// the zero value when the releases stage did not run (Count == 0).
+	var drel releasedigest.ReleaseDigest
 
 	// Sync the local base checkout before reading history for the index. The
 	// renderer's ListDigests (below) reads the *working tree* of whatever branch
@@ -478,7 +491,10 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 			OutputLanguage: outLang,
 			ReadOnly:       opts.DryRun,
 		}
-		drel, st, rrep, rerr := releasewatch.Build(ctx, opts.Releases.Fetcher, ro)
+		var st *releasewatch.State
+		var rrep releasewatch.Report
+		var rerr error
+		drel, st, rrep, rerr = releasewatch.Build(ctx, opts.Releases.Fetcher, ro)
 		relState, relStatePath = st, opts.Releases.StatePath
 		rep.Releases = fromReleaseWatch(rrep)
 		if rerr != nil {
@@ -631,12 +647,14 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 				res.SkipReason = "merged"
 				rep.TotalMs = since(start)
 				res.Report = rep
+				finishNotify(ctx, cfg, provider, outLang, &res, drel, opts.NotifyHTTPClient)
 				return res, nil
 			case latest.ClosedUnmerged() && trigger == TriggerSchedule:
 				res.Skipped = true
 				res.SkipReason = "pr-closed"
 				rep.TotalMs = since(start)
 				res.Report = rep
+				finishNotify(ctx, cfg, provider, outLang, &res, drel, opts.NotifyHTTPClient)
 				return res, nil
 			default:
 				// Includes merged + manual: rebuild the branch and let openPR open
@@ -862,7 +880,55 @@ func Run(ctx context.Context, cfg *config.Config, in Inputs, opts Options) (Resu
 	}
 	rep.TotalMs = since(start)
 	res.Report = rep
+	finishNotify(ctx, cfg, provider, outLang, &res, drel, opts.NotifyHTTPClient)
 	return res, nil
+}
+
+// finishNotify runs the optional notification stage at a successful, non-dry-run
+// exit of Run. It never turns the run into a failure: Build/Deliver errors are
+// folded into the contract.NotifyReport (Warnings / channel statuses) and the
+// caller's `return res, nil` stays nil. It is a no-op when the notify stage is
+// disabled or when neither section is gated in for this run.
+func finishNotify(ctx context.Context, cfg *config.Config, provider model.Provider, outLang string, res *Result, drel releasedigest.ReleaseDigest, httpClient *http.Client) {
+	if cfg == nil || !cfg.Notify.IsEnabled() {
+		return
+	}
+	no := cfg.Notify
+	// Trending gate: notify enabled + trending section on + a real trending
+	// digest exists + the run was not skipped (unless the user opted into
+	// pushes for skipped runs).
+	wantTrending := no.Sections.TrendingEnabled() &&
+		res.Digest.Date != "" &&
+		!(res.Skipped && !no.OnSkipped)
+	// Releases gate: section on + either the release stage changed something
+	// or the user opted into pushes for empty release weeks.
+	changed := res.Report.Releases != nil && res.Report.Releases.Changed > 0
+	wantReleases := no.Sections.ReleasesEnabled() && (changed || no.OnEmptyReleases)
+
+	if !wantTrending && !wantReleases {
+		return
+	}
+
+	opt := notify.Options{
+		Provider:   provider,
+		Lang:       outLang,
+		Cfg:        no,
+		HTTPClient: httpClient,
+	}
+	msgs, err := notify.Build(ctx, opt, res.Digest, drel, wantTrending, wantReleases)
+	if err != nil {
+		// A build failure is advisory only: record it on the report so the run
+		// stays successful, and nothing is delivered.
+		reason := err.Error()
+		res.Notify = &contract.NotifyReport{
+			Enabled:    true,
+			Attempted:  false,
+			SkipReason: &reason,
+		}
+		return
+	}
+	rep := notify.Deliver(ctx, opt, msgs)
+	res.Notify = &rep
 }
 
 // filesMatch reports whether every rendered artifact already exists on the
