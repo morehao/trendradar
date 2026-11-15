@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added — 每日推送通知（钉钉 / 飞书 / 企业微信）
+
+- 新增 `internal/notify`：在一次 `run` 的**成功收尾**处，把「本次周期一致的榜单」与
+  「订阅仓库本周变动」各自经模型总结成一条 markdown 摘要（模型不可用时回退规则式摘要），
+  再经 golib `gnotify` 的钉钉 / 飞书 / 企业微信群机器人 webhook **广播**（`broadcast` 默认，
+  另有 `requireAll` / `firstSuccess`）。分条独立投递，逐渠道统计成功/失败/禁用。
+- **失败不推送、不影响数据交付**：推送任何错误只体现在 `RunResult.notify` 的逐渠道状态与
+  运行日志里，从不改变 `run` 的返回结论；`notify.enabled: false` 一键旁路。
+- **按周期发榜**：日榜每天、周榜每周、月榜每月——只推与本次 run 周期一致的那一榜；订阅无
+  变更默认不发。dry-run 不推送。
+- 配置新增 `notify` 段（`internal/config`）：渠道开关 / webhook / 加签 / `msgtype`、内容分区、
+  `strategy`、正文裁剪与摘要字数上限等，密钥只走 `${VAR}` 引用、不落盘。
+- 契约（trendradar 同步升级）：`RunResult` 新增可选 `notify` 子树（`NotifyReport` /
+  `NotifyMessage` / `NotifyChannelResult`，additive，wire 整数 `ipcSchema=4`/`digestSchema=3`
+  不变），`internal/ipc.ContractVersion` 随之升到 `0.8.0`。
+- 依赖：`golib` 由 `v1.34.3` 升至 `v1.37.0`（含 `gnotify` 三渠道 + `MultiSender`，body 级
+  `errcode`/`code` 判定已内置）；Go 指令由 `1.26.1` 升至 `1.27.0`。
+
 ## [v0.12.5] - 2026-11-12
 
 ### Fixes
