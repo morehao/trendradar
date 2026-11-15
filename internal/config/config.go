@@ -600,7 +600,12 @@ func (c *Config) withDefaults() {
 		c.Notify.Channels.DingTalk.MsgType = "markdown"
 	}
 	if c.Notify.Channels.Lark.MsgType == "" {
-		c.Notify.Channels.Lark.MsgType = "post"
+		// Default to text: golib v1.37.0's lark "post" path emits
+		// {"content":{"zh_cn":...}} without the required "post" wrapper, so
+		// Feishu rejects it with code 10208 "'post' field required". "text"
+		// delivers reliably (verified against a real webhook). Operators can
+		// still opt into "post" explicitly, aware of the upstream limitation.
+		c.Notify.Channels.Lark.MsgType = "text"
 	}
 	if c.Notify.Channels.WeCom.MsgType == "" {
 		c.Notify.Channels.WeCom.MsgType = "markdown"
