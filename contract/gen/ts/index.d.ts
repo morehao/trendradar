@@ -74,6 +74,7 @@ export interface RunResult {
   "error"?: ErrorInfo;
   "warnings"?: Array<string>;
   "usage"?: Usage;
+  "notify"?: NotifyReport;
   "releases"?: ReleasesReport;
   "subscriptions"?: SubscriptionList;
   "subscriptionDoc"?: SubscriptionDoc;
@@ -92,6 +93,32 @@ export interface Usage {
   "cacheHits": number;
   "usedModel"?: string;
   "usedProvider"?: string;
+  [k: string]: unknown;
+}
+
+export interface NotifyChannelResult {
+  "channel": string;
+  "status": "sent" | "failed" | "disabled";
+  "durationMs"?: number;
+  "error"?: string;
+  [k: string]: unknown;
+}
+
+export interface NotifyMessage {
+  "kind": "trending" | "releases";
+  "period"?: "daily" | "weekly" | "monthly";
+  "bodyChars": number;
+  "summarySource": "model" | "fallback";
+  "channels": Array<NotifyChannelResult>;
+  [k: string]: unknown;
+}
+
+export interface NotifyReport {
+  "enabled": boolean;
+  "attempted": boolean;
+  "skipReason"?: string;
+  "messages": Array<NotifyMessage>;
+  "usage"?: { [k: string]: unknown };
   [k: string]: unknown;
 }
 
