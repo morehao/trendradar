@@ -3,6 +3,29 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
+## 0.8.0
+
+Additive, non-breaking. `RunResult` gains an optional `notify` report so the
+plugin can surface the notification stage (what was sent, to which channels, and
+how each fared) without re-deriving it. Wire integers unchanged
+(`ipcSchema=4`, `digestSchema=3`).
+
+### Added
+- `RunResult.notify?: NotifyReport` — present when a run went through the
+  notification stage; consumers that do not know it simply ignore it. Optional
+  and additive.
+- `NotifyReport` (`$defs`) — `{ enabled, attempted, skipReason?, messages[], usage? }`.
+  `enabled`/`attempted`/`messages` are required; `skipReason` (string) explains
+  why an enabled stage did not attempt delivery; `usage?` carries
+  `{ calls?, totalTokens?, usageKnown? }` for the notification span when known.
+- `NotifyMessage` (`$defs`) — `{ kind, period?, bodyChars, summarySource, channels[] }`.
+  `kind` is `trending` / `releases`; `period` is `daily` / `weekly` / `monthly`;
+  `bodyChars` is the rendered body length; `summarySource` is `model` / `fallback`;
+  `channels` holds one `NotifyChannelResult` per channel.
+- `NotifyChannelResult` (`$defs`) — `{ channel, status, durationMs?, error? }`.
+  `status` is `sent` / `failed` / `disabled`; `durationMs` and `error` are
+  present only when relevant.
+
 ## 0.7.1
 
 Additive, non-breaking. `Usage` gains two optional fields so the plugin can

@@ -106,6 +106,7 @@ type RunResult struct {
 	Error           *ErrorInfo        `json:"error,omitempty"`
 	Warnings        []string          `json:"warnings,omitempty"`
 	Usage           *Usage            `json:"usage,omitempty"`
+	Notify          *NotifyReport     `json:"notify,omitempty"`
 	Releases        *ReleasesReport   `json:"releases,omitempty"`
 	Subscriptions   *SubscriptionList `json:"subscriptions,omitempty"`
 	SubscriptionDoc *SubscriptionDoc  `json:"subscriptionDoc,omitempty"`
@@ -123,6 +124,29 @@ type Usage struct {
 	CacheHits        int     `json:"cacheHits"`
 	UsedModel        *string `json:"usedModel,omitempty"`
 	UsedProvider     *string `json:"usedProvider,omitempty"`
+}
+
+type NotifyChannelResult struct {
+	Channel    string  `json:"channel"`
+	Status     string  `json:"status"`
+	DurationMs *int    `json:"durationMs,omitempty"`
+	Error      *string `json:"error,omitempty"`
+}
+
+type NotifyMessage struct {
+	Kind          string                `json:"kind"`
+	Period        *string               `json:"period,omitempty"`
+	BodyChars     int                   `json:"bodyChars"`
+	SummarySource string                `json:"summarySource"`
+	Channels      []NotifyChannelResult `json:"channels"`
+}
+
+type NotifyReport struct {
+	Enabled    bool            `json:"enabled"`
+	Attempted  bool            `json:"attempted"`
+	SkipReason *string         `json:"skipReason,omitempty"`
+	Messages   []NotifyMessage `json:"messages"`
+	Usage      map[string]any  `json:"usage,omitempty"`
 }
 
 type StateRun struct {

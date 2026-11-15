@@ -464,6 +464,9 @@
         "usage": {
           "$ref": "#/$defs/Usage"
         },
+        "notify": {
+          "$ref": "#/$defs/NotifyReport"
+        },
         "releases": {
           "$ref": "releases.v3.json#/$defs/ReleasesReport"
         },
@@ -532,6 +535,125 @@
         "usedProvider": {
           "type": "string",
           "description": "The provider (vendor) backing usedModel, when known. Optional and additive: older consumers ignore it."
+        }
+      }
+    },
+    "NotifyChannelResult": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "The delivery outcome for one notification channel of one message.",
+      "required": [
+        "channel",
+        "status"
+      ],
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "sent",
+            "failed",
+            "disabled"
+          ]
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "NotifyMessage": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One rendered notification message and how each of its channels fared.",
+      "required": [
+        "kind",
+        "bodyChars",
+        "summarySource",
+        "channels"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "trending",
+            "releases"
+          ]
+        },
+        "period": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly"
+          ]
+        },
+        "bodyChars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summarySource": {
+          "type": "string",
+          "enum": [
+            "model",
+            "fallback"
+          ]
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NotifyChannelResult"
+          }
+        }
+      }
+    },
+    "NotifyReport": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Summary of the notification stage of a run: whether it ran, which messages it produced, and the per-channel delivery outcomes. Optional and additive on RunResult.",
+      "required": [
+        "enabled",
+        "attempted",
+        "messages"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "attempted": {
+          "type": "boolean"
+        },
+        "skipReason": {
+          "type": "string"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NotifyMessage"
+          }
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Model usage attributable to the notification stage, when known.",
+          "properties": {
+            "calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "totalTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "usageKnown": {
+              "type": "boolean"
+            }
+          }
         }
       }
     },
