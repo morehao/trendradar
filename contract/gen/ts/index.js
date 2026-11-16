@@ -1228,7 +1228,8 @@ const ipc = {
             "serve",
             "config",
             "version",
-            "subscribe"
+            "subscribe",
+            "notify"
           ]
         },
         "configPath": {
@@ -1250,8 +1251,18 @@ const ipc = {
             "list",
             "add",
             "remove",
-            "releases"
+            "releases",
+            "test"
           ]
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "dingtalk",
+            "lark",
+            "wecom"
+          ],
+          "description": "command=notify action=test only: test just this channel. Absent = every enabled channel."
         },
         "repo": {
           "type": "string",
@@ -1473,7 +1484,8 @@ const ipc = {
                   "subscribe",
                   "serve",
                   "config",
-                  "version"
+                  "version",
+                  "notify"
                 ]
               }
             },
@@ -1485,6 +1497,44 @@ const ipc = {
             "not": {
               "required": [
                 "stages"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "const": "notify"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          },
+          "then": {
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "test"
+                ]
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "repo"
+                  ]
+                },
+                {
+                  "required": [
+                    "volume"
+                  ]
+                }
               ]
             }
           }
@@ -1517,7 +1567,8 @@ const ipc = {
             "serve",
             "config",
             "version",
-            "subscribe"
+            "subscribe",
+            "notify"
           ]
         },
         "startedAt": {

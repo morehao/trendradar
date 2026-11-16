@@ -45,6 +45,8 @@ func main() {
 			break
 		}
 		err = runSubscribe(os.Args[2:])
+	case "notify":
+		err = runNotify(os.Args[2:])
 	case "config":
 		err = fmt.Errorf("command %q is not implemented yet", os.Args[1])
 	default:
@@ -68,6 +70,9 @@ commands:
              releases --repo owner/repo [--volume N] reads one volume of the
              repo's release document; add --json to read a contract RunRequest
              from stdin
+  notify     notify test --config config.yaml [--channel lark|dingtalk|wecom]
+             [--json]: send one fixed test message to verify a webhook is
+             reachable (reuses the real deliver/sign path; no fetch/summarize)
   config     inspect/validate config
   version    print version info; add --json for machine-readable output`)
 }

@@ -17,6 +17,7 @@ const (
 	CommandServe   Command = "serve"
 	CommandConfig  Command = "config"
 	CommandVersion Command = "version"
+	CommandNotify  Command = "notify"
 )
 
 // Aliases to the contract package (single source of truth).
