@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.13.1] - 2026-11-16
 
 ### Added — `notify test`：webhook 连通性试发
 
