@@ -85,9 +85,10 @@ func buildNotifier(spec ChannelSpec, opts []gnotify.Option) (gnotify.Notifier, e
 
 // msgTypeFor picks the per-channel msgtype to hand to gnotify via
 // Params["msgtype"]. The channel constructors already default sensibly
-// (dingtalk/wecom markdown, lark text); we pass the configured msgtype when set
-// so an operator can override. lark's msgtype set is text|post, dingtalk/wecom
-// text|markdown — config.validate already restricts these, so we pass as-is.
+// (dingtalk/wecom markdown, lark interactive); we pass the configured msgtype when set
+// so an operator can override. lark's msgtype set is interactive|post|text,
+// dingtalk/wecom text|markdown — config.validate already restricts these, so we
+// pass as-is.
 func msgTypeFor(spec ChannelSpec) string { return spec.MsgType }
 
 // deliver is the real Deliver implementation (design §6.3: never fatal).

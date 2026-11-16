@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed — 飞书（lark）默认消息类型改为 interactive 卡片
+
+- `notify.channels.lark.msgtype` 的默认值由 `text` 改为 `interactive`（互动卡片）。
+  背景：推送正文是 Markdown，`post` 会把整段塞进单个 `text` 节点、不解析 Markdown
+  （`**`、`- ` 原样露出），`text` 更朴素；`interactive` 用 `lark_md` 节点渲染，
+  标题/加粗/列表/链接均正确显示。
+- 依赖 `github.com/morehao/golib` 升级到 v1.38.3（gnotify/lark 新增 interactive 支持）。
+- 存量配置若显式写了 `msgtype: post|text` 仍按原样生效；要享用卡片需改为（或清空回到默认）`interactive`。
+
 ## [v0.13.1] - 2026-11-16
 
 ### Added — `notify test`：webhook 连通性试发

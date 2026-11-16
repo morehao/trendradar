@@ -9,7 +9,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/gowebpki/jcs v1.0.2
-	github.com/morehao/golib v1.37.1
+	github.com/morehao/golib v1.38.3
 	github.com/morehao/trendradar/contract v0.3.0
 	golang.org/x/sync v0.24.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -50,7 +50,7 @@ require (
 	golang.org/x/arch v0.25.0 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1 // indirect
-	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	resty.dev/v3 v3.0.0-rc.4 // indirect
