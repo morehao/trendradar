@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.13.2] - 2026-11-16
 
 ### Changed — 飞书（lark）默认消息类型改为 interactive 卡片
 
