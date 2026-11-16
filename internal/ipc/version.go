@@ -10,7 +10,7 @@ const DigestSchemaVersion = 3
 // digestSchema are separate and only bump on breaking changes). A stale value
 // here misreports the handshake without failing any build, so keep it in sync
 // whenever the contract package releases.
-const ContractVersion = "0.8.0"
+const ContractVersion = "0.8.1"
 
 // Build-time values. Override at release time with:
 //
