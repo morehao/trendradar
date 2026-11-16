@@ -75,6 +75,7 @@
 | `internal/subscription` | 订阅列表读写、校验、原子写 | 路径解析规则唯一 |
 | `internal/envfile` | `.env` 加载 | 真实环境变量优先 |
 | `internal/model` | LLM Provider 抽象（gllm / fake） | 可离线跑全流程 |
+| `internal/notify` | **推送通知**：把本次周期一致的榜单 + 订阅变动各总结成一条 markdown，经 golib `gnotify`（钉钉/飞书/企微）在 run 收尾推送 | 复用同一 provider；**失败不推送、不影响 run 结论**；结果进 `RunResult.notify` |
 | `contract/` | **对外形状唯一真源**：7 份 schema + 生成的 Go/TS 类型 | 独立 Go module + npm 包 |
 
 ---
@@ -103,6 +104,10 @@ sequenceDiagram
   A->>R: IsClean 检查 → Fetch → 切分支
   A->>R: 写产物 → git add → commit → push
   A->>R: 开/更新 PR
+  opt 非 dry-run 成功收尾 && notify.enabled
+    A->>M: 榜单 / 订阅变动各一次总结（失败→规则式降级）
+    A->>A: gnotify 广播到钉钉/飞书/企微（失败只记 NotifyReport，不改 err）
+  end
   C->>C: 追加 usage 日志、输出 RunResult
 ```
 

@@ -31,6 +31,82 @@ type Config struct {
 	// content. It is a single top-level knob shared by the trending and the
 	// release-subscription pipelines.
 	Language LanguageConfig `yaml:"language"`
+	// Notify controls the optional push stage that broadcasts the finished
+	// digest/release summaries to DingTalk / Lark / WeCom webhooks. It is off by
+	// default; enabling it requires at least one section and one channel.
+	Notify NotifyConfig `yaml:"notify"`
+}
+
+// NotifyConfig is the top-level `notify:` tree. Every knob has a safe default so
+// an all-default block is inert (enabled=false means the whole stage is bypassed).
+type NotifyConfig struct {
+	// Enabled gates the whole push stage. Pointer so absent defaults to false
+	// while an explicit true/false is honoured; a plain bool cannot tell "unset"
+	// from "false". Use IsEnabled() to read it.
+	Enabled *bool `yaml:"enabled"`
+	// Sections selects which produced sections are pushed.
+	Sections NotifySections `yaml:"sections"`
+	// OnSkipped pushes a note when the run was skipped (no new content).
+	OnSkipped bool `yaml:"onSkipped"`
+	// OnEmptyReleases pushes a note when the release stage found nothing new.
+	OnEmptyReleases bool `yaml:"onEmptyReleases"`
+	// Strategy is the fan-out policy. Only "broadcast" (send every selected
+	// section to every enabled channel) is implemented for now.
+	Strategy string `yaml:"strategy"`
+	// Channels holds the per-provider delivery config.
+	Channels NotifyChannels `yaml:"channels"`
+	// MaxReposPerSection caps how many repos each section message lists.
+	MaxReposPerSection int `yaml:"maxReposPerSection" validate:"omitempty,gte=1,lte=100"`
+	// MaxBodyChars caps the rendered body length. 0 means unlimited (rendering
+	// stays bounded by the per-provider limits); a nonzero value must be in
+	// [200, 20000] — small enough to matter, large enough to be useful.
+	MaxBodyChars int `yaml:"maxBodyChars" validate:"omitempty,gte=0"`
+	// TimeoutSeconds is the per-delivery HTTP timeout.
+	TimeoutSeconds int `yaml:"timeoutSeconds" validate:"omitempty,gte=1,lte=120"`
+	// SummaryMaxChars bounds the summary text carried in each message.
+	SummaryMaxChars int `yaml:"summaryMaxChars" validate:"omitempty,gte=100,lte=4000"`
+}
+
+// IsEnabled reports whether the notify stage is active. An unset flag means off
+// (opt-in default); only an explicit true turns it on.
+func (n NotifyConfig) IsEnabled() bool { return n.Enabled != nil && *n.Enabled }
+
+// NotifySections selects which sections are pushed. Both default to true so an
+// operator who only sets `notify.enabled: true` still gets a sensible push.
+// Pointer bools so an absent key defaults to true while an explicit false (e.g.
+// push only releases) is still honoured — a plain bool cannot tell them apart.
+type NotifySections struct {
+	Trending *bool `yaml:"trending"`
+	Releases *bool `yaml:"releases"`
+}
+
+// TrendingEnabled reports the effective trending flag (default true).
+func (s NotifySections) TrendingEnabled() bool { return s.Trending == nil || *s.Trending }
+
+// ReleasesEnabled reports the effective releases flag (default true).
+func (s NotifySections) ReleasesEnabled() bool { return s.Releases == nil || *s.Releases }
+
+// NotifyChannels is the per-provider delivery config.
+type NotifyChannels struct {
+	DingTalk NotifyChannel `yaml:"dingtalk"`
+	Lark     NotifyChannel `yaml:"lark"`
+	WeCom    NotifyChannel `yaml:"wecom"`
+}
+
+// NotifyChannel is one webhook target. webhookURL/secret support ${VAR}
+// expansion; an unresolved ${VAR} is a hard config error (secret values are
+// never echoed back). msgtype is provider-specific and validated against the
+// allowed set for each provider.
+type NotifyChannel struct {
+	// Enabled is a plain bool: the safe default for every channel is off, so an
+	// absent key and an explicit false mean the same thing.
+	Enabled bool `yaml:"enabled"`
+	// WebhookURL is the provider webhook endpoint. Required when Enabled.
+	WebhookURL string `yaml:"webhookURL"`
+	// Secret is the optional signing secret (DingTalk/Lark). WeCom has none.
+	Secret string `yaml:"secret"`
+	// MsgType is the provider message format, validated per provider.
+	MsgType string `yaml:"msgtype"`
 }
 
 // LanguageConfig selects the output language. Both the trending digest and the
@@ -326,6 +402,9 @@ func (c *Config) Validate() error {
 	if err := c.validateLanguage(); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
+	if err := c.Notify.validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
 	return nil
 }
 
@@ -384,6 +463,13 @@ func (c *Config) expandEnv() {
 	c.Releases.SubscriptionsFile = os.ExpandEnv(c.Releases.SubscriptionsFile)
 	c.Releases.OutputDir = os.ExpandEnv(c.Releases.OutputDir)
 	c.Observe.StoreDir = os.ExpandEnv(c.Observe.StoreDir)
+
+	// Notify webhooks/secrets support ${VAR} so they can live in .env.
+	c.Notify.Channels.DingTalk.WebhookURL = os.ExpandEnv(c.Notify.Channels.DingTalk.WebhookURL)
+	c.Notify.Channels.DingTalk.Secret = os.ExpandEnv(c.Notify.Channels.DingTalk.Secret)
+	c.Notify.Channels.Lark.WebhookURL = os.ExpandEnv(c.Notify.Channels.Lark.WebhookURL)
+	c.Notify.Channels.Lark.Secret = os.ExpandEnv(c.Notify.Channels.Lark.Secret)
+	c.Notify.Channels.WeCom.WebhookURL = os.ExpandEnv(c.Notify.Channels.WeCom.WebhookURL)
 }
 
 func (c *Config) withDefaults() {
@@ -490,5 +576,37 @@ func (c *Config) withDefaults() {
 	}
 	if c.Observe.MaxCandidates == 0 {
 		c.Observe.MaxCandidates = 300
+	}
+
+	// Notify defaults. enabled stays off (nil pointer = off); sections and
+	// strategy/limits get their documented defaults so `notify.enabled: true`
+	// alone is a complete, valid config.
+	if c.Notify.Strategy == "" {
+		c.Notify.Strategy = "broadcast"
+	}
+	if c.Notify.MaxReposPerSection == 0 {
+		c.Notify.MaxReposPerSection = 10
+	}
+	if c.Notify.TimeoutSeconds == 0 {
+		c.Notify.TimeoutSeconds = 15
+	}
+	if c.Notify.SummaryMaxChars == 0 {
+		c.Notify.SummaryMaxChars = 800
+	}
+	// Sections default to both true via the pointer accessors (TrendingEnabled/
+	// ReleasesEnabled), so there is nothing to fill in here.
+	// msgtype defaults are provider-specific.
+	if c.Notify.Channels.DingTalk.MsgType == "" {
+		c.Notify.Channels.DingTalk.MsgType = "markdown"
+	}
+	if c.Notify.Channels.Lark.MsgType == "" {
+		// Default to text (design §2.2): text is the simplest universally-safe
+		// lark format. Rich "post" is fully supported and verified end-to-end
+		// (golib v1.37.1 fixed the earlier content-wrapper bug), but is left as
+		// an explicit opt-in so the default stays minimal.
+		c.Notify.Channels.Lark.MsgType = "text"
+	}
+	if c.Notify.Channels.WeCom.MsgType == "" {
+		c.Notify.Channels.WeCom.MsgType = "markdown"
 	}
 }

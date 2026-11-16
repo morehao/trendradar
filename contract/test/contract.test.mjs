@@ -15,7 +15,7 @@ const jcsHash = (d) => {
   return 'sha256:' + crypto.createHash('sha256').update(canonicalize(basis), 'utf8').digest('hex')
 }
 
-test('contractVersion is 0.7.1', () => assert.equal(contractVersion, '0.7.1'))
+test('contractVersion is 0.8.0', () => assert.equal(contractVersion, '0.8.0'))
 
 test('error catalog has 17 retriable entries', () => {
   assert.equal(Object.keys(errorCatalog).length, 17)
@@ -254,4 +254,61 @@ test('RunResult can carry a subscription list or document envelope', () => {
   }
   assert.ok(validators.runResult({ ...base, subscriptions: fixtures.subscriptionsNormal }))
   assert.ok(validators.runResult({ ...base, subscriptionDoc: fixtures.subscriptionDocNormal }))
+})
+
+test('RunResult carries an optional notify report', () => {
+  const base = {
+    ipcSchema: 4, ok: true, command: 'run',
+    startedAt: '2026-11-15T00:00:00Z', finishedAt: '2026-11-15T00:05:00Z',
+    skipped: false, files: [],
+  }
+  const notify = {
+    enabled: true,
+    attempted: true,
+    messages: [
+      {
+        kind: 'trending',
+        period: 'daily',
+        bodyChars: 1234,
+        summarySource: 'model',
+        channels: [
+          { channel: 'telegram', status: 'sent', durationMs: 42 },
+          { channel: 'wecom', status: 'failed', durationMs: 10, error: 'timeout' },
+        ],
+      },
+      {
+        kind: 'releases',
+        bodyChars: 88,
+        summarySource: 'fallback',
+        channels: [{ channel: 'telegram', status: 'disabled' }],
+      },
+    ],
+    usage: { calls: 1, totalTokens: 100, usageKnown: true },
+  }
+  assert.ok(validators.runResult({ ...base, notify }))
+  // notify is optional
+  assert.ok(validators.runResult(base))
+  // skipReason + enabled/attempted false is a valid skipped stage
+  assert.ok(
+    validators.runResult({ ...base, notify: { enabled: true, attempted: false, skipReason: 'no-subscribers', messages: [] } }),
+  )
+  // kind and status are closed enums
+  assert.equal(
+    validators.runResult({ ...base, notify: { ...notify, messages: [{ ...notify.messages[0], kind: 'bogus' }] } }),
+    false,
+  )
+  assert.equal(
+    validators.runResult({
+      ...base,
+      notify: { ...notify, messages: [{ ...notify.messages[0], channels: [{ channel: 'x', status: 'bogus' }] }] },
+    }),
+    false,
+  )
+  // bodyChars must be an integer
+  assert.equal(
+    validators.runResult({ ...base, notify: { ...notify, messages: [{ ...notify.messages[0], bodyChars: 'x' }] } }),
+    false,
+  )
+  // messages is required
+  assert.equal(validators.runResult({ ...base, notify: { enabled: true, attempted: true } }), false)
 })
