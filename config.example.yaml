@@ -102,7 +102,7 @@ notify:
       enabled: false
       webhookURL: ${LARK_WEBHOOK}      # 飞书自定义机器人 webhook
       secret: ${LARK_SECRET}           # 签名校验密钥（可选）
-      msgtype: text                    # text（默认；golib v1.37.0 的 post 富文本格式有上游缺陷，飞书会报 10208，暂用 text）
+      msgtype: text                    # text（默认）| post（富文本，含标题；golib v1.37.1 起已修复可送达）
     wecom:
       enabled: false
       webhookURL: ${WECOM_WEBHOOK}     # 企业微信群机器人 webhook
