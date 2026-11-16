@@ -85,6 +85,7 @@ type RunRequest struct {
 	DryRun     *bool    `json:"dryRun,omitempty"`
 	OutputDir  *string  `json:"outputDir,omitempty"`
 	Action     *string  `json:"action,omitempty"`
+	Channel    *string  `json:"channel,omitempty"`
 	Repo       *string  `json:"repo,omitempty"`
 	Volume     *int     `json:"volume,omitempty"`
 	Stages     []string `json:"stages,omitempty"`

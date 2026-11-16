@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.13.1] - 2026-11-16
+
+### Added — `notify test`：webhook 连通性试发
+
+- 新增 `trendradar notify test --config config.yaml [--channel lark|dingtalk|wecom] [--json]`：
+  复用 `internal/notify.Deliver` 的**真实发送 + 加签链路**，向目标渠道发**一条固定测试消息**，
+  返回逐渠道 `status`（sent / failed + error）。用于在正式运行之外确认某条 webhook 真的可达。
+- 支持 IPC 形式：`notify --json` 从 stdin 读 `RunRequest{command:"notify", action:"test",
+  channel?, configPath}`，输出 `RunResult{command:"notify", notify:<NotifyReport>}`，
+  与 `run` / `subscribe` 共用同一信封形状，插件侧无需新解析逻辑。
+- 不抓取、不调用模型、不触碰仓库；`--channel` 只测指定渠道（忽略其 enabled 开关）。
+- 契约：`ipc.v4.json` 的 `RunRequest.command` 新增 `notify`、`action` 新增 `test`、新增可选
+  `channel`；`RunResult.command` 新增 `notify`。additive，`ipcSchema=4` 不变。
+
 ## [v0.13.0] - 2026-11-16
 
 ### Added — 每日推送通知（钉钉 / 飞书 / 企业微信）

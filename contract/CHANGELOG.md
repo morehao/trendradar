@@ -3,6 +3,19 @@
 All notable changes to `@morehao/trendradar-contract` are documented here.
 This project adheres to a `contract/vX.Y.Z` tag per release (npm + Go submodule).
 
+## 0.8.1
+
+Additive, non-breaking. Adds the `notify` command to the IPC envelope so a
+caller can test a webhook's reachability without a full run. Wire integers
+unchanged (`ipcSchema=4`, `digestSchema=3`).
+
+### Added
+- `RunRequest.command` gains `"notify"`; `RunRequest.action` gains `"test"`;
+  new optional `RunRequest.channel` (`"dingtalk" | "lark" | "wecom"`) selects a
+  single channel for the test (absent = every enabled channel).
+- `RunResult.command` gains `"notify"`. The per-channel outcome rides in the
+  already-existing `RunResult.notify` (`NotifyReport`), so no new result type.
+
 ## 0.8.0
 
 Additive, non-breaking. `RunResult` gains an optional `notify` report so the

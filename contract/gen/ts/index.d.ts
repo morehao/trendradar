@@ -47,12 +47,13 @@ export interface DigestArtifact {
 
 export interface RunRequest {
   "ipcSchema": 4;
-  "command": "run" | "serve" | "config" | "version" | "subscribe";
+  "command": "run" | "serve" | "config" | "version" | "subscribe" | "notify";
   "configPath"?: string;
   "date"?: string;
   "dryRun"?: boolean;
   "outputDir"?: string;
-  "action"?: "list" | "add" | "remove" | "releases";
+  "action"?: "list" | "add" | "remove" | "releases" | "test";
+  "channel"?: "dingtalk" | "lark" | "wecom";
   "repo"?: string;
   "volume"?: number;
   "stages"?: Array<"trending" | "digest" | "releases">;
@@ -61,7 +62,7 @@ export interface RunRequest {
 export interface RunResult {
   "ipcSchema": 4;
   "ok": boolean;
-  "command": "run" | "serve" | "config" | "version" | "subscribe";
+  "command": "run" | "serve" | "config" | "version" | "subscribe" | "notify";
   "startedAt": string;
   "finishedAt": string;
   "skipped": boolean;
