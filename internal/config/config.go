@@ -600,11 +600,13 @@ func (c *Config) withDefaults() {
 		c.Notify.Channels.DingTalk.MsgType = "markdown"
 	}
 	if c.Notify.Channels.Lark.MsgType == "" {
-		// Default to text (design §2.2): text is the simplest universally-safe
-		// lark format. Rich "post" is fully supported and verified end-to-end
-		// (golib v1.37.1 fixed the earlier content-wrapper bug), but is left as
-		// an explicit opt-in so the default stays minimal.
-		c.Notify.Channels.Lark.MsgType = "text"
+		// Default to interactive (interactive card): the message body is Markdown,
+		// and both "text" and "post" render it poorly — "post" puts the whole body
+		// into a single text node that does NOT parse Markdown (so "**", "- " show
+		// up literally), and "text" is even plainer. "interactive" renders the body
+		// via a lark_md node, so headings/bold/lists/links display correctly.
+		// Requires golib >= v1.38.3 (gnotify/lark interactive support).
+		c.Notify.Channels.Lark.MsgType = "interactive"
 	}
 	if c.Notify.Channels.WeCom.MsgType == "" {
 		c.Notify.Channels.WeCom.MsgType = "markdown"

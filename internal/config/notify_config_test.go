@@ -42,7 +42,7 @@ func TestNotifyDefaults(t *testing.T) {
 	if n.MaxReposPerSection != 10 || n.MaxBodyChars != 0 || n.TimeoutSeconds != 15 || n.SummaryMaxChars != 800 {
 		t.Fatalf("numeric defaults wrong: %+v", n)
 	}
-	if n.Channels.DingTalk.MsgType != "markdown" || n.Channels.Lark.MsgType != "text" || n.Channels.WeCom.MsgType != "markdown" {
+	if n.Channels.DingTalk.MsgType != "markdown" || n.Channels.Lark.MsgType != "interactive" || n.Channels.WeCom.MsgType != "markdown" {
 		t.Fatalf("msgtype defaults wrong: %+v", n.Channels)
 	}
 }
