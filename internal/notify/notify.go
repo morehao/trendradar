@@ -30,13 +30,22 @@ import (
 
 // Message is one outbound chat message (one section). Kind is "trending" or
 // "releases". Period is the trending period (daily/weekly/monthly) and empty
-// for the releases section. Subject is used as the message title / first line;
-// Body is the markdown content produced by Build.
+// for the releases section.
+//
+// Subject is the message title, and the ONLY place a title lives — Body never
+// contains it, so a channel that renders Subject (header / title / prefix) shows
+// the title exactly once.
+//
+// Body is the plain-text tier body (pure content, no title, no markdown links):
+// used for text-only channels and as the canonical body for BodyChars.
+// BodyLink is the link-capable tier body (same content, repo names rendered as
+// [FullName](url)); it may be empty when no link-capable channel is targeted.
 type Message struct {
-	Kind    string
-	Period  string
-	Subject string
-	Body    string
+	Kind     string
+	Period   string
+	Subject  string
+	Body     string
+	BodyLink string
 
 	// summarySource and usage are carried internally from Build to Deliver so
 	// Deliver can fill contract.NotifyMessage without re-running the model.
@@ -51,6 +60,12 @@ type Options struct {
 	Lang       string              // i18n output language (empty → zh)
 	Cfg        config.NotifyConfig // frozen §1.1 config shape
 	HTTPClient *http.Client        // injected into gnotify; nil → per-request default
+
+	// HasLinkCapable reports whether at least one enabled channel can render
+	// markdown links (msgtype markdown/interactive/post). When true Build produces
+	// Message.BodyLink (the link tier); when false BodyLink stays empty so no
+	// `[..](..)` is ever generated for a text-only fan-out.
+	HasLinkCapable bool
 }
 
 // Build generates the messages to send for this run (at most two: one trending,
@@ -61,6 +76,13 @@ func Build(ctx context.Context, opt Options, d digest.Digest, rel releasedigest.
 	wantTrending, wantReleases bool) ([]Message, error) {
 	lang := resolveLang(opt.Lang)
 	limit := effectiveSummaryMaxChars(opt.Cfg)
+
+	// Derive the link capability from the configured channels when the caller did
+	// not set it explicitly. This keeps app/run.go unchanged: Cfg already carries
+	// everything needed to know whether any enabled channel can render links.
+	if !opt.HasLinkCapable {
+		opt.HasLinkCapable = linkCapability(channelSpecs(opt.Cfg))
+	}
 
 	var msgs []Message
 
@@ -74,6 +96,7 @@ func Build(ctx context.Context, opt Options, d digest.Digest, rel releasedigest.
 			Period:        d.Period,
 			Subject:       trendingSubject(lang, d.Date, d.Period),
 			Body:          body.text,
+			BodyLink:      body.bodyLink,
 			summarySource: body.source,
 			usage:         body.usage,
 			usageCalls:    body.calls,
@@ -89,6 +112,7 @@ func Build(ctx context.Context, opt Options, d digest.Digest, rel releasedigest.
 			Kind:          KindReleases,
 			Subject:       releasesSubject(lang, rel),
 			Body:          body.text,
+			BodyLink:      body.bodyLink,
 			summarySource: body.source,
 			usage:         body.usage,
 			usageCalls:    body.calls,

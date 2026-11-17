@@ -116,7 +116,7 @@ func deliver(ctx context.Context, opt Options, msgs []Message) contract.NotifyRe
 	for _, msg := range msgs {
 		nm := contract.NotifyMessage{
 			Kind:          msg.Kind,
-			BodyChars:     runeLen(msg.Body),
+			BodyChars:     runeLen(canonicalBody(msg)),
 			SummarySource: msg.summarySource,
 		}
 		if msg.Period != "" {
@@ -163,7 +163,7 @@ func sendMessage(ctx context.Context, gopts []gnotify.Option, specs []ChannelSpe
 			continue
 		}
 
-		body := truncateForChannel(msg.Body, spec.Name, maxBody, lang)
+		body := truncateForChannel(pickBody(msg, spec), spec.Name, maxBody, lang)
 		gmsg := gnotify.Message{Subject: msg.Subject, Body: body, Params: map[string]string{"msgtype": msgTypeFor(spec)}}
 
 		start := time.Now()
@@ -189,3 +189,24 @@ func sendMessage(ctx context.Context, gopts []gnotify.Option, specs []ChannelSpe
 // errPtr returns a pointer to s (never nil so an empty error string is distinct
 // from a nil error field, matching the "failed must carry error" contract).
 func errPtr(s string) *string { return &s }
+
+// pickBody selects the body tier for one channel: link-capable channels get the
+// link tier when it is present, others (and any channel when there is no link
+// tier) get the plain tier body. Subject is always passed separately to gnotify,
+// so title de-duplication no longer depends on the body at all.
+func pickBody(msg Message, spec ChannelSpec) string {
+	if supportsMarkdownLink(spec) && msg.BodyLink != "" {
+		return msg.BodyLink
+	}
+	return msg.Body
+}
+
+// canonicalBody returns the message-level canonical body used for BodyChars: the
+// link tier when present, else the plain tier. It is per-message and independent
+// of per-channel truncation / disabled channels (design decision 3).
+func canonicalBody(msg Message) string {
+	if msg.BodyLink != "" {
+		return msg.BodyLink
+	}
+	return msg.Body
+}

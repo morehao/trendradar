@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,9 +31,11 @@ func strptr(s string) *string { return &s }
 func trendingDigest(period string, n int) digest.Digest {
 	repos := make([]digest.RepoDigest, 0, n)
 	for i := 0; i < n; i++ {
+		full := fmt.Sprintf("owner%d/repo%d", i, i)
 		repos = append(repos, digest.RepoDigest{
 			RepoSnapshot: digest.RepoSnapshot{
-				FullName:      fmt.Sprintf("owner%d/repo%d", i, i),
+				FullName:      full,
+				URL:           "https://github.com/" + full,
 				StarsInPeriod: (i + 1) * 100,
 				Rank:          i + 1,
 				Description:   strptr(fmt.Sprintf("desc %d", i)),
@@ -52,6 +55,13 @@ func repoReleases(name string, newCount int, latest, summary string) releasedige
 	if summary != "" {
 		r.Summary = strptr(summary)
 	}
+	return r
+}
+
+// repoReleasesURL is repoReleases with an explicit URL (for link assertions).
+func repoReleasesURL(name, url string, newCount int, latest, summary string) releasedigest.RepoReleases {
+	r := repoReleases(name, newCount, latest, summary)
+	r.URL = url
 	return r
 }
 
@@ -180,6 +190,53 @@ func TestBuild_ReleasesFallbackListsChanged(t *testing.T) {
 	}
 }
 
+// TestBuild_ReleasesLinkTier asserts the releases message gets a link tier from
+// RepoReleases.URL and that the plain body has no title and no links.
+func TestBuild_ReleasesLinkTier(t *testing.T) {
+	opt := Options{Provider: nil, Lang: "zh", Cfg: capConfig("markdown", "", "")}
+	rel := releaseDigest(
+		repoReleasesURL("a/b", "https://github.com/a/b", 2, "v1.2.0", "新增通知渠道"),
+		repoReleasesURL("e/f", "https://github.com/e/f", 1, "v2.0.0", "修复代理"),
+	)
+	msgs, err := Build(context.Background(), opt, digest.Digest{}, rel, false, true)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	m := msgs[0]
+	if strings.Contains(m.Body, "订阅仓库") {
+		t.Errorf("plain releases body must not contain title: %s", m.Body)
+	}
+	if strings.Contains(m.Body, "](") {
+		t.Errorf("plain releases body must not contain links: %s", m.Body)
+	}
+	for _, want := range []string{"[a/b](https://github.com/a/b)", "[e/f](https://github.com/e/f)"} {
+		if !strings.Contains(m.BodyLink, want) {
+			t.Errorf("releases link tier missing %q:\n%s", want, m.BodyLink)
+		}
+	}
+	if strings.Contains(m.BodyLink, "订阅仓库") {
+		t.Errorf("releases link tier must not contain title: %s", m.BodyLink)
+	}
+}
+
+// TestBuild_ReleasesURLEmptyDegradesToPlain asserts an empty RepoReleases.URL
+// degrades to plain FullName (no `[..]()`), no error.
+func TestBuild_ReleasesURLEmptyDegradesToPlain(t *testing.T) {
+	opt := Options{Provider: nil, Lang: "zh", Cfg: capConfig("markdown", "", "")}
+	rel := releaseDigest(repoReleases("a/b", 2, "v1.2.0", "s"))
+	msgs, err := Build(context.Background(), opt, digest.Digest{}, rel, false, true)
+	if err != nil {
+		t.Fatalf("Build must not fail on empty URL: %v", err)
+	}
+	m := msgs[0]
+	if strings.Contains(m.BodyLink, "](") {
+		t.Errorf("empty URL must not produce link syntax: %s", m.BodyLink)
+	}
+	if !strings.Contains(m.BodyLink, "a/b") {
+		t.Errorf("link tier should name the repo plainly: %s", m.BodyLink)
+	}
+}
+
 func TestBuild_ModelPathWithFake(t *testing.T) {
 	opt := Options{Provider: model.NewFake(), Lang: "zh", Cfg: baseConfig()}
 	d := trendingDigest("daily", 2)
@@ -196,8 +253,12 @@ func TestBuild_ModelPathWithFake(t *testing.T) {
 	if msgs[0].usageCalls != 1 {
 		t.Fatalf("usageCalls = %d, want 1", msgs[0].usageCalls)
 	}
-	if !strings.Contains(msgs[0].Body, "GitHub 趋势榜") {
-		t.Errorf("body missing subject header:\n%s", msgs[0].Body)
+	// Title lives ONLY on Subject now; Body must NOT repeat it.
+	if !strings.Contains(msgs[0].Subject, "GitHub 趋势榜") {
+		t.Errorf("subject missing title:\n%s", msgs[0].Subject)
+	}
+	if strings.Contains(msgs[0].Body, "GitHub 趋势榜") {
+		t.Errorf("body must not contain subject header:\n%s", msgs[0].Body)
 	}
 }
 
@@ -232,12 +293,125 @@ func TestBuild_EnglishLang(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("want 1 message, got %d", len(msgs))
 	}
-	if !strings.Contains(msgs[0].Body, "GitHub Trending") {
-		t.Errorf("english subject missing:\n%s", msgs[0].Body)
+	// English title goes on Subject, not Body.
+	if !strings.Contains(msgs[0].Subject, "GitHub Trending") {
+		t.Errorf("english subject missing:\n%s", msgs[0].Subject)
+	}
+	if strings.Contains(msgs[0].Body, "GitHub Trending") {
+		t.Errorf("english body must not contain subject:\n%s", msgs[0].Body)
 	}
 	if !strings.Contains(msgs[0].Body, "more not shown") && !strings.Contains(msgs[0].Body, "repository") {
-		// just ensure english phrasing path is exercised; content-specific.
 		t.Logf("english body: %s", msgs[0].Body)
+	}
+}
+
+// capConfig builds a config with the given non-empty channel msgtypes enabled so
+// Build derives the link capability from Cfg (no explicit Options flag needed).
+func capConfig(ding, lark, wecom string) config.NotifyConfig {
+	cfg := baseConfig()
+	cfg.Channels = config.NotifyChannels{}
+	if ding != "" {
+		cfg.Channels.DingTalk = config.NotifyChannel{Enabled: true, WebhookURL: "http://x", MsgType: ding}
+	}
+	if lark != "" {
+		cfg.Channels.Lark = config.NotifyChannel{Enabled: true, WebhookURL: "http://x", MsgType: lark}
+	}
+	if wecom != "" {
+		cfg.Channels.WeCom = config.NotifyChannel{Enabled: true, WebhookURL: "http://x", MsgType: wecom}
+	}
+	return cfg
+}
+
+// TestBuild_TrendingBodyNoTitleAllTiers asserts the Body (plain tier) never
+// carries the title and the link tier carries links, for a link-capable fan-out.
+func TestBuild_TrendingBodyNoTitleLinkTier(t *testing.T) {
+	opt := Options{Provider: nil, Lang: "zh", Cfg: capConfig("markdown", "", "")}
+	d := trendingDigest("daily", 2)
+	msgs, err := Build(context.Background(), opt, d, releasedigest.ReleaseDigest{}, true, false)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	m := msgs[0]
+	if strings.Contains(m.Body, "GitHub 趋势榜") {
+		t.Errorf("plain body must not contain title: %s", m.Body)
+	}
+	// Plain tier: no link syntax, just FullName.
+	if strings.Contains(m.Body, "](") {
+		t.Errorf("plain body must not contain markdown links: %s", m.Body)
+	}
+	if !strings.Contains(m.Body, "owner0/repo0") {
+		t.Errorf("plain body missing repo name: %s", m.Body)
+	}
+	// Link tier: [owner0/repo0](https://github.com/owner0/repo0).
+	want := "[owner0/repo0](https://github.com/owner0/repo0)"
+	if !strings.Contains(m.BodyLink, want) {
+		t.Errorf("link tier missing %q:\n%s", want, m.BodyLink)
+	}
+	if strings.Contains(m.BodyLink, "GitHub 趋势榜") {
+		t.Errorf("link tier must not contain title: %s", m.BodyLink)
+	}
+}
+
+// TestBuild_TextOnlyNoLinkTier asserts that a text-only fan-out produces no link
+// tier at all (BodyLink empty) and the plain body has no `[..](..)`.
+func TestBuild_TextOnlyNoLinkTier(t *testing.T) {
+	opt := Options{Provider: nil, Lang: "zh", Cfg: capConfig("", "", "text")}
+	d := trendingDigest("daily", 2)
+	msgs, _ := Build(context.Background(), opt, d, releasedigest.ReleaseDigest{}, true, false)
+	m := msgs[0]
+	if m.BodyLink != "" {
+		t.Errorf("text-only fan-out must not build a link tier, got: %s", m.BodyLink)
+	}
+	if strings.Contains(m.Body, "](") {
+		t.Errorf("text-only body must not contain link syntax: %s", m.Body)
+	}
+}
+
+// TestBuild_ModelLinkTierSingleCall asserts that with a link-capable fan-out the
+// model is called exactly once while both tiers are produced, and the link tier
+// uses URLs from RepoSnapshot.URL (never the model).
+func TestBuild_ModelLinkTierSingleCall(t *testing.T) {
+	opt := Options{Provider: model.NewFake(), Lang: "zh", Cfg: capConfig("", "interactive", "")}
+	d := trendingDigest("daily", 2)
+	msgs, err := Build(context.Background(), opt, d, releasedigest.ReleaseDigest{}, true, false)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	m := msgs[0]
+	if m.usageCalls != 1 {
+		t.Fatalf("usageCalls = %d, want 1 (two tiers share one model call)", m.usageCalls)
+	}
+	if m.summarySource != SourceModel {
+		t.Fatalf("summarySource = %q, want model", m.summarySource)
+	}
+	// Plain tier = model summary (contains the fake text), no title.
+	if strings.Contains(m.Body, "GitHub 趋势榜") {
+		t.Errorf("plain body must not contain title: %s", m.Body)
+	}
+	// Link tier still carries a deterministic link from the snapshot URL.
+	want := "[owner0/repo0](https://github.com/owner0/repo0)"
+	if !strings.Contains(m.BodyLink, want) {
+		t.Errorf("link tier missing %q:\n%s", want, m.BodyLink)
+	}
+}
+
+// TestBuild_URLEmptyDegradesToPlain asserts that a repo with an empty URL
+// degrades to a plain FullName (no `[..]()`), no error.
+func TestBuild_URLEmptyDegradesToPlain(t *testing.T) {
+	d := digest.Digest{Schema: 3, Date: "2026-11-15", Period: "daily", Count: 1, Repos: []digest.RepoDigest{
+		{RepoSnapshot: digest.RepoSnapshot{FullName: "no/url", StarsInPeriod: 5, Rank: 1}, Summary: "s"},
+	}}
+	opt := Options{Provider: nil, Lang: "zh", Cfg: capConfig("markdown", "", "")}
+	msgs, err := Build(context.Background(), opt, d, releasedigest.ReleaseDigest{}, true, false)
+	if err != nil {
+		t.Fatalf("Build must not fail on empty URL: %v", err)
+	}
+	m := msgs[0]
+	if strings.Contains(m.BodyLink, "](") {
+		t.Errorf("empty URL must not produce link syntax: %s", m.BodyLink)
+	}
+	if !strings.Contains(m.BodyLink, "no/url") {
+		t.Errorf("link tier should still name the repo plainly: %s", m.BodyLink)
 	}
 }
 
@@ -309,6 +483,139 @@ func chanStatus(rep contract.NotifyReport, msgIdx int) map[string]string {
 		out[c.Channel] = c.Status
 	}
 	return out
+}
+
+// captureWebhook records the raw request body of each call so tests can inspect
+// exactly what a channel would render (title count, link syntax presence).
+func captureWebhook(t *testing.T, got *[]string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		*got = append(*got, string(b))
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"errcode":0,"code":0}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestDeliver_TwoTierSelection asserts that in a markdown+text+markdown fan-out,
+// markdown channels receive the link tier and the text channel receives the plain
+// tier (no `[..](..)`), and the title appears exactly once per body (it is not in
+// the body at all — only the channel prepends it).
+func TestDeliver_TwoTierSelection(t *testing.T) {
+	var dingBodies, larkBodies, wecomBodies []string
+	dingSrv := captureWebhook(t, &dingBodies)
+	larkSrv := captureWebhook(t, &larkBodies)
+	wecomSrv := captureWebhook(t, &wecomBodies)
+
+	cfg := baseConfig()
+	cfg.Channels = config.NotifyChannels{
+		DingTalk: config.NotifyChannel{Enabled: true, WebhookURL: dingSrv.URL, MsgType: "markdown"},
+		Lark:     config.NotifyChannel{Enabled: true, WebhookURL: larkSrv.URL, MsgType: "text"},
+		WeCom:    config.NotifyChannel{Enabled: true, WebhookURL: wecomSrv.URL, MsgType: "markdown"},
+	}
+	opt := Options{Provider: nil, Lang: "zh", Cfg: cfg, HTTPClient: dingSrv.Client()}
+	link := "[owner0/repo0](https://github.com/owner0/repo0)"
+	msgs := []Message{{
+		Kind: KindTrending, Period: "daily", Subject: "S",
+		Body:          "- owner0/repo0 — +100 stars — summary 0",
+		BodyLink:      "- " + link + " — +100 stars — summary 0",
+		summarySource: SourceFallback,
+	}}
+
+	Deliver(context.Background(), opt, msgs)
+
+	get := func(b []string) string {
+		if len(b) != 1 {
+			t.Fatalf("expected 1 call, got %d", len(b))
+		}
+		return b[0]
+	}
+	// markdown channels → link tier.
+	if !strings.Contains(get(dingBodies), link) {
+		t.Errorf("dingtalk markdown payload missing link tier:\n%s", get(dingBodies))
+	}
+	if !strings.Contains(get(wecomBodies), link) {
+		t.Errorf("wecom markdown payload missing link tier:\n%s", get(wecomBodies))
+	}
+	// text channel → plain tier, no link syntax.
+	lark := get(larkBodies)
+	if strings.Contains(lark, "](") {
+		t.Errorf("lark text payload must not contain link syntax:\n%s", lark)
+	}
+	if !strings.Contains(lark, "owner0/repo0") {
+		t.Errorf("lark text payload missing repo name:\n%s", lark)
+	}
+}
+
+// TestDeliver_LarkPostUsesPlainTier asserts that a lark channel configured with
+// msgtype "post" receives the PLAIN tier, not the link tier: golib's post branch
+// puts the body into a single text node that does not parse markdown, so a
+// `[owner/repo](url)` would show up literally. The payload must therefore contain
+// the repo FullName but not the `](` link syntax.
+func TestDeliver_LarkPostUsesPlainTier(t *testing.T) {
+	var larkBodies []string
+	larkSrv := captureWebhook(t, &larkBodies)
+
+	cfg := baseConfig()
+	cfg.Channels = config.NotifyChannels{
+		Lark: config.NotifyChannel{Enabled: true, WebhookURL: larkSrv.URL, MsgType: "post"},
+	}
+	opt := Options{Provider: nil, Lang: "zh", Cfg: cfg, HTTPClient: larkSrv.Client()}
+	link := "[owner0/repo0](https://github.com/owner0/repo0)"
+	msgs := []Message{{
+		Kind: KindTrending, Period: "daily", Subject: "S",
+		Body:          "- owner0/repo0 — +100 stars — summary 0",
+		BodyLink:      "- " + link + " — +100 stars — summary 0",
+		summarySource: SourceFallback,
+	}}
+
+	Deliver(context.Background(), opt, msgs)
+
+	if len(larkBodies) != 1 {
+		t.Fatalf("expected 1 lark call, got %d", len(larkBodies))
+	}
+	payload := larkBodies[0]
+	if strings.Contains(payload, "](") {
+		t.Errorf("lark post payload must be plain tier (no link syntax), got:\n%s", payload)
+	}
+	if !strings.Contains(payload, "owner0/repo0") {
+		t.Errorf("lark post payload missing repo FullName:\n%s", payload)
+	}
+}
+
+// TestDeliver_BodyCharsCanonical asserts BodyChars is the link-tier rune length,
+// per message, unaffected by per-channel truncation/disabled channels.
+func TestDeliver_BodyCharsCanonical(t *testing.T) {
+	srv := fakeWebhook(t, 200, `{"errcode":0}`, 0)
+	opt := Options{Provider: nil, Lang: "zh", Cfg: allEnabled(srv.URL), HTTPClient: srv.Client()}
+	plain := "- owner0/repo0 — +100 stars — summary 0"
+	link := "- [owner0/repo0](https://github.com/owner0/repo0) — +100 stars — summary 0"
+	msgs := []Message{{Kind: KindTrending, Period: "daily", Subject: "S", Body: plain, BodyLink: link}}
+
+	rep := Deliver(context.Background(), opt, msgs)
+	if got := rep.Messages[0].BodyChars; got != len([]rune(link)) {
+		t.Errorf("BodyChars = %d, want runeLen(link tier)=%d", got, len([]rune(link)))
+	}
+}
+
+// TestDeliver_BodyCharsNoLinkTier asserts BodyChars falls back to the plain tier
+// when there is no link tier (text-only fan-out).
+func TestDeliver_BodyCharsNoLinkTier(t *testing.T) {
+	srv := fakeWebhook(t, 200, `{"errcode":0}`, 0)
+	cfg := baseConfig()
+	cfg.Channels = config.NotifyChannels{
+		Lark: config.NotifyChannel{Enabled: true, WebhookURL: srv.URL, MsgType: "text"},
+	}
+	opt := Options{Provider: nil, Lang: "zh", Cfg: cfg, HTTPClient: srv.Client()}
+	plain := "- owner0/repo0 — +100 stars — summary 0"
+	msgs := []Message{{Kind: KindTrending, Period: "daily", Subject: "S", Body: plain}}
+
+	rep := Deliver(context.Background(), opt, msgs)
+	if got := rep.Messages[0].BodyChars; got != len([]rune(plain)) {
+		t.Errorf("BodyChars = %d, want runeLen(plain)=%d", got, len([]rune(plain)))
+	}
 }
 
 func TestDeliver_AllSent(t *testing.T) {

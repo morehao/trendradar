@@ -92,14 +92,19 @@ func runeLen(s string) int { return utf8.RuneCountInString(s) }
 // model (or used verbatim by the rule-based fallback). It names at most
 // maxRepos repos (already sorted by the digest) and reports the remainder.
 //
+// allowLinks controls whether each repo name is rendered as a markdown link
+// [FullName](URL). Links are injected at assembly time only (never sent to the
+// model); the plain-text tier passes false so a `text` channel never receives
+// `[..](..)` syntax.
+//
 // Fields used (design §5.2): FullName, StarsInPeriod, Rank, Summary, Description.
-func compactTrendingList(d digest.Digest, maxRepos int) (items []string, shown int, rest int) {
+func compactTrendingList(d digest.Digest, maxRepos int, allowLinks bool) (items []string, shown int, rest int) {
 	repos := d.Repos
 	if maxRepos > 0 && len(repos) > maxRepos {
 		repos = repos[:maxRepos]
 	}
 	for _, r := range repos {
-		items = append(items, formatTrendingItem(r))
+		items = append(items, formatTrendingItem(r, allowLinks))
 	}
 	shown = len(repos)
 	rest = len(d.Repos) - shown
@@ -110,9 +115,20 @@ func compactTrendingList(d digest.Digest, maxRepos int) (items []string, shown i
 }
 
 // formatTrendingItem renders one repo as "owner/repo — +N stars — summary/desc".
-func formatTrendingItem(r digest.RepoDigest) string {
+// When allowLinks is true and the repo carries a URL, the name becomes
+// [owner/repo](url) so a link-capable channel renders it clickable; otherwise it
+// stays plain FullName (URL empty → plain, no error).
+func formatTrendingItem(r digest.RepoDigest, allowLinks bool) string {
 	var b strings.Builder
-	b.WriteString(r.FullName)
+	if allowLinks && r.URL != "" {
+		b.WriteString("[")
+		b.WriteString(r.FullName)
+		b.WriteString("](")
+		b.WriteString(r.URL)
+		b.WriteString(")")
+	} else {
+		b.WriteString(r.FullName)
+	}
 	if r.Rank > 0 {
 		fmt.Fprintf(&b, " (rank %d)", r.Rank)
 	}
@@ -130,13 +146,23 @@ func formatTrendingItem(r digest.RepoDigest) string {
 	return b.String()
 }
 
-// ruleBasedTrending builds the fallback trending body from the compact list: a
-// header line, one bullet per shown repo, and a "remaining N" note.
+// ruleBasedTrending builds the fallback trending body from the compact list: one
+// bullet per shown repo and a "remaining N" note. It never includes the subject
+// line — the title lives solely on Message.Subject (single source of truth);
+// including it here would duplicate it on channels that also render Subject.
 func ruleBasedTrending(lang i18n.OutputLanguage, d digest.Digest, maxRepos int) string {
-	items, shown, rest := compactTrendingList(d, maxRepos)
+	return trendingListBody(lang, d, maxRepos, false)
+}
+
+// ruleBasedTrendingLinks is the link tier twin of ruleBasedTrending: same list
+// but each repo name rendered as [FullName](URL). Used to build Message.BodyLink.
+func ruleBasedTrendingLinks(lang i18n.OutputLanguage, d digest.Digest, maxRepos int) string {
+	return trendingListBody(lang, d, maxRepos, true)
+}
+
+func trendingListBody(lang i18n.OutputLanguage, d digest.Digest, maxRepos int, allowLinks bool) string {
+	items, _, rest := compactTrendingList(d, maxRepos, allowLinks)
 	var b strings.Builder
-	b.WriteString(trendingSubject(lang, d.Date, d.Period))
-	b.WriteString("\n\n")
 	for _, it := range items {
 		b.WriteString("- ")
 		b.WriteString(it)
@@ -149,14 +175,13 @@ func ruleBasedTrending(lang i18n.OutputLanguage, d digest.Digest, maxRepos int) 
 			fmt.Fprintf(&b, "\n（其余 %d 个未列出）", rest)
 		}
 	}
-	_ = shown
 	return strings.TrimRight(b.String(), "\n")
 }
 
 // compactReleasesList renders subscribed repos that changed this period as a
 // compact list fed to the model / used by the fallback. Only NewCount>0 are
 // listed (design §5.2). Fields used: FullName, NewCount, LatestTag, Summary.
-func compactReleasesList(rel releasedigest.ReleaseDigest, maxRepos int) (items []string, shown int, rest int) {
+func compactReleasesList(rel releasedigest.ReleaseDigest, maxRepos int, allowLinks bool) (items []string, shown int, rest int) {
 	changed := make([]releasedigest.RepoReleases, 0, len(rel.Repos))
 	for _, r := range rel.Repos {
 		if r.NewCount > 0 {
@@ -168,7 +193,7 @@ func compactReleasesList(rel releasedigest.ReleaseDigest, maxRepos int) (items [
 		changed = changed[:maxRepos]
 	}
 	for _, r := range changed {
-		items = append(items, formatReleaseItem(r))
+		items = append(items, formatReleaseItem(r, allowLinks))
 	}
 	shown = len(changed)
 	rest = total - shown
@@ -179,10 +204,19 @@ func compactReleasesList(rel releasedigest.ReleaseDigest, maxRepos int) (items [
 }
 
 // formatReleaseItem renders one repo as "owner/repo — N new versions (latest X)
-// — summary".
-func formatReleaseItem(r releasedigest.RepoReleases) string {
+// — summary". When allowLinks is true and the repo carries a URL, the name
+// becomes [owner/repo](url) (URL empty → plain FullName, no error).
+func formatReleaseItem(r releasedigest.RepoReleases, allowLinks bool) string {
 	var b strings.Builder
-	b.WriteString(r.FullName)
+	if allowLinks && r.URL != "" {
+		b.WriteString("[")
+		b.WriteString(r.FullName)
+		b.WriteString("](")
+		b.WriteString(r.URL)
+		b.WriteString(")")
+	} else {
+		b.WriteString(r.FullName)
+	}
 	fmt.Fprintf(&b, " — %d new version(s)", r.NewCount)
 	if r.LatestTag != "" {
 		fmt.Fprintf(&b, " (latest %s)", r.LatestTag)
@@ -194,12 +228,21 @@ func formatReleaseItem(r releasedigest.RepoReleases) string {
 	return b.String()
 }
 
-// ruleBasedReleases builds the fallback releases body from the compact list.
+// ruleBasedReleases builds the fallback releases body from the compact list. Like
+// ruleBasedTrending it never includes the subject line — the title is carried
+// only by Message.Subject.
 func ruleBasedReleases(lang i18n.OutputLanguage, rel releasedigest.ReleaseDigest, maxRepos int) string {
-	items, _, rest := compactReleasesList(rel, maxRepos)
+	return releasesListBody(lang, rel, maxRepos, false)
+}
+
+// ruleBasedReleasesLinks is the link tier twin of ruleBasedReleases.
+func ruleBasedReleasesLinks(lang i18n.OutputLanguage, rel releasedigest.ReleaseDigest, maxRepos int) string {
+	return releasesListBody(lang, rel, maxRepos, true)
+}
+
+func releasesListBody(lang i18n.OutputLanguage, rel releasedigest.ReleaseDigest, maxRepos int, allowLinks bool) string {
+	items, _, rest := compactReleasesList(rel, maxRepos, allowLinks)
 	var b strings.Builder
-	b.WriteString(releasesSubject(lang, rel))
-	b.WriteString("\n\n")
 	for _, it := range items {
 		b.WriteString("- ")
 		b.WriteString(it)
@@ -243,12 +286,9 @@ func releasesSubject(lang i18n.OutputLanguage, rel releasedigest.ReleaseDigest) 
 	return "📦 订阅仓库本周变动（" + date + "）"
 }
 
-// assembleWithSummary combines a subject-with-summary model output into the
-// final body: subject line + blank line + model summary. Always markdown.
-func assembleWithSummary(subject, summary string) string {
-	summary = strings.TrimSpace(summary)
-	if summary == "" {
-		return subject
-	}
-	return subject + "\n\n" + summary
+// summaryBody returns the model summary trimmed as the final body. The subject is
+// no longer prepended: the title lives solely on Message.Subject, so Body is pure
+// content (no title duplication on channels that also render Subject).
+func summaryBody(summary string) string {
+	return strings.TrimSpace(summary)
 }
