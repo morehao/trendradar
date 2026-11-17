@@ -416,15 +416,26 @@ func (b *builder) processRepo(ctx context.Context, repo string) repoOutcome {
 	// persists it only after the document publishes), so marking here is safe:
 	// a failed publish discards this in-memory state and nothing is lost.
 	next := st
+	// LastTag / LastPublishedAt describe the newest *real* version, chosen by
+	// publish date — not the API head. cands arrive in /releases order
+	// (created_at), where a rolling prerelease that is re-published regularly
+	// (ragflow's "nightly": fresh created_at, year-old publishedAt) sits first;
+	// taking cands[0] would surface "nightly" as the repo's latest version even
+	// though a newer production tag was just summarized.
+	latest := newestByPublishDate(cands)
+	if latest != nil {
+		next.LastTag = latest.tagName()
+		if latest.rel.PublishedAt != nil {
+			next.LastPublishedAt = latest.rel.PublishedAt
+		}
+	}
+	// The incremental cursor still advances over every candidate, oldest first,
+	// so a future run can never skip an unprocessed version.
 	for i := len(cands) - 1; i >= 0; i-- {
 		c := cands[i]
 		if c.rel.ID > 0 {
 			next.LastID = c.rel.ID
 		}
-		if c.rel.PublishedAt != nil {
-			next.LastPublishedAt = c.rel.PublishedAt
-		}
-		next.LastTag = c.tagName()
 		AddSeenTag(&next, c.tagName())
 		AddSummarizedTag(&next, c.tagName())
 	}
@@ -457,16 +468,21 @@ func (b *builder) baseline(ctx context.Context, repo, owner, name string) repoOu
 	st := RepoState{}
 	var pool []candidate
 	if len(rels) > 0 {
-		latest := rels[0]
 		// Deliberately do NOT advance LastID past the baseline page: LastID is a
 		// legacy watermark only. Leaving it at 0 means the first regular run diffs
 		// by SummarizedTags (empty here) and summarizes every version in the page,
 		// instead of the baseline silently swallowing the versions in between.
-		st.LastTag = latest.TagName
-		st.LastPublishedAt = latest.PublishedAt
 		for _, r := range rels {
 			AddSeenTag(&st, r.TagName)
 			pool = append(pool, candidate{repoFull: repo, repoURL: repoURL(repo), rel: r, kind: "release"})
+		}
+		// LastTag is the newest *real* version by publish date, not rels[0]. The
+		// API head is a rolling prerelease for repos like ragflow (fresh
+		// created_at, year-old publishedAt), so positional selection would record
+		// "nightly" as the baseline's latest version.
+		if newest := newestByPublishDate(pool); newest != nil {
+			st.LastTag = newest.tagName()
+			st.LastPublishedAt = newest.rel.PublishedAt
 		}
 		// Backfill picks the newest N versions by *publication date*, not by the
 		// API's list position. /releases is ordered by created_at, so a rolling
@@ -629,16 +645,47 @@ func (b *builder) summarizeRepo(ctx context.Context, repo string, cands []candid
 		items = append(items, item)
 	}
 	start, end := b.periodRange(cands)
+	// LatestTag names the newest *real* version by publish date, matching the
+	// cursor's LastTag and the document's period. items[0] is the API head,
+	// which for a rolling prerelease (ragflow's "nightly") is not the newest.
+	latestTag := items[0].Tag
+	if newest := newestByPublishDate(cands); newest != nil {
+		latestTag = newest.tagName()
+	}
 	group := &releasedigest.RepoReleases{
 		FullName:    repo,
 		URL:         repoURL(repo),
-		LatestTag:   items[0].Tag,
+		LatestTag:   latestTag,
 		NewCount:    len(items),
 		PeriodStart: &start,
 		PeriodEnd:   &end,
 		Releases:    items,
 	}
 	return group, summarized, degraded, truncated
+}
+
+// newestByPublishDate returns the candidate with the greatest PublishedAt, or
+// nil when none carries a date. It is the single source of truth for "the repo's
+// latest version", shared by the cursor's LastTag and the document's LatestTag.
+//
+// /releases is ordered by created_at, so a rolling prerelease that is
+// re-published regularly (fresh created_at, stale publishedAt — e.g. ragflow's
+// "nightly") sits at the head while carrying a year-old publish date. Picking by
+// position would surface that rolling tag as newest even when a newer production
+// release was just summarized. Undated candidates (tag fallback) never displace a
+// dated one; ties keep the earlier (higher in the API list) candidate.
+func newestByPublishDate(cands []candidate) *candidate {
+	var best *candidate
+	for i := range cands {
+		c := &cands[i]
+		if c.rel.PublishedAt == nil {
+			continue
+		}
+		if best == nil || c.rel.PublishedAt.After(*best.rel.PublishedAt) {
+			best = c
+		}
+	}
+	return best
 }
 
 // periodRange picks the week bounds for a batch of versions from their actual

@@ -1,6 +1,12 @@
 package releasewatch
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
+
 	contract "github.com/morehao/trendradar/contract"
 	"github.com/morehao/trendradar/internal/releasedoc"
 )
@@ -62,7 +68,102 @@ func Items(statePath, repoRoot, docRoot string, repos []string) []contract.Subsc
 				item.LatestSummaryAt = &at
 			}
 		}
+		// Reconcile LatestTag against the durable, dated record. A cursor written
+		// by an older core can pin a rolling prerelease (ragflow's "nightly":
+		// fresh created_at, year-old publishedAt) as latest even after a newer
+		// production release was summarized, and that cursor never heals itself
+		// while no new version arrives. The newest weekly digest carries each
+		// version's real publish date, so the true newest is recoverable offline.
+		// Only override when the digest actually has a dated, newer version.
+		if tag, ok := newestDigestTag(repoRoot, docRoot, repo); ok && tag != "" && tag != derefOr(item.LatestTag, "") {
+			latest := tag
+			item.LatestTag = &latest
+		}
 		items = append(items, item)
 	}
 	return items
+}
+
+func derefOr(p *string, fallback string) string {
+	if p == nil {
+		return fallback
+	}
+	return *p
+}
+
+// weeklyDigestFile mirrors the subset of the release digest JSON Items needs.
+type weeklyDigestFile struct {
+	Repos []struct {
+		FullName  string `json:"fullName"`
+		LatestTag string `json:"latestTag"`
+		Releases  []struct {
+			Tag         string     `json:"tag"`
+			Name        string     `json:"name"`
+			PublishedAt *time.Time `json:"publishedAt"`
+		} `json:"releases"`
+	} `json:"repos"`
+}
+
+// newestDigestTag returns, for one repo, the tag of the version with the
+// greatest publish date across the weekly digest JSONs under docRoot (newest
+// file first, stopping at the first file that lists the repo and has a dated
+// version). It is a best-effort offline reconciliation: a missing or malformed
+// digest simply yields ok=false and the caller keeps the cursor value.
+//
+// docRoot is repository-relative in the CLI path and absolute under serve, the
+// same convention releasedoc uses: join it under repoRoot only when relative.
+func newestDigestTag(repoRoot, docRoot, repo string) (string, bool) {
+	if docRoot == "" {
+		return "", false
+	}
+	base := docRoot
+	if !filepath.IsAbs(base) {
+		base = filepath.Join(repoRoot, filepath.FromSlash(base))
+	}
+	dirs, err := filepath.Glob(filepath.Join(base, "_weekly", "*", "*.json"))
+	if err != nil || len(dirs) == 0 {
+		return "", false
+	}
+	// Newest week first: the filename is <YYYY-Wnn>.json, so lexical sort of the
+	// basename within an ISO-year directory matches chronological order.
+	sort.SliceStable(dirs, func(i, j int) bool { return dirs[i] > dirs[j] })
+	for _, file := range dirs {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		var d weeklyDigestFile
+		if json.Unmarshal(data, &d) != nil {
+			continue
+		}
+		for _, r := range d.Repos {
+			if r.FullName != repo {
+				continue
+			}
+			bestTag := ""
+			var bestAt time.Time
+			for _, rel := range r.Releases {
+				if rel.PublishedAt == nil {
+					continue
+				}
+				tag := rel.Tag
+				if tag == "" {
+					tag = rel.Name
+				}
+				if tag == "" {
+					continue
+				}
+				if bestTag == "" || rel.PublishedAt.After(bestAt) {
+					bestTag = tag
+					bestAt = *rel.PublishedAt
+				}
+			}
+			if bestTag != "" {
+				return bestTag, true
+			}
+			// Repo present but no dated versions in this file: fall through to
+			// older files (an older week may still carry the only dated version).
+		}
+	}
+	return "", false
 }
