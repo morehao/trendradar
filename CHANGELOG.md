@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed — 推送标题重复 & 仓库名不可点击
+
+- **标题只出现一次**：通知正文不再拼接标题，标题只由 `Message.Subject` 承载。此前飞书
+  `interactive` 卡片的 header 与正文首行各显示一次标题（企微 `markdown`、各渠道 `text` 同病），
+  现已消除。
+- **仓库名加超链接**：趋势榜与订阅发版消息中，支持 Markdown 链接的渠道（`markdown` /
+  `interactive`）把仓库名渲染为 `[owner/repo](url)`，URL 取自 `RepoSnapshot.URL` /
+  `RepoReleases.URL`，可点击。链接在组装期确定性拼接、不进模型，模型调用次数不变。
+- 按渠道渲染能力分档发送：`text` / `post` 走纯文本档（`post` 因 golib 用单个 `text` 节点
+  渲染、不解析 Markdown，故不支持链接），不会出现字面量 `[]()`。
+- `BodyChars` 维持消息级、取规范（链接档）源正文的 rune 长度；`ipcSchema` 不变。
+
 ## [v0.13.2] - 2026-11-16
 
 ### Changed — 飞书（lark）默认消息类型改为 interactive 卡片
